@@ -3,8 +3,8 @@
 # ============================== SUMMARY =====================================
 #
 # Program : check_snmp_netint.pl
-# Version : 2.34
-# Date    : December 25, 2011
+# Version : 2.35
+# Date    : April 19, 2012
 # Authors : William Leibzon - william@leibzon.org,
 #           Patrick Proy ( patrick at proy.org )
 # Licence : GPL - summary below, full text at http://www.fsf.org/licenses/gpl.txt
@@ -492,6 +492,11 @@
 #		    and graphing. This was (and still can be) accomplished before by
 #		    specifying threshold value as 0 and then its not checked. Also the
 #		    use of -w and -c is unnecessary if you do not use -k or -q options.
+# [2.35] 04/19/12 - Added patch by Sébastien PRUD'HOMME which incorporate revisions
+#                   code changes in revsions 1.23 and 1.19 of check_snmp_int (done
+#                   after this plugin deverged from it) into this plugin as well.
+#                   The changes add proper support for 64-bit counters when -g
+#                   option is used and fix a bug when output is in % / perf in Bytes.
 #
 # ========================== START OF PROGRAM CODE ===========================
 
@@ -515,7 +520,7 @@ if ($@) {
 }
 
 # Version 
-my $Version='2.34';
+my $Version='2.35';
 
 ############### BASE DIRECTORY FOR TEMP FILE (override this with -F) ########
 my $o_base_dir="/tmp/tmp_Nagios_int.";
@@ -528,6 +533,7 @@ my $descr_table = '1.3.6.1.2.1.2.2.1.2';
 my $oper_table = '1.3.6.1.2.1.2.2.1.8.';
 my $admin_table = '1.3.6.1.2.1.2.2.1.7.';
 my $speed_table = '1.3.6.1.2.1.2.2.1.5.';
+my $speed_table_64 = '1.3.6.1.2.1.31.1.1.1.15.';
 my $in_octet_table = '1.3.6.1.2.1.2.2.1.10.';
 my $in_octet_table_64 = '1.3.6.1.2.1.31.1.1.1.6.';
 my $in_error_table = '1.3.6.1.2.1.2.2.1.14.';
@@ -812,8 +818,9 @@ sub help {
 --label
    Add label before speed in output : in=, out=, errors-out=, etc...
 -g, --64bits
-   Use 64 bits counters instead of the standard counters  
-   when checking bandwidth & performance data.
+   Use 64 bits counters instead of the standard counters when checking
+   bandwidth & performance data for interface >= 1Gbps.
+   You must use snmp v2c or v3 to get 64 bits counters.
 -d, --delta=seconds
    make an average of <delta> seconds (default 300=5min)
 -B, --kbits
@@ -963,6 +970,15 @@ sub check_options {
     if (defined($o_timeout) && (isnnum($o_timeout) || ($o_timeout < 2) || ($o_timeout > 60))) 
 	{ print "Timeout must be >1 and <60 !\n"; print_usage(); exit $ERRORS{"UNKNOWN"}}
     if (!defined($o_timeout)) {$o_timeout=5;}
+    # Check snmpv2c or v3 with 64 bit counters
+    if ( defined ($o_highperf) && (!defined($o_version2) && defined($o_community)))
+      { print "Can't get 64 bit counters with snmp version 1\n"; print_usage(); exit $ERRORS{"UNKNOWN"}}
+    if (defined ($o_highperf)) {
+      if (eval "require bigint") {
+        use bigint;
+      } else  { print "Need bigint module for 64 bit counters\n"; print_usage(); exit $ERRORS{"UNKNOWN"}}
+    }
+
     # check if -e without -f
     if ( defined($o_perfe) && !defined($o_perf))
         { print "Cannot output error without -f option!\n"; print_usage(); exit $ERRORS{"UNKNOWN"}}		
@@ -1201,6 +1217,7 @@ my @descr = ();
 my (@oid_perf,@oid_perf_outoct,@oid_perf_inoct,@oid_perf_inerr,@oid_perf_outerr,@oid_perf_indisc,@oid_perf_outdisc)= (undef,undef,undef,undef,undef,undef,undef);
 my @oid_descr=(); # this is actually only used with '-m' to double-check that cached index is correct
 my @oid_speed=();
+my @oid_speed_high=();
 my @oid_commentlabel=();
 my @oid_ciscostatus=();
 my @oid_ciscofaultstatus=();
@@ -1383,6 +1400,7 @@ for (my $i=0;$i<$num_int;$i++) {
      }
      if ($check_speed && (!defined($portspeed[$i]) || !defined($o_maxminsnmp))) {
          $oid_speed[$i]=$speed_table . $tindex[$i];
+         $oid_speed_high[$i]=$speed_table_64 . $tindex[$i];
      }
      if (defined($o_commentoid)) {
        if (defined($o_ciscocat) && defined($o_cisco{show_portnames})) {
@@ -1399,7 +1417,13 @@ if ( $num_int == 0 ) { print "ERROR : Unknown interface $o_descr\n" ; exit $ERRO
 
 # WL: do it as one query when -m option is used 
 if (defined($o_perf) || defined($o_checkperf) || $expected_speed!=0) {
-        @oid_perf=(@oid_perf_outoct,@oid_perf_inoct,@oid_perf_inerr,@oid_perf_outerr,@oid_perf_indisc,@oid_perf_outdisc,@oid_speed);
+  @oid_perf=(@oid_perf_outoct,@oid_perf_inoct,@oid_speed);
+  if (defined($o_highperf)) {
+    @oid_perf=(@oid_perf,@oid_speed_high);
+  }
+  if (defined ($o_ext_checkperf) || defined($o_perfe)) {
+    @oid_perf=(@oid_perf,@oid_perf_inerr,@oid_perf_outerr,@oid_perf_indisc,@oid_perf_outdisc);
+  } 
 }
 if (defined($o_ciscocat)) {
 	@oid_ciscostatus=(@oid_ciscofaultstatus,@oid_ciscooperstatus,@oid_ciscoaddoperstatus);
@@ -1682,13 +1706,29 @@ for (my $i=0;$i < $num_int; $i++) {
   }
 
   # WL: portspeed data now put in separate array
-  $portspeed[$i]=$$resultf{$oid_speed[$i]} if $check_speed && defined($oid_speed[$i]) && defined($$resultf{$oid_speed[$i]});
+  # Get the speed in normal or highperf speed counters
+  if (defined($oid_speed[$i]) && defined($$resultf{$oid_speed[$i]})) {
+      if ($$resultf{$oid_speed[$i]} == 4294967295) { # Too high for this counter (cf IF-MIB)
+          if (! defined($o_highperf) && (defined($o_prct) || defined ($o_perfs) || defined ($o_perfp))) {
+              print "Cannot get interface speed with standard MIB, use highperf mib (-g) : UNKNOWN\n";
+              exit $ERRORS{"UNKNOWN"}
+          }
+          if (defined ($$resultf{$oid_speed_high[$i]}) && $$resultf{$oid_speed_high[$i]} != 0) {
+              $portspeed[$i]=$$resultf{$oid_speed_high[$i]} * 1000000;
+          } else {
+              print "Cannot get interface speed using highperf mib : UNKNOWN\n";
+              exit $ERRORS{"UNKNOWN"}
+          }
+      } else {
+          $portspeed[$i]=$$resultf{$oid_speed[$i]};
+      }
+  }
   if ($expected_speed!=0 && defined($portspeed[$i]) && $portspeed[$i]!=$expected_speed) {
-		$int_status_extratext.=',' if $int_status_extratext;
-		$int_status_extratext.="Speed=".$portspeed[$i]."bps";
-		$int_status_extratext.=":CRIT(should be $expected_speed bps)";
-		$int_status_opt=2;
-		$final_status=2;
+      $int_status_extratext.=',' if $int_status_extratext;
+      $int_status_extratext.="Speed=".$portspeed[$i]."bps";
+      $int_status_extratext.=":CRIT(should be $expected_speed bps)";
+      $int_status_opt=2;
+      $final_status=2;
   }
 
   # Make the bandwith & error checks if necessary 
@@ -1935,7 +1975,12 @@ for (my $i=0;$i < $num_int; $i++) {
 	if ($usable_data==0) {
   	    if (defined($o_kbits)) { # bps
 		  # put warning and critical levels into bps or Bps
-		  my $warn_factor = (defined($o_meg)) ? 1000000 : (defined($o_gig)) ? 1000000000 : 1000;
+		  my $warn_factor;
+		  if (defined($o_prct)) { # warn&crit in % -> put warn_factor to 1% of speed in bps
+			$warn_factor=$portspeed[$i]/100;
+                  } else { # just convert from K|M|G bps
+			$warn_factor = (defined($o_meg)) ? 1000000 : (defined($o_gig)) ? 1000000000 : 1000;
+		  }
 		  $perf_out .= " ".perf_name($descr[$i],"in_bps")."=";
 		  $perf_out .= sprintf("%.0f",$checkperf_out[0] * 8 * $speed_metric) .";" if defined($checkperf_out[0]);
 		  $perf_out .= (defined($o_warn_max[0]) && $o_warn_max[0]) ? $o_warn_max[0]*$warn_factor . ";" : ";";
@@ -1947,15 +1992,20 @@ for (my $i=0;$i < $num_int; $i++) {
 		  $perf_out .= (defined($o_crit_max[1]) && $o_crit_max[1]) ? $o_crit_max[1]*$warn_factor . ";" : ";";
 		  $perf_out .= "0;". $portspeed[$i] ." " if defined($portspeed[$i]);
 	    } else { # Bps
-		  my $warn_factor = (defined($o_meg)) ? 1048576 : (defined($o_gig)) ? 1073741824 : 1024;
+		  my $warn_factor;
+		  if (defined($o_prct)) { # warn&crit in % -> put warn_factor to 1% of speed in Bps
+			$warn_factor=$portspeed[$i]/800;
+		  } else { # just convert from K|M|G bps
+			$warn_factor = (defined($o_meg)) ? 1048576 : (defined($o_gig)) ? 1073741824 : 1024;
+		  }
 		  $perf_out .= " ".perf_name($descr[$i],"in_Bps")."=" . sprintf("%.0f",$checkperf_out[0] * $speed_metric) .";" if defined($checkperf_out[0]);
 		  $perf_out .= (defined($o_warn_max[0]) && $o_warn_max[0]) ? $o_warn_max[0]*$warn_factor . ";" : ";";
 		  $perf_out .= (defined($o_crit_max[0]) && $o_crit_max[0]) ? $o_crit_max[0]*$warn_factor . ";" : ";";
-		  $perf_out .= "0;". $portspeed[$i] ." " if defined($portspeed[$i]);
+		  $perf_out .= "0;". $portspeed[$i] / 8 ." " if defined($portspeed[$i]);
 		  $perf_out .= " ".perf_name($descr[$i],"out_Bps")."=" . sprintf("%.0f",$checkperf_out[1] * $speed_metric) .";" if defined($checkperf_out[1]);
 		  $perf_out .= (defined($o_warn_max[1]) && $o_warn_max[1]) ? $o_warn_max[1]*$warn_factor . ";" : ";";
 		  $perf_out .= (defined($o_crit_max[1]) && $o_crit_max[1]) ? $o_crit_max[1]*$warn_factor . ";" : ";";
-		  $perf_out .= "0;". $portspeed[$i] ." " if defined($portspeed[$i]);		  
+		  $perf_out .= "0;". $portspeed[$i] / 8 ." " if defined($portspeed[$i]);		  
 	    }
 	}
     }

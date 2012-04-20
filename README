@@ -1,14 +1,18 @@
 Hi there,
 
 This is a public code repository for nagios plugins I've been writing since 2004.
-Most of the plugins have been available on my site, nagios exchange and
-monitoring exchange for years. If you need more information please see:
+Most of these plugins have been available on my site, on nagios exchange and
+on monitoring exchange for years. If you need more information please see:
   http://william.leibzon.org/nagios/
 
-Each plugin has its own "README" in the header section of the plugin.
+On nagios exchange plugins and graphing templates can be found at:
+  http://exchange.nagios.org/directory/Owner/willix/1
 
-While I'll continue to accept patches by email as before, if you do know
-how to use git, I'll be happy to accept your contribution by pull request too.
+Each plugin has its own "README" and HELP in the header section before the code.
+All plugins are released under GPL 2.0 License as specified in that header too.
+
+While I'll continue to accept patches by email as before, if you use git
+I'll be happy to accept your contributions by pull requests too.
 
 If you need to reach me, email to: william@leibzon.org
 

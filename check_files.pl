@@ -107,7 +107,7 @@ if ($@) {
  %ERRORS = ('OK'=>0,'WARNING'=>1,'CRITICAL'=>2,'UNKNOWN'=>3,'DEPENDENT'=>4);
 }
 
-my $Version='0.32';
+my $Version='0.33';
 
 my $o_help=     undef;          # help option
 my $o_timeout=  10;             # Default 10s Timeout
@@ -587,7 +587,7 @@ if (defined($o_age_crit) && ($chk = check_threshold($oldest_filename." ",$oldest
 	$statuscode = "CRITICAL";
 	$statusinfo .= $chk." seconds old";
 }
-elsif (defined($o_age_warn) && ($chk = check_threshold($oldest_filename." ",$oldest_secold,$o_age_warn) && $statuscode eq 'OK') ) {
+elsif (defined($o_age_warn) && ($chk = check_threshold($oldest_filename." ",$oldest_secold,$o_age_warn)) && $statuscode eq 'OK' ) {
         $statuscode="WARNING";
         $statusinfo .= $chk." seconds old";
 }

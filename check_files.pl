@@ -3,8 +3,8 @@
 # ============================== SUMMARY =====================================
 #
 # Program : check_files.pl 
-# Version : 0.32
-# Date    : Apr 21, 2012
+# Version : 0.33
+# Date    : Apr 27, 2012
 # Author  : William Leibzon - william@leibzon.org
 # Summary : This is a nagios plugin that checks directory and files
 #           file count and directory and file age
@@ -89,6 +89,7 @@
 #  [0.2]  Apr 19, 2012 - First version written based on check_netstat.pl 0.351
 #  [0.3]  Apr 21, 2012 - Added -l -r and -T options and fixed bugs
 #  [0.32] Apr 21, 2012 - Added -I as an alternative to -C 
+#  [0.33] Apr 27, 2012 - Fixed bug with determining file ages
 #
 # ========================== START OF PROGRAM CODE ============================
 
@@ -492,6 +493,7 @@ my $newest_filetime=undef;
 my $newest_filename=undef;
 my @nmatches=();
 my $READTHIS=undef;
+my $matched=0;
 
 if (defined($o_stdin)) {
    $READTHIS=\*STDIN;
@@ -544,22 +546,24 @@ while (<$READTHIS>) {
         verb ("    parsed:".$temp);
     }
 
-    if (defined($ls[$nlines]{'time'})) {
-	if (!defined($newest_filetime) || $ls[$nlines]{'time'}>$newest_filetime) {
-	    $newest_filetime=$ls[$nlines]{'time'};
-	    $newest_filename=$ls[$nlines]{'filename'};
-    	}
-        if (!defined($oldest_filetime) || $ls[$nlines]{'time'}<$oldest_filetime) {
-            $oldest_filetime=$ls[$nlines]{'time'};
-	    $oldest_filename=$ls[$nlines]{'filename'};
-        }
-    }
     if (defined($ls[$nlines]{'filename'})) {
+	$matched=0;
         for (my $i=0; $i<scalar(@o_filesL); $i++) {
 	    if ($ls[$nlines]{'filename'} =~ /$o_filesL[$i]/) {
 		$nmatches[$i] = 0 if !defined($nmatches[$i]); 
 		$nmatches[$i]++;
 		verb("    file matches regex '".$o_filesL[$i]."' for file spec '".$o_filesLv[$i]."'");
+		$matched=1;
+	    }
+	}
+	if ($matched==1 && defined($ls[$nlines]{'time'})) {
+	    if (!defined($newest_filetime) || $ls[$nlines]{'time'}>$newest_filetime) {
+		$newest_filetime=$ls[$nlines]{'time'};
+		$newest_filename=$ls[$nlines]{'filename'};
+	    }
+	    if (!defined($oldest_filetime) || $ls[$nlines]{'time'}<$oldest_filetime) {
+		$oldest_filetime=$ls[$nlines]{'time'};
+		$oldest_filename=$ls[$nlines]{'filename'};
 	    }
 	}
     }

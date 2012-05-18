@@ -492,8 +492,8 @@
 #		    and graphing. This was (and still can be) accomplished before by
 #		    specifying threshold value as 0 and then its not checked. Also the
 #		    use of -w and -c is unnecessary if you do not use -k or -q options.
-# [2.35] 04/19/12 - Added patch by Sébastien PRUD'HOMME which incorporate revisions
-#                   code changes in revsions 1.23 and 1.19 of check_snmp_int (done
+# [2.35] 04/19/12 - Added patch by Sébastien PRUD'HOMME which incorporates changes
+#                   and bug fixes in revsions 1.23 and 1.19 of check_snmp_int (done
 #                   after this plugin deverged from it) into this plugin as well.
 #                   The changes add proper support for 64-bit counters when -g
 #                   option is used and fix a bug when output is in % / perf in Bytes.
@@ -791,6 +791,8 @@ sub help {
    at least couple sets allows for more realistic and less 'bursty' results
    but nagios has buffer limits so very large output of performance data
    would not be kept. Default is now 2 sets. 
+-d, --delta=seconds
+   make an average of <delta> seconds (default 300=5min)
 -m, --minimize_queries | -mm, --minimum_queries
    Minimize number of snmp queries by reusing description table OIDs from
    performance data (see -P above) and doing all SNMP checks together. 
@@ -821,8 +823,6 @@ sub help {
    Use 64 bits counters instead of the standard counters when checking
    bandwidth & performance data for interface >= 1Gbps.
    You must use snmp v2c or v3 to get 64 bits counters.
--d, --delta=seconds
-   make an average of <delta> seconds (default 300=5min)
 -B, --kbits
    Make the warning and critical levels in K|M|G Bits/s instead of K|M|G Bytes/s
 -G, --giga ; -M, --mega ; -u, --prct
@@ -867,7 +867,7 @@ sub verb { my $t=shift; print $t,"\n" if defined($o_verb) ; }
 sub process_perf {
  my %pdh;
  my ($nm,$dt);
- foreach (split(' ',$_[0])) {
+ foreach (quotewords('\s+',1,$_[0])) {
    if (/(.*)=(.*)/) {
         ($nm,$dt)=($1,$2);
         verb("prev_perf: $nm = $dt");

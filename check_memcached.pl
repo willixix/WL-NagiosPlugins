@@ -89,7 +89,7 @@
 #   And example of trying to retrieve all of them is:
 #     -s misc,malloc,sizes,maps,cachedump,slabs,items
 #   However not all of them will have data in your system and arrays like
-#   sizes provide too much datai (how many items stored on each size)
+#   sizes provide too much data (how many items stored on each size)
 #   for standard use.
 #
 #   To see stat variables in plugin status output line and or specify thresholds
@@ -794,14 +794,17 @@ my $i;
 $dataresults{$_} = [undef, 0, 0] foreach(@o_varsL);
 $dataresults{$_} = [undef, 0, 0] foreach(@o_perfvarsL);
 foreach $vstat (keys %{$stats->{'hosts'}{$dsn}}) {
-  foreach $vnam (keys %{$stats->{'hosts'}{$dsn}{$vstat}}) {
-     $vval = $stats->{'hosts'}{$dsn}{$vstat}{$vnam};
-     if (defined($vval)) {
-    	verb("Stats Data: $vstat($vnam) = $vval");
-	if ($vnam eq 'version') {
-		$memdversion = $vval;
-	}
-	else {
+  verb("Stats Data: vstat=$vstat reftype=".ref($stats->{'hosts'}{$dsn}{$vstat}));
+  if (defined($stats->{'hosts'}{$dsn}{$vstat})) {
+    if (ref($stats->{'hosts'}{$dsn}{$vstat}) eq 'HASH') {
+      foreach $vnam (keys %{$stats->{'hosts'}{$dsn}{$vstat}}) {
+        $vval = $stats->{'hosts'}{$dsn}{$vstat}{$vnam};
+        if (defined($vval)) {
+          verb("Stats Data: $vstat($vnam) = $vval");
+          if ($vnam eq 'version') {
+               $memdversion = $vval;
+          }
+          else {
 		if ($vstat eq 'misc' || $vstat eq 'malloc') {
 			$dnam = $vnam;
 		}
@@ -813,11 +816,27 @@ foreach $vstat (keys %{$stats->{'hosts'}{$dsn}}) {
        			$dataresults{$dnam} = [$vval, 0, 0];
     			push @o_perfvarsL, $dnam;
 		}	
-   	}
-     }
-     else {
-        verb("Stats Data: $vstat($vnam) = NULL");
-     }
+          }
+        }
+        else {
+          verb("Stats Data: $vstat($vnam) = NULL");
+        }
+      }
+    }
+    elsif ($stats->{'hosts'}{$dsn}{$vstat} =~ /ERROR/) {
+       verb("Memcached Perl Library ERROR getting stats for $vstat");
+    }
+    else {
+       $vval = $stats->{'hosts'}{$dsn}{$vstat};
+       chop($vval);
+       verb("Stats Data: $vstat = $vval");
+       $dnam = $vstat;
+       $dataresults{$dnam}[0] = $vval if exists($dataresults{$dnam});
+       if (defined($o_perfvars) && $o_perfvars eq '*') {
+         $dataresults{$dnam} = [$vval, 0, 0];
+         push @o_perfvarsL, $dnam;
+       }
+    }
   }
 }
 $memd->disconnect_all;

@@ -3,8 +3,8 @@
 # ============================== SUMMARY =====================================
 #
 # Program : check_memcached.pl
-# Version : 0.61
-# Date    : Apr 9, 2012
+# Version : 0.62
+# Date    : May 19, 2012
 # Author  : William Leibzon - william@leibzon.org
 # Licence : GPL - summary below, full text at http://www.fsf.org/licenses/gpl.txt
 #
@@ -217,8 +217,15 @@
 #		    is available, hitrate would be #misses/#total from last check
 #		    rather than #misses/#total from start of statistics.
 #  [0.61 - Apr 2012] Documentation fixes and small bugs
+#  [0.62 - May 2012] Cache::Memcached library has bugs and not always provided hash of
+#	             array with results for each statistics just giving raw memcached
+#		     data. This effected 'items' and 'slabs' statistics and maybe others.
+#		     Plugin can now handle parsing such data into separate variables.
 #
 # TODO or consider for future:
+#
+#  0. Add '--extra-opts' to allow to read options from a file as specified
+#     at http://nagiosplugins.org/extra-opts. This is TODO for all my plugins
 #
 #  1. In plans are to allow long options to specify thresholds for known variables.
 #     These would mean you specify '--cur_connections' in similar way to '--hitrate'
@@ -243,6 +250,12 @@
 #     Above also should have PNP4Nagios template for check_memcached.pl if you
 #     did not get it from the place you downloaded this plugin from. 
 #
+#  4. There has been a request to allow to specify threshold checks both for each slab
+#     (which is possible to do now after starting with 0.62 version of the plugin)
+#     and for all slabs. This is for "items" and "slabs" statistics. This is currently
+#     under consideration. If you want this please comment at
+#        https://github.com/willixix/WL-NagiosPlugins/issues/1
+#
 # ============================ START OF PROGRAM CODE =============================
 
 use strict;
@@ -265,7 +278,7 @@ if ($@) {
  %ERRORS = ('OK'=>0,'WARNING'=>1,'CRITICAL'=>2,'UNKNOWN'=>3,'DEPENDENT'=>4);
 }
 
-my $Version='0.61';
+my $Version='0.62';
 
 # This is a list of known statistics variables (plus few variables added by plugin),
 # used in order to designate COUNTER variables with 'c' in perfout for graphing programs
@@ -829,13 +842,28 @@ foreach $vstat (keys %{$stats->{'hosts'}{$dsn}}) {
     else {
        $vval = $stats->{'hosts'}{$dsn}{$vstat};
        chop($vval);
-       verb("Stats Data: $vstat = $vval");
-       $dnam = $vstat;
-       $dataresults{$dnam}[0] = $vval if exists($dataresults{$dnam});
-       if (defined($o_perfvars) && $o_perfvars eq '*') {
-         $dataresults{$dnam} = [$vval, 0, 0];
-         push @o_perfvarsL, $dnam;
-       }
+       my @lines = split("\n",$vval); 
+       my $count=0;
+       foreach my $ln (@lines) {
+	  $count++;
+	  if ($ln =~ /STAT\s+(.*)\s+(\d+)/) {
+		$vval = $2;
+		$dnam = $1;
+		$dnam =~ s/\:/_/g;
+		$dnam = $vstat.'_'.$dnam if $dnam !~ /^$vstat/;
+	  }
+	  else {
+		$dnam = $vstat."_".$count;
+		$vval = $ln;
+		$vval =~ s/\s/_/g;
+	  } 
+          verb("Stats Data: $vstat($dnam) = $vval");
+          $dataresults{$dnam}[0] = $vval if exists($dataresults{$dnam});
+          if (defined($o_perfvars) && $o_perfvars eq '*') {
+             $dataresults{$dnam} = [$vval, 0, 0];
+             push @o_perfvarsL, $vstat;
+          }
+       } 
     }
   }
 }

@@ -3,8 +3,8 @@
 # ============================== SUMMARY =====================================
 #
 # Program : check_netsnmp_memory.pl
-# Version : 0.2
-# Date    : Jan 09, 2012
+# Version : 0.21
+# Date    : May 20, 2012
 # Authors : William Leibzon - william@leibzon.org
 # Licence : GPL - summary below, full text at http://www.fsf.org/licenses/gpl.txt
 #
@@ -50,19 +50,20 @@
 # 0.2  - Jan 08,  2012  : Removed retrieval of shared memory as 2.6 kernel had it at 0
 #			  and newest 3.0 kernel now report an error when asking for it 
 #			  If you have an older 2.4 kernel system, use 0.15 version
+# 0.21 - May 20,  2012  : As has been pointed out, 1MB is 1024K and not 1000
 #
 # ========================== START OF PROGRAM CODE ===========================
 
 
 my @expressions_netsnmpmem = ( 
-        "total_free=snmp(1.3.6.1.4.1.2021.4.11.0),1000,/,round(1),' MB',+",	# Total free, data is reported in kb, we want MB
-	"total_real=snmp(1.3.6.1.4.1.2021.4.5.0),1000,/,round(1),' MB',+",	# Total real memory
-	"avail_real=snmp(1.3.6.1.4.1.2021.4.6.0),1000,/,round(1),' MB',+",	# Free real memory
-	"total_swap=snmp(1.3.6.1.4.1.2021.4.3.0),1000,/,round(1),' MB',+", 	# Total swap
-	"avail_swap=snmp(1.3.6.1.4.1.2021.4.4.0),1000,/,round(1),' MB',+",	# Free swap, here "MB" is added to the end as a string
-	"min_swap=snmp(1.3.6.1.4.1.2021.4.12.0),1000,/,round(1),' MB',+",
-	"buffer=snmp(1.3.6.1.4.1.2021.4.14.0),1000',/,round(1),' MB',+",	# In use buffer memory
-	"cached=snmp(1.3.6.1.4.1.2021.4.15.0),1000,/,round(1),' MB',+",		# In use cached memory
+        "total_free=snmp(1.3.6.1.4.1.2021.4.11.0),1024,/,round(1),' MB',+",	# Total free, data is reported in kb, we want MB
+	"total_real=snmp(1.3.6.1.4.1.2021.4.5.0),1024,/,round(1),' MB',+",	# Total real memory
+	"avail_real=snmp(1.3.6.1.4.1.2021.4.6.0),1024,/,round(1),' MB',+",	# Free real memory
+	"total_swap=snmp(1.3.6.1.4.1.2021.4.3.0),1024,/,round(1),' MB',+", 	# Total swap
+	"avail_swap=snmp(1.3.6.1.4.1.2021.4.4.0),1024,/,round(1),' MB',+",	# Free swap, here "MB" is added to the end as a string
+	"min_swap=snmp(1.3.6.1.4.1.2021.4.12.0),1024,/,round(1),' MB',+",
+	"buffer=snmp(1.3.6.1.4.1.2021.4.14.0),1024',/,round(1),' MB',+",	# In use buffer memory
+	"cached=snmp(1.3.6.1.4.1.2021.4.15.0),1024,/,round(1),' MB',+",		# In use cached memory
 	"total=total_real,total_swap,+,' MB [',.,total_real,.,' real ',.,total_swap,.,' swap : ',.,total_free,.,' free]',.",  # Total memory on the system (you can still use it as a number since everything after first few digits would be cut of for numeric calculations, also only number is reported in perf data; I should probably impliment printf function to make formatting and output easier...)
 	"used_swap=total_swap,avail_swap,-,round(1),' MB',+",				# Swap memory in use
 	'%avail_real=avail_real,total_real,%',					# Percent of available real memory

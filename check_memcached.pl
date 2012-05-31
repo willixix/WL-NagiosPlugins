@@ -3,8 +3,8 @@
 # ============================== SUMMARY =====================================
 #
 # Program : check_memcached.pl
-# Version : 0.62
-# Date    : May 19, 2012
+# Version : 0.63
+# Date    : June 01, 2012
 # Author  : William Leibzon - william@leibzon.org
 # Licence : GPL - summary below, full text at http://www.fsf.org/licenses/gpl.txt
 #
@@ -59,20 +59,20 @@
 #
 #   Plugin currently does not support authentication so the only connection
 #   parameters are "-H hostname" and "-p port". The default port is 11211
-#   but you must specify hotname (if localhost specify it as -H 127.0.0.1)
+#   and you must specify the hostname (if localhost specify it as -H 127.0.0.1)
 # 
 # 2. Response Time, HitRate, Memory Utilization
 #
 #   To get response time you use "-T" or "--response_time" option. By itself
-#   it will cause output of respose time at the status line. You can also us
+#   it will cause output of respose time at the status line. You can also use
 #   it as "-T warn,crit" to specify warning and critical thresholds.
 #
-#   To get hitrate the option needed is "-R" or "--hitrate". If previous
-#   performance data is not feed to plugin (-P option, see below) the plugin
-#   calculates it as total hitrate over life of memcached process. If -P
-#   is specified and previous performance data is feed back, the data is
-#   based on real hitrate with lifei-long info also given in paramphesis.
-#   As with -T you can specify -R by itself or with thresholds as -R warn,crit
+#   To get hitrate the option is "-R" or "--hitrate". If previous performance
+#   data is not feed to plugin (-P option, see below) the plugin calculates
+#   it as total hitrate over life of memcached process. If -P is specified
+#   and previous performance data is feed back, the data is based on real
+#   hitrate with lifelong info also given in paramphesis. As with -T you
+#   can specify -R by itself or with thresholds as -R warn,crit
 # 
 #   Memory utilization corresponds to what some others call "size". This is
 #   percent of max memory currently in use. The option is -U or --utilization
@@ -102,17 +102,17 @@
 #           -a curr_connections,evictions -w ~,~ -c ~,~
 #      OR   -a curr_connections,evictions -w , -c ,
 #
+#
 #   If you want to check rate of change rather than actual value you can do this
-#   by specifying it as '&variable' such as "&total_connections" which is similar
-#   to 'curr_connections'. By default it would be reported in the output as
-#   '&Delta_variable' and as nagios removed '&' symbol you probably will
-#   see it as just "Delta_variable" unless you changed nagios.cfg and removed '&'
-#   from 'illegal_macro_output_chars'. As an alternative you can specify how to
-#   label these with -L or --rate_label option which specify prefix and/or suffix
-#   For example '-L dt_' would have the output being "dt_total_connections'
-#   and '-L ,_rate' would result in 'total_connections_rate' for the name.
-#   You can use these creates names in -a as well, for example:
-#           -L ,_rate -a total_connections_rate -w 1000 -c ~
+#   by specifying it as '&variable' such as "&total_connections" or "variable_rate"
+#   which is "total_connections_rate" and is similar to 'curr_connections' variable.
+#   By default it would be reported in the output as 'variable_rate' though '&variable'
+#   is a format used internally by plugin. As an alternative you can specify how to
+#   label these with --rate_label option where you can specify prefix and/or suffix.
+#   For example '--rate_label=dt_' would have the output being "dt_total_connections'
+#   where as '---rate_label=,_rate' is plugin default giving 'total_connections_rate'. 
+#   You can use these names with -a and -A such as:
+#           --rate_label=,_rate -a total_connections_rate -w 1000 -c ~
 #
 #   Now in order to be able to calculate rate of change, the plugin needs to
 #   know values of the variables from when it was run the last time. This
@@ -132,17 +132,16 @@
 #     =value : issue alert if data is equal to this value (default for non-numeric)
 #     !value : issue alert if data is NOT equal to this value
 #
-#   There are also two two specifications of range formats:
+#   There are two two specifications of range formats as with other nagios plugins:
 #     number1:number2   issue alert if data is OUTSIDE of range [number1..number2]
 #	                i.e. alert if data<$number1 or data>$number2
 #     @number1:number2  issue alert if data is WITHIN range [number1..number2] 
 #		        i.e. alert if data>=$number and $data<=$number2
 #
 #   The plugin will attempt to check that WARNING values is less than CRITICAL
-#   (or greater for <). A special prefix modifier '^' can also be used to disable
-#   checking that warn values are less then (or greater then) critical values.
-#   A quick example of such special use is '--warn=^<100 --crit=>200' which means
-#   warning alert if value is < 100 and critical alert if its greater than 200.
+#   (or greater for <). A special prefix modifier '^' can be used to disable these
+#   checks. A quick example of such special use is '--warn=^<100 --crit=>200' which
+#   means warning alert if value is < 100 and critical alert if its greater than 200.
 #
 # 5. Performance Data
 #
@@ -151,13 +150,14 @@
 #   to go out as performance data for Nagios graphing programs that can use it.
 #
 #   You may also directly specify which variables are to be return as performance data
-#   and with '-A' option. If you use '-A' by itself and not specify any variables or
-#   use special special value of '*' (as in '-A *') the plugin will output all variables.
+#   with '-A' option. If you use '-A' by itself and not specify any variables or use
+#   special special value of '*' (as in '-A *') the plugin will output all variables,
+#   which is really useful for finding what data you can chck with this plugin.
 #
 #   The plugin will output threshold values as part of performance data as specified at
 #     http://nagiosplug.sourceforge.net/developer-guidelines.html#AEN201
 #   And don't worry about using non-standard >,<,=,~ prefixes, all of that would get
-#   converted into nagios threshold for performance output
+#   converted into nagios threshold format for performance output
 #
 #   The plugin is smart enough to add 'c' suffix for known COUNTER variables to
 #   values in performance data. Known variables are specifed in an array you can
@@ -194,7 +194,7 @@
 # }
 #
 # Example of command-line use:
-#   /usr/lib/nagios/plugins/check_memcached.pl -H localhost -a 'curr_connections,evications' -w ~,~ -c ~,~ -s misc,malloc,sizes -U -A -R -T -f -v
+#   /usr/lib/nagios/plugins/check_memcached.pl -H localhost -a 'curr_connections,evictions' -w ~,~ -c ~,~ -s misc,malloc,sizes -U -A -R -T -f -v
 #
 # In above the -v option means "verbose" and with it plugin will output some debugging
 # information about what it is doing. The option is not intended to be used when plugin
@@ -221,6 +221,15 @@
 #	             array with results for each statistics just giving raw memcached
 #		     data. This effected 'items' and 'slabs' statistics and maybe others.
 #		     Plugin can now handle parsing such data into separate variables.
+#  [0.63 - Jun 2012] Documentation fixes.
+#		     Default rate variable name changed from &Delta_variable to
+#                    variable_rate to be in sync with check_redis.pl. One of the reasons
+#                    is that in the future I'll plan to add variables that are real delta
+#                    i.e new_value-old_value and not (new_value-old_value)/time
+#		     Also I've decided that specifying prefix & suffix or rate label
+#                    variables will not be one-letter option and only long-name option
+#                    As such -L option has been depreciated. I'm doing it all early
+#                    because only few currently use this and its not too late to change
 #
 # TODO or consider for future:
 #
@@ -251,10 +260,9 @@
 #     did not get it from the place you downloaded this plugin from. 
 #
 #  4. There has been a request to allow to specify threshold checks both for each slab
-#     (which is possible to do now after starting with 0.62 version of the plugin)
-#     and for all slabs. This is for "items" and "slabs" statistics. This is currently
-#     under consideration. If you want this please comment at
-#        https://github.com/willixix/WL-NagiosPlugins/issues/1
+#     (which is possible to do now starting with 0.62 version of the plugin) and for
+#     all slabs as well. This applies to "items" and "slabs" statistics and will probably
+#     be imlimented by allowing regex checks in place of specific variable name.
 #
 # ============================ START OF PROGRAM CODE =============================
 
@@ -351,8 +359,8 @@ my $o_utilsize=	undef;		# threshold spec for utilization%
 my $o_prevperf= undef;		# performance data given with $SERVICEPERFDATA$ macro
 my $o_prevtime= undef;		# previous time plugin was run $LASTSERVICECHECK$ macro
 my $o_ratelabel=undef;		# prefix and suffix for creating rate variables
-my $o_rsuffix='';	
-my $o_rprefix="&Delta_";	# default prefix	
+my $o_rsuffix='_rate';		# default rate variable name suffix
+my $o_rprefix="";
 
 ## Additional global variables
 my $memd= undef;                # DB connection object
@@ -363,7 +371,7 @@ my $perfcheck_time=undef;	# time when data was last checked
 sub p_version { print "check_memcached.pl version : $Version\n"; }
 
 sub print_usage {
-   print "Usage: $0 [-v] -H <host> [-p <port>] [-s <memcache stat arrays>] [-a <memcache statistics variables> -w <variables warning thresholds> -c <variables critical thresholds>] [-A <performance output variables>] [-L <ratevar-prefix>[,<ratevar-suffix>]] [-T [conntime_warn,conntime_crit]] [-R [hitrate_warn,hitrate_crit]] [-U [utilization_size_warn,utilization_size_crit]] [-f] [-T <timeout>] [-V] [-P <previous performance data in quoted string>]\n";
+   print "Usage: $0 [-v] -H <host> [-p <port>] [-s <memcache stat arrays>] [-a <memcache statistics variables> -w <variables warning thresholds> -c <variables critical thresholds>] [-A <performance output variables>] [-T [conntime_warn,conntime_crit]] [-R [hitrate_warn,hitrate_crit]] [-U [utilization_size_warn,utilization_size_crit]] [-f] [-T <timeout>] [-V] [-P <previous performance data in quoted string>]\n";
    print "For more details on options do: $0 --help\n";
 }
 
@@ -444,10 +452,10 @@ sub help {
    Previous performance data (normally put '-P \$SERVICEPERFDATA\$' in nagios
    command definition). This is used to calculate rate of change for counter
    statistics variables and for proper calculation of hitrate.
- -L, --rate_label=[PREFIX_STRING[,SUFFIX_STRING]]
+ --rate_label=[PREFIX_STRING[,SUFFIX_STRING]]
    Prefix or Suffix label used to create a new variable which has rate of change
    of another base variable. You can specify PREFIX or SUFFIX or both. Default
-   if not specified is '&Delta_' prefix string.
+   if not specified is '_rate' suffix string i.e. --rate_label=,_rate
  -V, --version
    Prints version number
 EOT
@@ -601,7 +609,7 @@ sub check_options {
 	'U:s'	=> \$o_utilsize,	'utilization:s' => \$o_utilsize,
         'P:s'   => \$o_prevperf,        'prev_perfdata:s' => \$o_prevperf,
         'E:s'   => \$o_prevtime,        'prev_checktime:s'=> \$o_prevtime,
-	'L:s'	=> \$o_ratelabel,	'rate_label:s'	=> \$o_ratelabel,
+	'rate_label:s'	=> \$o_ratelabel,
     );
     if (defined($o_help)) { help(); exit $ERRORS{"UNKNOWN"} };
     if (defined($o_version)) { p_version(); exit $ERRORS{"UNKNOWN"} };

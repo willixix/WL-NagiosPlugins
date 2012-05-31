@@ -18,13 +18,42 @@
 # ===================== INFORMATION ABOUT THIS TEMPLATE =======================
 #
 # This is a pnp4nagios template for redis database check done with check_redis.pl
+# that would graph some status variables returned by this plugin.
 #
-# The template would graph some status variables returned by check_redis.pl
+# Unlike most templates this does not care which order variables are returned in
+# and will automatically pick the right ones, so you can just use '-A' option
+# from the plugin to return all performance variables (though in that case
+# your rrd file will lager and contain extra datat that would not be graphed).
+#
 # Here is an example of nagios command config:
 #
 # define command {
-#    command_name    check_memcached
-#    command_line    $USER1$/check_redis.pl -H $HOSTADDRESS$ -P $ARG1$ -T $ARG2$ -R $ARG3$ -U $ARG4$ -a curr_connections,evictions -w ~,~ -c ~,~ -f -A 'utilization,hitrate,response_time,curr_connections,evictions,cmd_set,bytes_written,curr_items,uptime,rusage_system,get_hits,total_connections,get_misses,bytes,time,connection_structures,total_items,limit_maxbytes,rusage_user,cmd_get,bytes_read,threads,rusage_user_ms,rusage_system_ms,cas_hits,conn_yields,incr_misses,decr_misses,delete_misses,incr_hits,decr_hits,delete_hits,cas_badval,cas_misses,cmd_flush,listen_disabled_num,accepting_conns,pointer_size,pid'
+#    command_name        check_redis_new
+#    command_line        $USER1$/check_redis.pl -H $HOSTADDRESS$ -p $ARG1$ -T $ARG2$ -R -A -M $_HOSTSYSTEM_MEMORY$ -m $ARG3$ -a $ARG4$ -w $ARG5$ -c $ARG6$ -f -P "$SERVICEPERFDATA$"
+# }
+#
+# Arguments and thresholds are:
+#  $ARG1 : Port
+#  $ARG2 : response time thresholds
+#  $ARG3 : memory utilization thresholds
+#  $ARG4 : additional variables to be checked
+#  $ARG5 : warning thresholds for those variables
+#  $ARG6 : critical thresholds for those variables
+#
+# define service {
+#        use                     prod-service
+#        hostgroups              redishosts
+#        service_description     Redis
+#        check_command           check_redis_new!6379!"1,2"!"80,90"!blocked_clients,connected_clients!50,~!100,~
+# }
+#
+# define host {
+#         use             prod-server
+#         host_name       redis.mynetwork
+#         address         redis.mynetwork
+#         alias           Redis Stat Server
+#         hostgroups      linux,redishosts
+#        _SYSTEM_MEMORY  '8G'
 # }
 #
 # ========================= VERSION HISTORY and TODO ==========================

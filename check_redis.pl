@@ -3,8 +3,8 @@
 # ============================== SUMMARY =====================================
 #
 # Program : check_redis.pl
-# Version : 0.42
-# Date    : Apr 28, 2012
+# Version : 0.43
+# Date    : May 31, 2012
 # Author  : William Leibzon - william@leibzon.org
 # Licence : GPL - summary below, full text at http://www.fsf.org/licenses/gpl.txt
 #
@@ -78,9 +78,9 @@
 #		     Version 0.4 because its based on a well developed code base
 #  [0.41 - Apr 15, 2012] Added list of variables array and perf_ok regex.
 #			 Still testing internally and not released yet.
-#  [0.42 - Apr 28, 2012] Added total_keys, total_expired, nice uptime_info 
+#  [0.42 - Apr 28, 2012] Added total_keys, total_expires, nice uptime_info 
 #			 and memory utilization
-#  [0.43 - May ??, 2012] Planned first release. Documentation to be added above
+#  [0.43 - May 31, 2012] Planned first release. Documentation to be added above
 #			 replacing check_memcached examples
 #
 # TODO or consider for future:
@@ -100,13 +100,13 @@
 #     - How to better calculate memory utilization and get max memory available
 #     - Special options to measure cpu use and set threshold 
 #
-#  Other users can recommand a new feature to be added here too. If so please email me at
+#  Others are welcome recommand a new feature to be added here. If so please email to 
 #         william@leibzon.org.
-#  And don't worry, I'm not a company with sme hidden agenda to use your idea
+#  And don't worry, I'm not a company with some hidden agenda to use your idea
 #  but an actual person who you can easily get hold of by email, find on forums
 #  and on Nagios conferences. More info on my nagios work is at:
 #         http://william.leibzon.org/nagios/
-#  Above site should have PNP4Nagios template for this and other plugins.
+#  Above site should also have PNP4Nagios template for this and other plugins.
 #
 # ============================ START OF PROGRAM CODE =============================
 
@@ -159,17 +159,17 @@ my %KNOWN_STATUS_VARS = (
 	 'gcc_version' => [ 'TEXTINFO', '' ],
 	 'changes_since_last_save' => [ 'COUNTER', 'c' ],
 	 'arch_bits' => [ 'GAUGE', '' ],
-	 'lru_clock' => [ 'GAUGE', '' ], # is it page? not sure. LRU is page replacement algorithm
+	 'lru_clock' => [ 'GAUGE', '' ], # LRU is page replacement algorithm (least recently used), I'm unsure what this represents though
 	 'role' => [ 'SETTING', '' ],
 	 'multiplexing_api' => [ 'SETTING' , '' ],
 	 'slave' => [ 'TEXTDATA', '' ],
 	 'pubsub_channels' => [ 'GAUGE', '' ],
 	 'redis_git_sha1' => [ 'TEXTDATA', '' ],
-	 'used_cpu_user_children' => [ 'COUNTER', 'c' ],
+	 'used_cpu_user_children' => [ 'GAUGE', '' ],
 	 'process_id' => [ 'GAUGE', '' ],
 	 'used_memory_human' => [ 'GAUGE', '' ],
 	 'keyspace_misses' => [ 'COUNTER', 'c' ],
-	 'used_cpu_user' => [ 'COUNTER', 'c' ],
+	 'used_cpu_user' => [ 'GAUGE', '' ],
 	 'total_commands_processed' => [ 'COUNTER', '' ],
 	 'mem_fragmentation_ratio' => [ 'GAUGE', '' ],
 	 'client_longest_output_list' => [ 'GAUGE', '' ],
@@ -181,10 +181,15 @@ my %KNOWN_STATUS_VARS = (
 	 'used_memory_peak' => [ 'GAUGE', 'B' ],
 	 'connected_slaves' => [ 'GAUGE', '' ],
 	 'used_cpu_sys_children' => [ 'GAUGE', '' ],
+	 'master_host' => [ 'TEXTINFO', '' ],
+	 'slave0' => [ 'TEXTINFO', '' ],
+	 'slave1' => [ 'TEXTINFO', '' ],
+	 'slave2' => [ 'TEXTINFO', '' ],
+	 'slave3' => [ 'TEXTINFO', '' ],
 	);
 
 # Here you can also specify which variables should go into perf data, 
-# For right now it is 'GAUGE', 'COUNTER', 'DATA', and 'BOOLEAN'
+# For right now it is 'GAUGE', 'COUNTER', 'DATA' (but not 'TEXTDATA'), and 'BOOLEAN'
 # you may want to remove BOOLEAN if you don't want too much data
 my $PERF_OK_STATUS_REGEX = 'GAUGE|COUNTER|^DATA$|BOOLEAN';
 
@@ -215,8 +220,8 @@ my $o_repdelay=undef;           # replication delay time
 my $o_prevperf= undef;		# performance data given with $SERVICEPERFDATA$ macro
 my $o_prevtime= undef;		# previous time plugin was run $LASTSERVICECHECK$ macro
 my $o_ratelabel=undef;		# prefix and suffix for creating rate variables
-my $o_rsuffix='';	
-my $o_rprefix="&Delta_";	# default prefix	
+my $o_rsuffix='_rate';		# default suffix	
+my $o_rprefix='';
 
 ## Additional global variables
 my $redis= undef;               # DB connection object
@@ -315,7 +320,7 @@ sub help {
  -L, --rate_label=[PREFIX_STRING[,SUFFIX_STRING]]
    Prefix or Suffix label used to create a new variable which has rate of change
    of another base variable. You can specify PREFIX or SUFFIX or both. Default
-   if not specified is '&Delta_' prefix string.
+   if not specified is suffix '_rate'.
  -V, --version
    Prints version number
 EOT
@@ -463,7 +468,7 @@ sub dataresults_addvar {
    }
 }
 
-
+# this converts uptime in seconds to nice & short output format
 sub uptime_info {
   my $uptime_seconds = shift;
   my $upinfo = "";
@@ -689,6 +694,7 @@ else {
   alarm ($o_timeout+10);
 }
 
+# connect using tcp and verify the port is working
 my $sock = new IO::Socket::INET(
   PeerAddr => $HOSTNAME,
   PeerPort => $PORT,
@@ -700,6 +706,7 @@ if (!$sock) {
 }
 close($sock);
 
+# now do connection using Redis library
 my $start_time;
 my $dsn = $HOSTNAME.":".$PORT;
 verb("connecting to $dsn"); 
@@ -719,7 +726,9 @@ if (!$redis->ping) {
 
 # This returns hashref of various statistics/info data
 my $stats = $redis->info();
+$redis->quit;
 
+# Now process the results we got
 my $dbversion = "";
 my $statuscode = "OK";
 my $statusinfo = "";
@@ -728,14 +737,16 @@ my $perfdata = "";
 my $vnam;
 my $dnam;
 my $vval;
+my %dbs=();	# database-specific info, this is almost unused right now
+my %slaves=();
 my $chk = "";
 my $i;
 
 # load all data into internal hash array
 $dataresults{$_} = [undef, 0, 0] foreach(@o_varsL);
 $dataresults{$_} = [undef, 0, 0] foreach(@o_perfvarsL);
-$dataresults{'total_keys'} = [0,0,0];
-$dataresults{'total_expires'} = [0,0,0];
+my $total_keys=0;
+my $total_expires=0;
 foreach $vnam (keys %{$stats}) {
      $vval = $stats->{$vnam};
      if (defined($vval)) {
@@ -744,12 +755,14 @@ foreach $vnam (keys %{$stats}) {
 		$dbversion .= $vval;
 	}
 	elsif ($vnam =~ /^db/) {
+		$dbs{$vnam}= {'name'=>$vnam};
 		foreach (split(/,/,$vval)) {
 			my ($k,$d) = split(/=/,$_);
 			dataresults_addvar($vnam.'_'.$k,$d); 
+			$dbs{$vnam}{$k}=$d;
 			verb(" - stats data added: ".$vnam.'_'.$k.' = '.$d);
-			$dataresults{'total_keys'}[0]+=$d if $k eq 'keys' && isnum($d);
-			$dataresults{'total_expires'}[0]+=$d if $k eq 'expires' && isnum($d);
+			$total_keys+=$d if $k eq 'keys' && isnum($d);
+			$total_expires+=$d if $k eq 'expires' && isnum($d);
 		}
 	}
 	elsif ($vnam =~ /~slave/) {
@@ -763,9 +776,10 @@ foreach $vnam (keys %{$stats}) {
         verb("Stats Data: $vnam = NULL");
      }
 }
-$redis->quit;
-verb("Calculated Data: total_keys=".$dataresults{'total_keys'}[0]);
-verb("Calculated Data: total_expires=".$dataresults{'total_expires'}[0]);
+verb("Calculated Data: total_keys=".$total_keys);
+verb("Calculated Data: total_expires=".$total_expires);
+dataresults_addvar('total_keys',$total_keys);
+dataresults_addvar('total_expires',$total_expires);
 
 # Response Time
 if (defined($o_timecheck)) {
@@ -973,7 +987,9 @@ foreach $avar (keys %dataresults) {
 print $statuscode . $statusinfo." ";
 print "- " if $statusinfo;
 print "REDIS " . $dbversion . ' on ' . $HOSTNAME. ':'. $PORT;
-print ' up '.uptime_info($dataresults{'uptime_in_seconds'}[0]) if defined($dataresults{'uptime_in_seconds'}); 
+print ' has '.scalar(keys %dbs).' databases ('.join(',',keys(%dbs)).')';
+print " with ".$dataresults{'total_keys'}[0]." keys" if $dataresults{'total_keys'}[0] > 0;
+print ', up '.uptime_info($dataresults{'uptime_in_seconds'}[0]) if defined($dataresults{'uptime_in_seconds'}); 
 print " -" . $statusdata if $statusdata;
 print " |" . $perfdata if $perfdata;
 print "\n";

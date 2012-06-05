@@ -3,8 +3,8 @@
 # ============================== SUMMARY =====================================
 #
 # Program : check_uptime.pl
-# Version : 0.5alpha
-# Date    : February 14, 2012
+# Version : 0.5
+# Date    : Feb 29, 2012
 # Authors : William Leibzon - william@leibzon.org
 # Licence : GPL - summary below, full text at http://www.fsf.org/licenses/gpl.txt
 #
@@ -130,7 +130,7 @@
 # 0.41 - Jan 13, 2012 : Added bug fix by Rom_UA posted as comment on Nagios Exchange
 #			Added version history you're reading right now.
 # 0.42 - Feb 13, 2012 : Bug fix to not report WARNING if uptime is not correct output
-# 0.5  - Feb xx, 2012 : Added support for "netswitch" engine type that retrieves
+# 0.5  - Feb 29, 2012 : Added support for "netswitch" engine type that retrieves
 #		        snmpEngineTime. Added proper support for sysUpTime interpreting
 #			it as 1/100s of a second and converting to days,hours,minutes
 #			Changed internal processing structure, now reported uptime

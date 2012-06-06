@@ -3,8 +3,8 @@
 # ============================== SUMMARY =====================================
 #
 # Program : check_uptime.pl
-# Version : 0.5
-# Date    : Feb 29, 2012
+# Version : 0.51
+# Date    : June 06, 2012
 # Authors : William Leibzon - william@leibzon.org
 # Licence : GPL - summary below, full text at http://www.fsf.org/licenses/gpl.txt
 #
@@ -42,7 +42,8 @@
 #  On a remote system it'll retrieve data from sysSystem for system type
 #  and use that to decide if further data should be retrieved from 
 #    sysUptime (OID 1.3.6.1.2.1.1.3.0) for windows or 
-#    hostUptime (OID 1.3.6.1.2.1.25.1.1.0) for unix system
+#    hostUptime (OID 1.3.6.1.2.1.25.1.1.0) for unix system or
+#    snmpEngineTime (OID 1.3.6.1.6.3.10.2.1.3) for cisco switches
 #
 #  For information on available options please execute it with --help i.e:
 #    check_uptime.pl --help
@@ -135,6 +136,7 @@
 #			it as 1/100s of a second and converting to days,hours,minutes
 #			Changed internal processing structure, now reported uptime
 #			info text is based on uptime_minutes and not separate.
+# 0.51 - Jun 05, 2012 : Bug fixed for case when when snmp system info is < 3 words.
 # 
 # TODO:
 #   1) Add support for ">", "<" and other threshold qualifiers
@@ -168,7 +170,7 @@ if ($@) {
 }
 
 # Version 
-my $Version='0.5';
+my $Version='0.51';
 
 # SNMP OID
 my $oid_sysSystem = '1.3.6.1.2.1.1.1.0';	     # windows and some unix
@@ -521,7 +523,12 @@ if ($check_type==1) {  # local
      $uptime_minutes = $days*24*60+$hrs*60+$mins;
   }
   my @temp=split(' ',`uname -a`);
-  $system_info=join(' ',$temp[0],$temp[1],$temp[2]);
+  if (scalar(@temp)<3) {
+        $system_info=`uname -a`;
+  }
+  else {
+        $system_info=join(' ',$temp[0],$temp[1],$temp[2]);
+  }
 }
 else {
   # SNMP connection
@@ -615,7 +622,12 @@ else {
     $uptime_info = "up ".$uptime_output;
   }
   my @temp=split(' ',$result->{$oid_sysSystem});
-  $system_info=join(' ',$temp[0],$temp[1],$temp[2]);
+  if (scalar(@temp)<3) {
+	$system_info=$result->{$oid_sysSystem};
+  }
+  else {
+	$system_info=join(' ',$temp[0],$temp[1],$temp[2]);
+  }
 }
 
 if (defined($uptime_minutes) && !defined($uptime_info)) {

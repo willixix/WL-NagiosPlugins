@@ -3,8 +3,8 @@
 # ============================== SUMMARY =====================================
 #
 # Program : check_snmp_netint.pl
-# Version : 2.35
-# Date    : April 19, 2012
+# Version : 2.36
+# Date    : June 9, 2012
 # Authors : William Leibzon - william@leibzon.org,
 #           Patrick Proy ( patrick at proy.org )
 # Licence : GPL - summary below, full text at http://www.fsf.org/licenses/gpl.txt
@@ -497,6 +497,13 @@
 #                   after this plugin deverged from it) into this plugin as well.
 #                   The changes add proper support for 64-bit counters when -g
 #                   option is used and fix a bug when output is in % / perf in Bytes.
+# [2.36] 06/09/12 - Added fixes suggested from modified version of this plugin
+#		    created by Yannick Charton to remove ^@ (NULL ?) and other
+#		    not ASCII caracters at the end of the interface description,
+#		    which allows to correctly match the network interface on
+#                   on Windows servers. Extended '-v' (debug/verbose) option,
+#		    so that instead of writing to STDOUT people could specify
+#		    a file to write debug output to.
 #
 # ========================== START OF PROGRAM CODE ===========================
 
@@ -520,7 +527,7 @@ if ($@) {
 }
 
 # Version 
-my $Version='2.35';
+my $Version='2.36';
 
 ############### BASE DIRECTORY FOR TEMP FILE (override this with -F) ########
 my $o_base_dir="/tmp/tmp_Nagios_int.";
@@ -571,7 +578,7 @@ my $o_admin=		undef;	# admin status instead of oper
 my $o_inverse=  	undef;	# Critical when up
 my $o_ignorestatus=     undef;  # Ignore interface NAK status, always report OK
 my $o_dormant=        	undef;  # Dormant state is OK
-my $o_verb=		undef;	# verbose mode
+my $o_verb=		undef;	# verbose mode/debug file name
 my $o_version=		undef;	# print version
 my $o_noreg=		undef;	# Do not use Regexp for name
 my $o_short=		undef;	# set maximum of n chars to be displayed
@@ -698,7 +705,7 @@ sub write_file {
 sub p_version { print "check_snmp_netint version : $Version\n"; }
 
 sub print_usage {
-    print "Usage: $0 [-v] -H <host> (-C <snmp_community> [-2]) | (-l login -x passwd [-X pass -L <authp>,<privp>)  [-p <port>] [-N <desc table oid>] -n <name in desc_oid> [-O <comments table OID>] [-I] [-i | -a | -D] [-r] [-f[eSyYZ] [-P <previous perf data from nagios \$SERVICEPERFDATA\$>] [-T <previous time from nagios \$LASTSERVICECHECK\$>] [--pcount=<hist size in perf>]] [-k[qBMGu] [-S [intspeed]] -g [-w<warn levels> -c<crit levels> [-z]| -z] -d<delta>] [-o <octet_length>] [-m|-mm] [-t <timeout>] [-s] [--label] [--cisco=[oper,][addoper,][linkfault,][use_portnames|show_portnames]] [--stp[=<expected stp state>]] [-V]\n";
+    print "Usage: $0 [-v [debugfilename]] -H <host> (-C <snmp_community> [-2]) | (-l login -x passwd [-X pass -L <authp>,<privp>)  [-p <port>] [-N <desc table oid>] -n <name in desc_oid> [-O <comments table OID>] [-I] [-i | -a | -D] [-r] [-f[eSyYZ] [-P <previous perf data from nagios \$SERVICEPERFDATA\$>] [-T <previous time from nagios \$LASTSERVICECHECK\$>] [--pcount=<hist size in perf>]] [-k[qBMGu] [-S [intspeed]] -g [-w<warn levels> -c<crit levels> [-z]| -z] -d<delta>] [-o <octet_length>] [-m|-mm] [-t <timeout>] [-s] [--label] [--cisco=[oper,][addoper,][linkfault,][use_portnames|show_portnames]] [--stp[=<expected stp state>]] [-V]\n";
 }
 
 sub isnnum { # Return true if arg is not a number
@@ -713,14 +720,15 @@ sub ascii_to_hex { # Convert each ASCII character to a two-digit hex number [WL]
 }
 
 sub help {
-   print "\nSNMP Network Interface Monitor for Nagios (check_snmp_netint) v. ",$Version,"\n";
-   print "GPL licence, (c)2004-2007 Patrick Proy, (c)2007-2011 William Leibzon\n";
-   print "contribs by J. Jungmann, S. Probst, R. Leroy, M. Berger, T. Horn\n\n";
+   print "\nSNMP Network Interface Monitor Plugin for Nagios (check_snmp_netint) v. ",$Version,"\n";
+   print "GPL licence, (c)2004-2007 Patrick Proy, (c)2007-2012 William Leibzon\n";
+   print "contribs by J. Jungmann, S. Probst, R. Leroy, M. Beger, T. Horn and many others\n\n";
    print_usage();
    print <<EOT;
 
--v, --verbose
+-v, --verbose[=FILENAME]
    print extra debugging information (including interface list on the system)
+   If filename is specifies instead of STDOUT the debug data is written to the file
 -h, --help
    print this help message
 -H, --hostname=HOST
@@ -860,8 +868,24 @@ Note : when multiple interfaces are selected with regexp,
 EOT
 }
 
-# For verbose output
-sub verb { my $t=shift; print $t,"\n" if defined($o_verb) ; }
+# For verbose output (updated 06/06/12 to write to debug file if specified)
+sub verb {
+    my $t=shift;
+    if (defined($o_verb)) {
+	if ($o_verb eq "") {
+		print $t;
+	}
+	else {
+	    if (!open (DEBUGFILE, ">>$o_verb")) {
+		print $t;
+	    }
+	    else {
+		print DEBUGFILE $t,"\n";
+		close DEBUGFILE;
+	    }
+	}
+    }
+}
 
 # WL: load previous performance data 
 sub process_perf {
@@ -900,7 +924,7 @@ sub perf_name2 {
 sub check_options {
     Getopt::Long::Configure ("bundling");
 	GetOptions(
-   	'v'	=> \$o_verb,		'verbose'	=> \$o_verb,
+   	'v:s'	=> \$o_verb,		'verbose:s' => \$o_verb, "debug:s" => \$o_verb, 
         'h'     => \$o_help,    	'help'        	=> \$o_help,
         'H:s'   => \$o_host,		'hostname:s'	=> \$o_host,
         'p:i'   => \$o_port,   		'port:i'	=> \$o_port,
@@ -915,7 +939,7 @@ sub check_options {
 	'i'	=> \$o_inverse,		'inverse'	=> \$o_inverse,
 	'a'	=> \$o_admin,		'admin'		=> \$o_admin,
 	'D'     => \$o_dormant,         'dormant'       => \$o_dormant,
-+       'I'     => \$o_ignorestatus,    'ignorestatus'  => \$o_ignorestatus,
+        'I'     => \$o_ignorestatus,    'ignorestatus'  => \$o_ignorestatus,
 	'r'	=> \$o_noreg,		'noregexp'	=> \$o_noreg,
 	'V'	=> \$o_version,		'version'	=> \$o_version,
         'f'     => \$o_perf,            'perfparse'     => \$o_perf,
@@ -1313,12 +1337,18 @@ else {
    verb("Filter : $o_descr");
    foreach my $key (keys %$result) {
       verb("OID : $key, Desc : $$result{$key}");
+
+      # below chop line is based on code by Y. Charton to Remove ^@ (NULL ?) and other
+      # non-ASCII caracters at the end of the interface description, this allows to
+      # correctly match interface for those checking Windows servers with buggy snmp
+      chop($$result{$key}) if (ord(substr($$result{$key},-1,1)) > 127 || ord(substr($$result{$key},-1,1)) == 0 );
+
       # test by regexp or exact match
       my $test = defined($o_noreg) 
 		? $$result{$key} eq $o_descr
 		: $$result{$key} =~ /$o_descr/;
       if ($test && $key =~ /$descr_table\.(.*)/) {
-	  # WL: get the index number of the interface (using additional map in case of cisco) 
+	 # WL: get the index number of the interface (using additional map in case of cisco) 
 	 if (defined($o_ciscocat)) {
 		if (defined($o_cisco{use_portnames}) && defined($$resultp{$cisco_port_ifindex_map.'.'.$1})) {
 			$cport[$num_int] = $1;

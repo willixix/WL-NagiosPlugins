@@ -3,8 +3,8 @@
 # ============================== SUMMARY =====================================
 #
 # Program : check_sasraid_megaraid.pl (also known as check_megaraid.pl)
-# Version : 1.91
-# Date    : Feb 8, 2012
+# Version : 1.92
+# Date    : June 15, 2012
 # Author  : William Leibzon - william@leibzon.org
 # Copyright: (C) 2002 ibiblio (C) 2006-2012 William Leibzon
 # Summary : This is a nagios plugin to monitor LSI MegaRAID and attached disks
@@ -165,10 +165,13 @@
 #      This is all for better security for those few who do use this plugin
 #   17. [1.902 - Jan 12, 2012] Documentation fixes
 #   18. [1.91 - Feb 8, 2012] Bug fixes with 1.9 release (forgot to include verb() function)
+#   19. [1.92 - Jun 15, 2012] Bug fixes when no SNNP version is specified
+#	                      Verb function & option updated to allow debug info go to file
+#			      specified as a parameter to -v rather than just stdout
 #
 # ========================== START OF PROGRAM CODE ===========================
 
-my $version = "1.902";
+my $version = "1.92";
 
 use strict;
 use Getopt::Long;
@@ -351,7 +354,24 @@ sub set_oids {
   }
 }
 
-sub verb { my $t=shift; print $t,"\n" if defined($opt_debug) ; }
+# For verbose output (updated 06/06/12 to write to debug file if specified)
+sub verb {
+    my $t=shift;
+    if (defined($opt_debug)) {
+        if ($opt_debug eq "") {
+                print $t;
+        }
+        else {
+            if (!open (DEBUGFILE, ">>$opt_debug")) {
+                print $t;
+            }
+            else {
+                print DEBUGFILE $t,"\n";
+                close DEBUGFILE;
+            }
+        }
+    }
+}
 
 # Function to parse command line arguments
 sub check_options {
@@ -363,7 +383,8 @@ sub check_options {
         'O:s'   => \$opt_baseoid,	'oid:s'         => \$opt_baseoid,
 	't:s'   => \$opt_t,		'timeout:s'	=> \$opt_t,
 	'a:s'	=> \$opt_a,		'alert:s'	=> \$opt_a,
-	'd'	=> \$opt_debug,		'debug'		=> \$opt_debug,
+	'v:s'	=> \$opt_debug,		'verbose:s'	=> \$opt_debug,
+	'd:s'	=> \$opt_debug,		'debug:s'	=> \$opt_debug,
 					'debug_time'	=> \$opt_debugtime,
 	'P:s'   => \$opt_perfdata,	'perf:s'	=> \$opt_perfdata,
 	'S:s'	=> \$opt_prevstate,	'state:s'	=> \$opt_prevstate,
@@ -401,32 +422,41 @@ sub check_options {
         ($opt_p =~ m/^[0-9]+$/) || usage("Invalid port number: $opt_p\n");
         $port = $opt_p;
   }
-  # snmp version paramete, default auto-detect with version 1 if community is specified
+  # snmp version parameter, default auto-detect with version 1 if community is specified
+  if (!defined($opt_snmpversion)) {
+	if (defined($o_community) && !defined($o_login) && !defined($o_passwd)) {
+		$opt_snmpversion = '1';
+	}
+	elsif (!defined($o_community) && defined($o_login) && defined($o_passwd)) {
+		$opt_snmpversion = '3';
+	}
+	else {
+		usage("Can not autodetect SNMP version when -C and -l are both specified\n");
+	}
+  }
   if ($opt_snmpversion eq '2' || $opt_snmpversion eq '2c') {
         $opt_snmpversion='2';
   }
-  elsif (defined($opt_snmpversion) && !($opt_snmpversion ne '1' || $opt_snmpversion ne '3')) {
+  elsif ($opt_snmpversion ne '1' && $opt_snmpversion ne '3') {
         usage("Invalid or unsupported value ($opt_snmpversion) for SNMP version\n");
   }
-  # check snmp information
   if (defined($o_login) || defined($o_passwd)) {
-	if (defined($o_community)) { usage("Can't mix snmp v1,2c,3 protocols!\n");}
-	if (!defined($opt_snmpversion)) { $opt_snmpversion='3'; }
-	if ($opt_snmpversion ne '3') { usage("Incorrect snmp version specified!\n");}
+	if (defined($o_community)) { usage("Can't mix snmp v1,2c,3 protocols!\n"); }
+	if ($opt_snmpversion ne '3') { usage("Incorrect snmp version specified!\n"); }
   }
   if (defined($o_community)) {
-	if ($opt_snmpversion eq '3') { usage("SNMP version 3 does not use community\n");}
-	if (!defined($opt_snmpversion)) { $opt_snmpversion = '1' };
+	if ($opt_snmpversion eq '3') { usage("SNMP version 3 does not use community\n"); }
   }
   if (defined ($v3protocols)) {
-        if (!defined($o_login)) { usage("Put snmp V3 login info with protocols!\n");}
+        if (!defined($o_login)) { usage("Put snmp V3 login info with protocols!\n"); }
         my @v3proto=split(/,/,$v3protocols);
-        if ((defined ($v3proto[0])) && ($v3proto[0] ne "")) {$o_authproto=$v3proto[0];  }       # Auth protocol
+        if ((defined ($v3proto[0])) && ($v3proto[0] ne "")) { $o_authproto=$v3proto[0]; } 
         if (defined ($v3proto[1])) {$o_privproto=$v3proto[1];}   # Priv  protocol
         if ((defined ($v3proto[1])) && (!defined($o_privpass)))
-          { usage("Put snmp V3 priv login info with priv protocols!\n");}
+          { usage("Put snmp V3 priv login info with priv protocols!\n"); }
   }
 
+  # cart type parameter
   if (defined($opt_cardtype)) {
      if ($opt_cardtype eq 'megaraid' || $opt_cardtype eq 'perc3' || $opt_cardtype eq 'perc4') {
 	$cardtype='megaraid';
@@ -933,7 +963,7 @@ sub help {
         print "  -C, --community <community>\n";
         print "    SNMP community string\n";
         print "  -s, --snmp_version 1 | 2 | 2c | 3\n";
-        print "    Version of SNMP protocol to use - default is autodetect or 1\n";
+        print "    Version of SNMP protocol to use (default is 1 if -C and 3 if -l specified)";
         print "  -p, --port <port>\n";
         print "    SNMP port (defaults to 161)\n";
         print "  -l, --login=LOGIN ; -x, --passwd=PASSWD\n";
@@ -947,9 +977,10 @@ sub help {
         print "  -t, --timeout <timeout>\n";
         print "    Seconds before timing out (defaults to Nagios timeout value)\n";
 	print "\nDebug Options:\n";
-	print "  --debug \n";
+	print "  --debug[=FILENAME] || --verbose[=FILENAME]\n";
 	print "    Enables verbose debug output printing exactly what data was retrieved from SNMP\n";
-	print "    This is for manual checks, not intended to be used when plugin is called from Nagios\n";
+	print "    This is mainly for manual checks when testing this plugin on the console\n";
+	print "	   If filename is specified instead of STDOUT the debug data is written to that file\n";
 	print "  --debug_time \n";
 	print "    This must be used with '-P' option and provides data on how long each SNMP data retrieval operation took\n";
 	print "    The data is output together with 'performance' data so this can be used when calling from nagios\n";
@@ -966,7 +997,7 @@ sub usage {
 # display usage information
 sub print_usage {
         print "Usage:\n";
-        print "$0 [-s <snmp_version>] -H <host> (-C <snmp_community>) | (-l login -x passwd [-X pass -L <authp>,<privp>) [-p <port>] [-t <timeout>] [-O <base oid>] [-a <alert level>] [--extra_info] [--drive_errors -P <previous performance data> -S <previous state>] [--debug] [--debug_time] [--snmp_optimize] [-T megaraid|sasraid|perc3|perc4|perc5|perc6|mptfusion|sas6ir|sas6]\n";
+        print "$0 [-s <snmp_version>] -H <host> (-C <snmp_community>) | (-l login -x passwd [-X pass -L <authp>,<privp>) [-p <port>] [-t <timeout>] [-O <base oid>] [-a <alert level>] [--extra_info] [--drive_errors -P <previous performance data> -S <previous state>] [-v [DebugLogFile] || -d [DebugLogFile]] [--debug_time] [--snmp_optimize] [-T megaraid|sasraid|perc3|perc4|perc5|perc6|mptfusion|sas6ir|sas6]\n";
         print "$0 --version | $0 --help (use this to see better documentation of above options)\n";
 }
 

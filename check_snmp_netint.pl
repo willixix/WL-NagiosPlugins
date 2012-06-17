@@ -6,7 +6,8 @@
 # Version : 2.36
 # Date    : June 9, 2012
 # Authors : William Leibzon - william@leibzon.org,
-#           Patrick Proy ( patrick at proy.org )
+#           Patrick Proy ( patrick at proy.org ),
+#           and many other listed in "CONTRIBUTORS" documentation section
 # Licence : GPL - summary below, full text at http://www.fsf.org/licenses/gpl.txt
 #
 # =========================== PROGRAM LICENSE =================================
@@ -226,7 +227,7 @@
 # III.For those of you with Cisco switches you may have noticed that they
 #     do not provide appropriate port names at standard SNMP ifdescr table.
 #     There are two options to help you:
-#   1. if you set custom port names ('set port 1/xx name zzz") you can use
+#   1. If you set custom port names ('set port 1/xx name zzz") you can use
 #      those names with "--cisco=use_portnames" option.
 #   2. Another option is specify custom description table with
 #       "-N 1.3.6.1.2.1.31.1.1.1.1"
@@ -252,8 +253,8 @@
 #   had usable data and will not attempt to retrieve from tables that did
 #   not exist on subsequent calls. 
 #
-# IV. Although only tested with cisco switches, support is also provided
-#     to query STP (Spanning Tree Protocol) status of the port. This is
+# IV. Support is also provided to query STP (Spanning Tree Protocol) status
+#     of the port. Although only tested with cisco switches, this is
 #     standartized SNMP data and should be supported by few other vendors
 #     so separate '--stp' option will work without '--cisco' option.
 #     The plugin will report single WARNING alert if status changes so
@@ -478,7 +479,7 @@
 #
 # [2.3]  12/15/10 - Various small fixes. Plus a patch sent by Tristan Horn to better
 #                   support minimum and maximum warning and critical thresholds
-# [2.31] 01/10/11 - Bug when reporting in_prct/out_prct performance metric 
+# [2.31] 01/10/11 - Bug fix when reporting in_prct/out_prct performance metric 
 # [2.32] 12/22/11 - Fixes for bugs reported by Joe Trungale and Nicolas Parpandet
 #		    Updates to check on existance of utils.pm and use but not require it
 #		    Patch by Steve Hanselman that adds "-I" option:
@@ -497,18 +498,42 @@
 #                   after this plugin deverged from it) into this plugin as well.
 #                   The changes add proper support for 64-bit counters when -g
 #                   option is used and fix a bug when output is in % / perf in Bytes.
-# [2.36] 06/09/12 - Added fixes suggested from modified version of this plugin
-#		    created by Yannick Charton to remove ^@ (NULL ?) and other
-#		    not ASCII caracters at the end of the interface description,
-#		    which allows to correctly match the network interface on
-#                   on Windows servers. Extended '-v' (debug/verbose) option,
-#		    so that instead of writing to STDOUT people could specify
-#		    a file to write debug output to.
+# [2.36] 06/15/12 - 1) Added fixes suggested in modified version of this plugin created
+#		       by Yannick Charton to remove ^@ (NULL ?) and other not-ASCII
+#		       characters at the end of the interface description. This allows
+#		       to correctly match the network interface on some Windows servers.
+#		    2) Extended '-v' (debug/verbose) option so that instead of writing
+#		       to STDOUT people could specify a file to write debug output to.
+#		    3) Using of quotewords() in prev_perf as suggested by Nicholas Scott
+#		       allows to work with interfaces that have space in their name.
+#		       Due to this plugin now require Text::ParseWords perl library.
+#		    4) List of contributors created as a separate header section below.
 #
-# ========================== START OF PROGRAM CODE ===========================
+# ============================ LIST OF CONTRIBUTORS ===============================
+#
+# The following individuals have contributed code, patches, bug fixes and ideas to
+# this plugin:
+#
+#    Patrick Proy
+#    William Leibzon
+#    J. Jungmann
+#    S. Probst
+#    R. Leroy
+#    M. Beger
+#    Bryan Leaman
+#    Tristan Horn
+#    Yannick Charton
+#    Steve Hanselman
+#    Sébastien PRUD'HOMME
+#    Nicholas Scott
+#
+# Open source community is forever grateful for all your contributions.
+#
+# ============================ START OF PROGRAM CODE =============================
 
 use strict;
 use Getopt::Long;
+use Text::ParseWords;
 
 # Nagios specific
 use lib "/usr/local/nagios/libexec";
@@ -600,6 +625,14 @@ my $o_gig=              undef;  # output in GBytes or Gbits (-G)
 my $o_prct=             undef;  # output in % of max speed  (-u)
 my $o_kbits=	        undef;	# Warn and critical in Kbits instead of KBytes
 my $o_zerothresholds=	undef;  # If warn/crit are not specified, assume its 0
+
+# Average Traffic Calculation Options (new option for upcoming 2.4 beta)
+my $o_timeavg_opt=	undef;  # New option that allows to keep track of average traffic
+				# (50 percentile) over longer period and to set
+				# threshold based on deviation from this average
+my $o_atime_nchecks_opt= undef;	# Minimum number of samples for threshold to take affect
+				# (2 numbers: one fo take affect in addition to regular
+			        #  threshold, 2nd number is to take affect overriding them)
 
 # Performance data options
 my $o_perf=             undef;  # Output performance data
@@ -727,8 +760,8 @@ sub help {
    print <<EOT;
 
 -v, --verbose[=FILENAME]
-   print extra debugging information (including interface list on the system)
-   If filename is specifies instead of STDOUT the debug data is written to the file
+   Print extra debugging information (including interface list on the system)
+   If filename is specified instead of STDOUT the debug data is written to that file.
 -h, --help
    print this help message
 -H, --hostname=HOST
@@ -887,22 +920,24 @@ sub verb {
     }
 }
 
-# WL: load previous performance data 
+# Load previous performance data
+# 05/20/12: modified to use quotewords as suggested by Nicholas Scott
 sub process_perf {
- my %pdh;
- my ($nm,$dt);
- foreach (quotewords('\s+',1,$_[0])) {
-   if (/(.*)=(.*)/) {
-        ($nm,$dt)=($1,$2);
-        verb("prev_perf: $nm = $dt");
-	# in some of my plugins time_ is to profile how long execution takes for some part of plugin
-        # $pdh{$nm}=$dt if $nm !~ /^time_/;
-	$pdh{$nm}=$dt;
-	$pdh{$nm}=$1 if $dt =~ /(\d+)c/; # 'c' is added as designation for octet
-	push @prev_time,$1 if $nm =~ /.*\.(\d+)/ && (!defined($prev_time[0]) || $prev_time[0] ne $1); # more then one set of previously cached performance data
+   my %pdh;
+   my ($nm,$dt);
+   use Text::ParseWords;
+   foreach (quotewords('\s+',1,$_[0])) {
+       if (/(.*)=(.*)/) {
+           ($nm,$dt)=($1,$2);
+           verb("prev_perf: $nm = $dt");
+           # in some of my plugins time_ is to profile how long execution takes for some part of plugin
+           # $pdh{$nm}=$dt if $nm !~ /^time_/;
+           $pdh{$nm}=$dt;
+           $pdh{$nm}=$1 if $dt =~ /(\d+)c/; # 'c' is added as designation for octet
+           push @prev_time,$1 if $nm =~ /.*\.(\d+)/ && (!defined($prev_time[0]) || $prev_time[0] ne $1); # more then one set of previously cached performance data
+       }
    }
- }
- return %pdh;
+   return %pdh;
 }
 
 # this is normal way check_snmp_int does it
@@ -1339,7 +1374,7 @@ else {
       verb("OID : $key, Desc : $$result{$key}");
 
       # below chop line is based on code by Y. Charton to Remove ^@ (NULL ?) and other
-      # non-ASCII caracters at the end of the interface description, this allows to
+      # non-ASCII characters at the end of the interface description, this allows to
       # correctly match interface for those checking Windows servers with buggy snmp
       chop($$result{$key}) if (ord(substr($$result{$key},-1,1)) > 127 || ord(substr($$result{$key},-1,1)) == 0 );
 

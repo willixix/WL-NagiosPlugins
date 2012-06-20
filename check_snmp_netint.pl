@@ -906,11 +906,11 @@ sub verb {
     my $t=shift;
     if (defined($o_verb)) {
 	if ($o_verb eq "") {
-		print $t;
+		print $t, "\n";
 	}
 	else {
 	    if (!open (DEBUGFILE, ">>$o_verb")) {
-		print $t;
+		print $t, "\n";
 	    }
 	    else {
 		print DEBUGFILE $t,"\n";

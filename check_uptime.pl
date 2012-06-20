@@ -179,7 +179,7 @@ if ($@) {
 }
 
 # Version 
-my $Version='0.51';
+my $Version='0.52';
 
 # SNMP OID
 my $oid_sysSystem = '1.3.6.1.2.1.1.1.0';	     # windows and some unix

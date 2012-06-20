@@ -3,8 +3,8 @@
 # ============================== SUMMARY =====================================
 #
 # Program : check_redis.pl
-# Version : 0.5
-# Date    : June 01, 2012
+# Version : 0.51
+# Date    : June 16, 2012
 # Author  : William Leibzon - william@leibzon.org
 # Licence : GPL - summary below, full text at http://www.fsf.org/licenses/gpl.txt
 #
@@ -225,6 +225,8 @@
 #		         place of &delta. Changed -D option to -r.
 #  [0.5  - Jun 01, 2012] First official release will start with version 0.5
 #			 Documentation changes, but no code updates.
+#  [0.51 - Jun 16, 2012] Added support to specify filename to '-v' option
+#			 for debug output and '--debug' as alias to '--verbose'
 #
 # TODO or consider for future:
 #
@@ -275,7 +277,7 @@ if ($@) {
  %ERRORS = ('OK'=>0,'WARNING'=>1,'CRITICAL'=>2,'UNKNOWN'=>3,'DEPENDENT'=>4);
 }
 
-my $Version='0.5';
+my $Version='0.51';
 
 # This is a list of known stat and info variables including variables added by plugin,
 # used in order to designate COUNTER variables with 'c' in perfout for graphing programs
@@ -378,7 +380,7 @@ my %dataresults= ();		# this is where data is loaded into
 sub p_version { print "check_redis.pl version : $Version\n"; }
 
 sub print_usage {
-   print "Usage: $0 [-v] -H <host> [-p <port>] [-a <statistics variables> -w <variables warning thresholds> -c <variables critical thresholds>] [-A <performance output variables>] [-T [conntime_warn,conntime_crit]] [-R [hitrate_warn,hitrate_crit]] [-m [mem_utilization_warn,mem_utilization_crit] [-M <maxmemory>[B|K|M|G]]] [-r replication_delay_time_warn,replication_delay_time_crit]  [-f] [-T <timeout>] [-V] [-P <previous performance data in quoted string>]\n";
+   print "Usage: $0 [-v [debugfilename]] -H <host> [-p <port>] [-a <statistics variables> -w <variables warning thresholds> -c <variables critical thresholds>] [-A <performance output variables>] [-T [conntime_warn,conntime_crit]] [-R [hitrate_warn,hitrate_crit]] [-m [mem_utilization_warn,mem_utilization_crit] [-M <maxmemory>[B|K|M|G]]] [-r replication_delay_time_warn,replication_delay_time_crit]  [-f] [-T <timeout>] [-V] [-P <previous performance data in quoted string>]\n";
    print "For more details on options do: $0 --help\n";
 }
 
@@ -389,8 +391,9 @@ sub help {
    print "data which are also returned as performance output for graphing.\n\n";
    print_usage();
    print <<EOT;
- -v, --verbose
-   print extra debugging information
+ -v, --verbose[=FILENAME], --debug[=FILENAME]
+   Print extra debugging information.
+   If filename is specified instead of STDOUT the debug data is written to that file.
  -h, --help
    Print this detailed help screen
  -H, --hostname=ADDRESS
@@ -471,8 +474,24 @@ sub help {
 EOT
 }
 
-# For verbose output
-sub verb { my $t=shift; print $t,"\n" if defined($o_verb) ; }
+# For verbose output (updated 06/06/12 to write to debug file if specified)
+sub verb {
+    my $t=shift;
+    if (defined($o_verb)) {
+	if ($o_verb eq "") {
+		print $t;
+	}
+	else {
+	    if (!open (DEBUGFILE, ">>$o_verb")) {
+		print $t;
+	    }
+	    else {
+		print DEBUGFILE $t,"\n";
+		close DEBUGFILE;
+	    }
+	}
+    }
+}
 
 # Return true if arg is a number
 sub isnum {
@@ -632,7 +651,7 @@ sub uptime_info {
 sub check_options {
     Getopt::Long::Configure ("bundling");
     GetOptions(
-        'v'     => \$o_verb,            'verbose'       => \$o_verb,
+   	'v:s'	=> \$o_verb,		'verbose:s' => \$o_verb, "debug:s" => \$o_verb,
         'h'     => \$o_help,            'help'          => \$o_help,
         'H:s'   => \$o_host,            'hostname:s'    => \$o_host,
         'p:i'   => \$o_port,            'port:i'        => \$o_port,

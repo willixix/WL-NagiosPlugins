@@ -632,7 +632,7 @@ my $o_timeavg_opt=	undef;  # New option that allows to keep track of average tra
 				# threshold based on deviation from this average
 my $o_atime_nchecks_opt= undef;	# Minimum number of samples for threshold to take affect
 				# (2 numbers: one fo take affect in addition to regular
-			        #  threshold, 2nd number is to take affect overriding them)
+			        #  threshold, 2nd number is to take
 
 # Performance data options
 my $o_perf=             undef;  # Output performance data

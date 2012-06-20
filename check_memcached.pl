@@ -3,8 +3,8 @@
 # ============================== SUMMARY =====================================
 #
 # Program : check_memcached.pl
-# Version : 0.63
-# Date    : June 01, 2012
+# Version : 0.64
+# Date    : June 15, 2012
 # Author  : William Leibzon - william@leibzon.org
 # Licence : GPL - summary below, full text at http://www.fsf.org/licenses/gpl.txt
 #
@@ -221,15 +221,17 @@
 #	             array with results for each statistics just giving raw memcached
 #		     data. This effected 'items' and 'slabs' statistics and maybe others.
 #		     Plugin can now handle parsing such data into separate variables.
-#  [0.63 - Jun 2012] Documentation fixes.
-#		     Default rate variable name changed from &Delta_variable to
-#                    variable_rate to be in sync with check_redis.pl. One of the reasons
-#                    is that in the future I'll plan to add variables that are real delta
-#                    i.e new_value-old_value and not (new_value-old_value)/time
-#		     Also I've decided that specifying prefix & suffix or rate label
-#                    variables will not be one-letter option and only long-name option
-#                    As such -L option has been depreciated. I'm doing it all early
-#                    because only few currently use this and its not too late to change
+#  [0.63 - Jun 10 2012] Documentation fixes.
+#		        Default rate variable name changed from &Delta_variable to
+#                       variable_rate to be in sync with check_redis.pl. One of the reasons
+#                       is that in the future I'll plan to add variables that are real 
+#                       delta i.e new_value-old_value and not (new_value-old_value)/time
+#		        Also I've decided that specifying prefix & suffix or rate label
+#                       variables will not be one-letter option and only long-name option
+#                       As such -L option has been depreciated. I'm doing it all early
+#                       because only few currently use this and its not too late to change
+# [0.64 - Jun 16, 2012] Added support to specify filename to '-v' option
+#			for debug output and '--debug' as alias to '--verbose'
 #
 # TODO or consider for future:
 #
@@ -286,11 +288,12 @@ if ($@) {
  %ERRORS = ('OK'=>0,'WARNING'=>1,'CRITICAL'=>2,'UNKNOWN'=>3,'DEPENDENT'=>4);
 }
 
-my $Version='0.62';
+my $Version='0.64';
 
 # This is a list of known statistics variables (plus few variables added by plugin),
 # used in order to designate COUNTER variables with 'c' in perfout for graphing programs
-my %KNOWN_STATUS_VARS = ( 
+my %KNOWN_STATUS_VARS = (
+	 'version' =>  [ 'VERSION', '' ],		# memcached version
 	 'utilization' => [ 'GAUGE', '%' ],		# calculated by plugin
 	 'hitrate' => [ 'GAUGE', '%' ],			# calculated by plugin
 	 'response_time' => [ 'GAUGE', 's' ],		# measured by plugin
@@ -330,9 +333,9 @@ my %KNOWN_STATUS_VARS = (
 	);
 
 # Here you can also specify which variables should go into perf data, 
-# For right now it is 'GAUGE', 'COUNTER', 'DATA', and 'BOOLEAN'
+# For right now it is 'GAUGE', 'COUNTER', 'DATA' (but not 'TEXTDATA'), and 'BOOLEAN'
 # you may want to remove BOOLEAN if you don't want too much data
-my $PERF_OK_STATUS_REGEX = "GAUGE|COUNTER|DATA|BOOLEAN";
+my $PERF_OK_STATUS_REGEX = 'GAUGE|COUNTER|^DATA$|BOOLEAN';
 
 # ============= MAIN PROGRAM CODE - DO NOT MODIFY BELOW THIS LINE ==============
 
@@ -371,7 +374,7 @@ my $perfcheck_time=undef;	# time when data was last checked
 sub p_version { print "check_memcached.pl version : $Version\n"; }
 
 sub print_usage {
-   print "Usage: $0 [-v] -H <host> [-p <port>] [-s <memcache stat arrays>] [-a <memcache statistics variables> -w <variables warning thresholds> -c <variables critical thresholds>] [-A <performance output variables>] [-T [conntime_warn,conntime_crit]] [-R [hitrate_warn,hitrate_crit]] [-U [utilization_size_warn,utilization_size_crit]] [-f] [-T <timeout>] [-V] [-P <previous performance data in quoted string>]\n";
+   print "Usage: $0 [-v [debugfilename]] -H <host> [-p <port>] [-s <memcache stat arrays>] [-a <memcache statistics variables> -w <variables warning thresholds> -c <variables critical thresholds>] [-A <performance output variables>] [-T [conntime_warn,conntime_crit]] [-R [hitrate_warn,hitrate_crit]] [-U [utilization_size_warn,utilization_size_crit]] [-f] [-T <timeout>] [-V] [-P <previous performance data in quoted string>]\n";
    print "For more details on options do: $0 --help\n";
 }
 
@@ -382,8 +385,9 @@ sub help {
    print "which are also returned as performance output for graphing.\n\n";
    print_usage();
    print <<EOT;
- -v, --verbose
-   print extra debugging information
+ -v, --verbose[=FILENAME], --debug[=FILENAME]
+   Print extra debugging information.
+   If filename is specified instead of STDOUT the debug data is written to that file.
  -h, --help
    Print this detailed help screen
  -H, --hostname=ADDRESS
@@ -461,8 +465,24 @@ sub help {
 EOT
 }
 
-# For verbose output
-sub verb { my $t=shift; print $t,"\n" if defined($o_verb) ; }
+# For verbose output (updated 06/06/12 to write to debug file if specified)
+sub verb {
+    my $t=shift;
+    if (defined($o_verb)) {
+	if ($o_verb eq "") {
+		print $t;
+	}
+	else {
+	    if (!open (DEBUGFILE, ">>$o_verb")) {
+		print $t;
+	    }
+	    else {
+		print DEBUGFILE $t,"\n";
+		close DEBUGFILE;
+	    }
+	}
+    }
+}
 
 # Return true if arg is a number
 sub isnum {
@@ -592,7 +612,7 @@ sub threshold_specok {
 sub check_options {
     Getopt::Long::Configure ("bundling");
     GetOptions(
-        'v'     => \$o_verb,            'verbose'       => \$o_verb,
+   	'v:s'	=> \$o_verb,		'verbose:s' => \$o_verb, "debug:s" => \$o_verb,
         'h'     => \$o_help,            'help'          => \$o_help,
         'H:s'   => \$o_host,            'hostname:s'    => \$o_host,
         'p:i'   => \$o_port,            'port:i'        => \$o_port,

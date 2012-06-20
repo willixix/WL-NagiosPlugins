@@ -4,7 +4,7 @@
 #
 # Program : check_uptime.pl
 # Version : 0.52
-# Date    : June 15, 2012
+# Date    : June 19, 2012
 # Authors : William Leibzon - william@leibzon.org
 # Licence : GPL - summary below, full text at http://www.fsf.org/licenses/gpl.txt
 #
@@ -137,7 +137,7 @@
 #			Changed internal processing structure, now reported uptime
 #			info text is based on uptime_minutes and not separate.
 # 0.51 - Jun 05, 2012 : Bug fixed for case when when snmp system info is < 3 words.
-# 0.52 - Jun 15, 2012 : For switches if snmpEngineTime OID is not available,
+# 0.52 - Jun 19, 2012 : For switches if snmpEngineTime OID is not available,
 #		        the plugin will revert back to checking hostUptime and
 #			then sysUptime. Entire logic has in fact been changed
 #			to support trying more than just two OIDs. Also added

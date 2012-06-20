@@ -4,7 +4,7 @@
 #
 # Program : check_memcached.pl
 # Version : 0.64
-# Date    : June 15, 2012
+# Date    : June 16, 2012
 # Author  : William Leibzon - william@leibzon.org
 # Licence : GPL - summary below, full text at http://www.fsf.org/licenses/gpl.txt
 #
@@ -470,11 +470,11 @@ sub verb {
     my $t=shift;
     if (defined($o_verb)) {
 	if ($o_verb eq "") {
-		print $t;
+		print $t, "\n";
 	}
 	else {
 	    if (!open (DEBUGFILE, ">>$o_verb")) {
-		print $t;
+		print $t, "\n";
 	    }
 	    else {
 		print DEBUGFILE $t,"\n";

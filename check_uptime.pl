@@ -3,8 +3,8 @@
 # ============================== SUMMARY =====================================
 #
 # Program : check_uptime.pl
-# Version : 0.51
-# Date    : June 06, 2012
+# Version : 0.52
+# Date    : June 15, 2012
 # Authors : William Leibzon - william@leibzon.org
 # Licence : GPL - summary below, full text at http://www.fsf.org/licenses/gpl.txt
 #
@@ -137,11 +137,20 @@
 #			Changed internal processing structure, now reported uptime
 #			info text is based on uptime_minutes and not separate.
 # 0.51 - Jun 05, 2012 : Bug fixed for case when when snmp system info is < 3 words.
+# 0.52 - Jun 15, 2012 : For switches if snmpEngineTime OID is not available,
+#		        the plugin will revert back to checking hostUptime and
+#			then sysUptime. Entire logic has in fact been changed
+#			to support trying more than just two OIDs. Also added
+#			support to specify filename to '-v' option for debug
+#		        output to go to instead of console and for '--debug'
+#			option as an alias to '--verbose'.
 # 
 # TODO:
+#   0) Add '--extra-opts' to allow to read options from a file as specified
+#      at http://nagiosplugins.org/extra-opts. This is TODO for all my plugins
 #   1) Add support for ">", "<" and other threshold qualifiers
 #      as done in check_snmp_temperature.pl or check_mysqld.pl
-#   2) Support for more types, in particular network equipment such as cisco:
+#   2) Support for more types, in particular network equipment such as cisco: [DONE]
 #      	     sysUpTime is a 32-bit counter in 1/100 of a second, it rolls over after 496 days
 #            snmpEngineTime (.1.3.6.1.6.3.10.2.1.3) returns the uptime in seconds and will not
 #            roll over, however some cisco switches (29xx) are buggy and it gets reset too.
@@ -222,7 +231,7 @@ my $check_type = 0;
 sub p_version { print "check_uptime version : $Version\n"; }
 
 sub print_usage {
-    print "Usage: $0 [-v] [-T local|unix-host|unix-sys|win|net] [-H <host> (-C <snmp_community>) [-2] | (-l login -x passwd [-X pass -L <authp>,<privp>) [-p <port>]] [-w <warn minutes> -s <crit minutes>] [-f] [-P <previous perf data from nagios \$SERVICEPERFDATA\$>] [-t <timeout>] | [-V] [--label <string>]\n";
+    print "Usage: $0 [-v [debugfilename]] [-T local|unix-host|unix-sys|win|net] [-H <host> (-C <snmp_community>) [-2] | (-l login -x passwd [-X pass -L <authp>,<privp>) [-p <port>]] [-w <warn minutes> -s <crit minutes>] [-f] [-P <previous perf data from nagios \$SERVICEPERFDATA\$>] [-t <timeout>] | [-V] [--label <string>]\n";
 }
 
 sub isnnum { # Return true if arg is not a number
@@ -240,8 +249,9 @@ sub help {
    print <<EOT;
 
 Debug & Console Options:
- -v, --verbose
-   print extra debugging information
+ -v, --verbose[=FILENAME], --debug[=FILENAME]
+   print extra debugging information.
+   if filename is specified instead of STDOUT the debug data is written to that file
  -h, --help
    print this help message
  -V, --version
@@ -298,8 +308,24 @@ SNMP Access Options:
 EOT
 }
 
-# For verbose output
-sub verb { my $t=shift; print $t,"\n" if defined($o_verb) ; }
+# For verbose output (updated 06/06/12 to write to debug file if specified)
+sub verb {
+    my $t=shift;
+    if (defined($o_verb)) {
+        if ($o_verb eq "") {
+                print $t,"\n";
+        }
+        else {
+            if (!open(DEBUGFILE, ">>$o_verb")) {
+                print $t, "\n";
+            }
+            else {
+                print DEBUGFILE $t,"\n";
+                close DEBUGFILE;
+            }
+        }
+    }
+}
 
 # load previous performance data 
 sub process_perf {
@@ -331,7 +357,7 @@ sub type_from_name {
 sub check_options {
     Getopt::Long::Configure ("bundling");
 	GetOptions(
-   	'v'	=> \$o_verb,		'verbose'	=> \$o_verb,
+   	'v:s'	=> \$o_verb,		'verbose:s'	=> \$o_verb,  "debug:s" => \$o_verb,
         'h'     => \$o_help,    	'help'        	=> \$o_help,
         'H:s'   => \$o_host,		'hostname:s'	=> \$o_host,
         'p:i'   => \$o_port,   		'port:i'	=> \$o_port,
@@ -532,8 +558,10 @@ if ($check_type==1) {  # local
 }
 else {
   # SNMP connection
-  my ($session,$result,$oid);
-  $session=create_snmp_session();
+  my $session=create_snmp_session();
+  my $result=undef;
+  my $oid="";
+  my $guessed_check_type=0;
 
   if ($check_type==0){
       $result = $session->get_request(-varbindlist=>[$oid_sysSystem]);
@@ -544,54 +572,69 @@ else {
       }
       verb("$o_host SysInfo Result from OID $oid_sysSystem: $result->{$oid_sysSystem}");
       if ($result->{$oid_sysSystem} =~ /Windows/) {
-	  $check_type=2;
-	  verb('Type: 2 = windows');
+	  $guessed_check_type=2;
+	  verb('Guessing Type: 2 = windows');
       }
       if ($result->{$oid_sysSystem} =~ /Cisco/) {
-	  $check_type=5;
-	  verb('Type: 5 = netswitch');
+	  $guessed_check_type=5;
+	  verb('Guessing Type: 5 = netswitch');
+      }
+      if ($guessed_check_type==0) {
+	  $guessed_check_type=3; # will try hostUptime first
       }
   }
   if ($check_type==0) {
-      $oid=$oid_hostUptime; # still auto, will try host first
+      $oid=$oid_uptime_types[$guessed_check_type][2];
   }
   else {
       $oid=$oid_uptime_types[$check_type][2];
   }
 
-  $result = $session->get_request(-varbindlist=>[$oid,$oid_sysSystem]);
-  if (!defined($result)) {
-      if ($check_type!=0) {
-         printf("ERROR: Can not retrieve uptime OID table $oid: %s.\n", $session->error);
-         $session->close;
-         exit $ERRORS{"UNKNOWN"};
+  do {
+      $result = $session->get_request(-varbindlist=>[$oid,$oid_sysSystem]);
+      if (!defined($result)) {
+          if ($check_type!=0) {
+              printf("ERROR: Can not retrieve uptime OID table $oid: %s.\n", $session->error);
+              $session->close;
+              exit $ERRORS{"UNKNOWN"};
+          }
+          else {
+              if ($session->error =~ /noSuchName/) {
+		  if ($guessed_check_type==4) {
+                      verb("Received noSuchName error for sysUpTime OID $oid. Giving up.");
+                      $guessed_check_type=0;
+		  } 
+	          if ($guessed_check_type==3) {
+            	      verb("Received noSuchName error for hostUpTime OID $oid, will now try sysUpTime");
+		      $guessed_check_type=4;
+	          }
+	          else {
+		      verb("Received noSuchName error for OID $oid, will now try hostUpTime");
+		      $guessed_check_type=3;
+		  }
+		  if ($guessed_check_type!=0) {
+		      $oid=$oid_uptime_types[$guessed_check_type][2];
+		  }
+	      }
+	      else {
+		  printf("ERROR: Can not retrieve uptime OID table $oid: %s.\n", $session->error);
+         	  $session->close;
+         	  exit $ERRORS{"UNKNOWN"};
+	      }
+	  }
       }
       else {
-         if ($session->error =~ /noSuchName/) {
-            verb("Received noSuchName error for hostUpTime OID $oid, will now try sysUpTime");
-            $oid=$oid_sysUptime;
-            $result = $session->get_request(-varbindlist=>[$oid,$oid_sysSystem]);
-	    if (!defined($result)) {
-		printf("ERROR: Can not retrieve uptime OID table $oid: %s.\n", $session->error);
-         	$session->close;
-         	exit $ERRORS{"UNKNOWN"};
-      	    }
-            else {
-		$check_type=4;
-	    }
-         }
-         else {
-            printf("ERROR: Can not retrieve uptime OID table $oid: %s.\n", $session->error);
-            $session->close;
-            exit $ERRORS{"UNKNOWN"};
-         }
+          if ($check_type==0) {
+	      $check_type=$guessed_check_type;
+	  }
       }
-         
   }
-  else {
-      $check_type=3 if $check_type==0;
-  } 
+  while (!defined($result) && $guessed_check_type!=0);
   $session->close;
+  if ($check_type==0 && $guessed_check_type==0) {
+        printf("ERROR: Can not autodetermine proper uptime OID table. Giving up.\n");
+        exit $ERRORS{"UNKNOWN"};
+  }
 
   my ($days, $hrs, $mins);
   $uptime_output=$result->{$oid};

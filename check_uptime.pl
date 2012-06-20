@@ -582,8 +582,6 @@ else {
       if ($guessed_check_type==0) {
 	  $guessed_check_type=3; # will try hostUptime first
       }
-  }
-  if ($check_type==0) {
       $oid=$oid_uptime_types[$guessed_check_type][2];
   }
   else {
@@ -630,6 +628,7 @@ else {
       }
   }
   while (!defined($result) && $guessed_check_type!=0);
+
   $session->close;
   if ($check_type==0 && $guessed_check_type==0) {
         printf("ERROR: Can not autodetermine proper uptime OID table. Giving up.\n");

@@ -329,7 +329,7 @@ sub check_options {
           exit $ERRORS{"UNKNOWN"};
         }
         if (scalar(@o_warnLv)!=scalar(@o_attrL) || scalar(@o_critLv)!=scalar(@o_attrL)) {
-          printf "Number of spefied warning levels (%d) and critical levels (%d) must be equal to the number of attributes specified at '-a' (%d). If you need to ignore some attribute specify it as '~'\n", scalar(@o_warnLv), scalar(@o_critLv), scalar(@o_attrL);
+          printf "Number of specified warning levels (%d) and critical levels (%d) must be equal to the number of attributes specified at '-a' (%d). If you need to ignore some attribute specify it as '~'\n", scalar(@o_warnLv), scalar(@o_critLv), scalar(@o_attrL);
           print_usage();
           exit $ERRORS{"UNKNOWN"};
 	}

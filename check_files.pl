@@ -373,7 +373,7 @@ sub check_options {
 		for($i=0;$i<scalar(@o_filesLv);$i++) { $o_critLv[$i]='~'; }
 	    }
 	    else {
-		printf "Number of spefied warning levels (%d) and critical levels (%d) must be equal to the number checks specified at '-F' (%d). If you need not set threshold specify it as '~'\n", scalar(@o_warnLv), scalar(@o_critLv), scalar(@o_filesL);
+		printf "Number of specified warning levels (%d) and critical levels (%d) must be equal to the number checks specified at '-F' (%d). If you need not set threshold specify it as '~'\n", scalar(@o_warnLv), scalar(@o_critLv), scalar(@o_filesL);
 		print_usage();
 		exit $ERRORS{"UNKNOWN"};
 	    }

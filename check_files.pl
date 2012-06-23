@@ -598,16 +598,16 @@ my $tnow = time();
 my $oldest_secold=$tnow-$oldest_filetime if defined($oldest_filetime);
 my $newest_secold=$tnow-$newest_filetime if defined($newest_filetime);
 verb("Oldest file has age of ".$oldest_secold." seconds and newest ".$newest_secold." seconds");
-if (defined($o_age_crit) && ($chk = check_threshold($oldest_filename." ",$oldest_secold,$o_age_crit)) ) {
-	$statuscode = "CRITICAL";
-	$statusinfo .= readable_time($chk)." old";
-}
-elsif (defined($o_age_warn) && ($chk = check_threshold($oldest_filename." ",$oldest_secold,$o_age_warn)) && $statuscode eq 'OK' ) {
-        $statuscode="WARNING";
-        $statusinfo .= readable_time($chk)." old";
-}
-elsif (defined($o_age) && defined($oldest_secold)) {
-	$statusdata .= " oldest timestamp is ".readable_time($oldest_secold);
+if (defined($o_age) && defined($oldest_secold)) {
+        $statusdata .= " oldest timestamp is ".readable_time($oldest_secold);
+	if (defined($o_age_crit) && ($chk = check_threshold($oldest_filename." ",$oldest_secold,$o_age_crit)) ) {
+		$statuscode = "CRITICAL";
+		$statusinfo .= $chk." seconds old";
+	}
+	if (defined($o_age_warn) && ($chk = check_threshold($oldest_filename." ",$oldest_secold,$o_age_warn)) && $statuscode eq 'OK' ) {
+        	$statuscode="WARNING";
+        	$statusinfo .= $chk." seconds old";
+	}
 }
 
 # loop to check if warning & critical attributes are ok

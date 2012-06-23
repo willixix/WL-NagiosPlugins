@@ -461,7 +461,7 @@ sub parse_lsline {
 sub div_mod { return int( $_[0]/$_[1]) , ($_[0] % $_[1]); }
 
 sub readable_time {
-  my $total_sec = $_;
+  my $total_sec = shift;
   my ($sec,$mins,$hrs,$days);
   ($mins,$sec) = div_mod($total_sec,60);
   ($hrs,$mins) = div_mod($mins,60);
@@ -599,7 +599,7 @@ my $oldest_secold=$tnow-$oldest_filetime if defined($oldest_filetime);
 my $newest_secold=$tnow-$newest_filetime if defined($newest_filetime);
 verb("Oldest file has age of ".$oldest_secold." seconds and newest ".$newest_secold." seconds");
 if (defined($o_age) && defined($oldest_secold)) {
-        $statusdata .= " oldest timestamp is ".readable_time($oldest_secold);
+        $statusdata .= " oldest timestamp is ".readable_time($oldest_secold)." old";
 	if (defined($o_age_crit) && ($chk = check_threshold($oldest_filename." ",$oldest_secold,$o_age_crit)) ) {
 		$statuscode = "CRITICAL";
 		$statusinfo .= $chk." seconds old";

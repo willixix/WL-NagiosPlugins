@@ -3,8 +3,8 @@
 # ============================== SUMMARY =====================================
 #
 # Program : check_files.pl 
-# Version : 0.33
-# Date    : Apr 27, 2012
+# Version : 0.34
+# Date    : June 22, 2012
 # Author  : William Leibzon - william@leibzon.org
 # Summary : This is a nagios plugin that checks directory and files
 #           file count and directory and file age
@@ -90,6 +90,7 @@
 #  [0.3]  Apr 21, 2012 - Added -l -r and -T options and fixed bugs
 #  [0.32] Apr 21, 2012 - Added -I as an alternative to -C 
 #  [0.33] Apr 27, 2012 - Fixed bug with determining file ages
+#  [0.34] Jun 22, 2012 - Added better reporting of file age than just seconds
 #
 # ========================== START OF PROGRAM CODE ============================
 
@@ -312,7 +313,7 @@ sub help {
 	should be used if there are a lot of files in a directory.
 	WARNING: using this option will cause -r not to work on most system
 -C, --cmd=STR
-	By default the plugin will chdir to specify directory, do 'ls -l'
+	By default the plugin will chdir to specified directory, do 'ls -l'
 	and parse results. Here you can specify alternative cmd to execute
 	that provides the data. This is used, for example, when files are
 	to be checked on a remote system, in which case here you could be
@@ -457,6 +458,22 @@ sub parse_lsline {
     return \%ret;
 }
 
+sub div_mod { return int( $_[0]/$_[1]) , ($_[0] % $_[1]); }
+
+sub readable_time {
+  my $total_sec = $_;
+  my ($sec,$mins,$hrs,$days);
+  ($mins,$sec) = div_mod($total_sec,60);
+  ($hrs,$mins) = div_mod($mins,60);
+  ($days,$hrs) = div_mod($hrs,24);
+  my $txtout="";
+  $txtout .= "$days days " if $days>0;
+  $txtout .= "$hrs hours " if $hrs>0;
+  $txtout .= "$mins minutes " if $mins>0 && ($days==0 || $hrs==0);
+  $txtout .= "$sec seconds" if ($sec>0 || $mins==0) && ($hrs==0 && $days==0);
+  return $txtout;
+}
+
 # Get the alarm signal (just in case timeout screws up)
 $SIG{'ALRM'} = sub {
      print ("ERROR: Alarm signal (Nagios time-out)\n");
@@ -521,8 +538,6 @@ else {
 
     # I would have preferred open3 [# if (!open3($cin, $cout, $cerr, $shell_command))]
     # but there are problems when using it within nagios embedded perl
-    # TODO: Note that putting $shell_command_auth in the command line exposes SNMP community
-    #       for anyone who does 'ps', I should rewrite this to be more secure
     verb("Executing $shell_command 2>&1");
     $ls_pid=open(SHELL_DATA, "$shell_command 2>&1 |");
     if (!$ls_pid) {
@@ -585,14 +600,14 @@ my $newest_secold=$tnow-$newest_filetime if defined($newest_filetime);
 verb("Oldest file has age of ".$oldest_secold." seconds and newest ".$newest_secold." seconds");
 if (defined($o_age_crit) && ($chk = check_threshold($oldest_filename." ",$oldest_secold,$o_age_crit)) ) {
 	$statuscode = "CRITICAL";
-	$statusinfo .= $chk." seconds old";
+	$statusinfo .= readable_time($chk)." old";
 }
 elsif (defined($o_age_warn) && ($chk = check_threshold($oldest_filename." ",$oldest_secold,$o_age_warn)) && $statuscode eq 'OK' ) {
         $statuscode="WARNING";
-        $statusinfo .= $chk." seconds old";
+        $statusinfo .= readable_time($chk)." old";
 }
 elsif (defined($o_age) && defined($oldest_secold)) {
-	$statusdata .= " oldest timestamp is $oldest_secold seconds";
+	$statusdata .= " oldest timestamp is ".readable_time($oldest_secold);
 }
 
 # loop to check if warning & critical attributes are ok

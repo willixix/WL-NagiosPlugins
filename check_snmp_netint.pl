@@ -1,20 +1,15 @@
 #!/usr/bin/perl -w
 #
-# =============================== SUMMARY =====================================
+# ============================== SUMMARY =====================================
 #
 # Program : check_snmp_netint.pl
-# Version : 2.4 alpha 1
-# Date    : July ??, 2012
-# Maintainer : William Leibzon - william@leibzon.org,
-# Authors : See "CONTRIBUTORS" documentation section
+# Version : 2.36
+# Date    : June 9, 2012
+# Authors : William Leibzon - william@leibzon.org,
+#           Patrick Proy ( patrick at proy.org ),
+#           and many other listed in "CONTRIBUTORS" documentation section
 # Licence : GPL - summary below, full text at http://www.fsf.org/licenses/gpl.txt
 #
-#  ********************* IMPORTANT NOTE ABOUT THIS VERSION ********************
-#  ***  THIS IS AN ALPHA/DEVELOPMENT RELEASE WHICH HAS NOT BEEN TESTED      ***
-#  *** IF YOU NEED A STABLE VERSION, PLEASE GET 2.36 VERSION OF THIS PLUGIN ***
-#  *** AT HTTP://william.leibzon.org/nagios/ or http://exchange.nagios.org/ ***
-#  ****************************************************************************
-# 
 # =========================== PROGRAM LICENSE =================================
 #
 # This program is free software; you can redistribute it and/or modify
@@ -36,11 +31,11 @@
 #  This is a plugin for nagios to check network interfaces (network ports)
 #  on servers switches & routers. It is based on check_snmp_int.pl plugin
 #  by Patrick Ploy with extensive rewrites for performance improvements
-#  and additions to support Cisco and other switches (plugin can query and
-#  cache cisco port names, port link data and switch STP status and more)
-#  The plugin can use nagios-stored previous performance data to give port
-#  traffic & utilization without creation of temporary files. This new 2.4
-#  version supports checking interface on a local linux server without SNMP. 
+#  (caching improved execution time by up to 100%) and additions to better
+#  support Cisco and other switches (it can query and cache cisco port names,
+#  cisco port link data and for cisco and other switches STP status). Other
+#  improvements are ability to check port traffic & utilization without
+#  creation of temporary files.
 #
 # ======================  SETUP AND PLUGIN USE NOTES  =========================
 #
@@ -514,27 +509,21 @@
 #		       Due to this plugin now require Text::ParseWords perl library.
 #		    4) List of contributors created as a separate header section below.
 #
-# [2.4] alpha 	    This version will support getting data from network interfaces on
-#		    the local machine rather than just by SNMP. It will also support
-#		    providing data on average traffic (50-percentalile) and being able
-#		    to specify threshold based on deviation from this average. There
-#		    likely to be several alpha versions before official 2.4 release.
-#
 # ============================ LIST OF CONTRIBUTORS ===============================
 #
 # The following individuals have contributed code, patches, bug fixes and ideas to
-# this plugin (listed in last-name alphabetical order):
+# this plugin:
 #
+#    Patrick Proy
+#    William Leibzon
+#    J. Jungmann
+#    S. Probst
+#    R. Leroy
 #    M. Beger
+#    Bryan Leaman
+#    Tristan Horn
 #    Yannick Charton
 #    Steve Hanselman
-#    Tristan Horn
-#    J. Jungmann
-#    Bryan Leaman
-#    William Leibzon
-#    R. Leroy
-#    S. Probst
-#    Patrick Proy
 #    Sébastien PRUD'HOMME
 #    Nicholas Scott
 #
@@ -563,7 +552,7 @@ if ($@) {
 }
 
 # Version 
-my $Version='2.4';
+my $Version='2.36';
 
 ############### BASE DIRECTORY FOR TEMP FILE (override this with -F) ########
 my $o_base_dir="/tmp/tmp_Nagios_int.";
@@ -697,7 +686,6 @@ my $timenow=time(); 	# This used to be defined later but easier if moved to the 
 my $stp_warntime=900;	# Warn in case of change in STP state in last 15 minutes
 my $check_speed=0;      # If '-Y', '-u' or '-S' options are given this is set to 1
 my $expected_speed=0;	# if -S has interface speed specified, this is set and alert is issued if interface is not same speed
-my $shell_pid=undef;	# defined only if run locally
 
 # Functions
 sub read_file { 
@@ -767,7 +755,7 @@ sub ascii_to_hex { # Convert each ASCII character to a two-digit hex number [WL]
 sub help {
    print "\nSNMP Network Interface Monitor Plugin for Nagios (check_snmp_netint) v. ",$Version,"\n";
    print "GPL licence, (c)2004-2007 Patrick Proy, (c)2007-2012 William Leibzon\n";
-   print "Please see documentation for a list of all authors and contributors\n\n";
+   print "contribs by J. Jungmann, S. Probst, R. Leroy, M. Beger, T. Horn and many others\n\n";
    print_usage();
    print <<EOT;
 
@@ -1025,59 +1013,30 @@ sub check_options {
 	{ print_usage(); exit $ERRORS{"UNKNOWN"}}
 
     # check snmp information
-    # 06/25/12: this is now required only if plugin name starts with check_snmp or if host is specified)
-    if ($0 =~ /^check_snmp/ || defined($o_host))
-	if ($no_snmp) { print "Can't locate Net/SNMP.pm\n"; exit $ERRORS{"UNKNOWN"}; }
-	if ( !defined($o_community) && (!defined($o_login) || !defined($o_passwd)) )
-	    { print "Put snmp login info!\n"; print_usage(); exit $ERRORS{"UNKNOWN"}}
-	if ((defined($o_login) || defined($o_passwd)) && (defined($o_community) || defined($o_version2)) )
-	    { print "Can't mix snmp v1,2c,3 protocols!\n"; print_usage(); exit $ERRORS{"UNKNOWN"}}
-	if (defined ($v3protocols)) {
-	    if (!defined($o_login)) { print "Put snmp V3 login info with protocols!\n"; print_usage(); exit $ERRORS{"UNKNOWN"}}
-	    my @v3proto=split(/,/,$v3protocols);
-	    if ((defined ($v3proto[0])) && ($v3proto[0] ne "")) {$o_authproto=$v3proto[0];  }	# Auth protocol
-	    if (defined ($v3proto[1])) {$o_privproto=$v3proto[1];	}	# Priv  protocol
-	    if ((defined ($v3proto[1])) && (!defined($o_privpass)))
-	      { print "Put snmp V3 priv login info with priv protocols!\n"; print_usage(); exit $ERRORS{"UNKNOWN"}}
-	}
-	if (defined($o_maxminsnmp)) { 
-	    if (defined($o_minsnmp)) {
-		print "You dont need to use -m when you already specified -mm."; print_usage(); exit $ERRORS{"UNKNOWN"};
-	    }
-	    else {
-		$o_minsnmp=1;
-	    }
-	}
-	# Check snmpv2c or v3 with 64 bit counters
-	if (defined ($o_highperf) && (!defined($o_version2) && defined($o_community)))
-	  { print "Can't get 64 bit counters with snmp version 1\n"; print_usage(); exit $ERRORS{"UNKNOWN"}}
-	if (defined ($o_highperf)) {
-	  if (eval "require bigint") {
-	    use bigint;
-	  } else  { print "Need bigint module for 64 bit counters\n"; print_usage(); exit $ERRORS{"UNKNOWN"}}
-	}
-	$o_minsnmp=1 if defined($o_minsnmp[0]);
-	$o_maxminsnmp=1 if defined($o_minsnmp[1]);
-	$perfcache_recache_trigger=$perfcache_recache_max if defined($o_maxminsnmp);
-	if (defined($o_commentoid) && $o_commentoid!~/\.$/) {
-	    $o_commentoid.='.';
-	}
-	#### octet length checks
-	if (defined ($o_octetlength) && (isnnum($o_octetlength) || $o_octetlength > 65535 || $o_octetlength < 484 )) {
-	    print "octet length must be < 65535 and > 484\n";print_usage(); exit $ERRORS{"UNKNOWN"};
-	}
-    }
-    else {
-	$no_snmp=1;
-	if (defined($o_octetlength) || defined($o_highperf) || defined($o_maxminsnmp) || defined($o_minsnmp) ||
-	    defined($v3protocols) || defined($o_login) || defined($o_passwd) || defined($o_version2) || defined($o_community) ||
-	    defined($o_ciscocat) || defined($o_stp)) {
-	   print "Option you specified is only valid with SNMP. Maybe you forgot to specify hostname with -h?\n";print_usage(); exit $ERRORS{"UNKNOWN"};
-	}
+    if ($no_snmp) { print "Can't locate Net/SNMP.pm\n"; exit $ERRORS{"UNKNOWN"}; }
+    if ( !defined($o_community) && (!defined($o_login) || !defined($o_passwd)) )
+	{ print "Put snmp login info!\n"; print_usage(); exit $ERRORS{"UNKNOWN"}}
+    if ((defined($o_login) || defined($o_passwd)) && (defined($o_community) || defined($o_version2)) )
+	{ print "Can't mix snmp v1,2c,3 protocols!\n"; print_usage(); exit $ERRORS{"UNKNOWN"}}
+    if (defined ($v3protocols)) {
+	if (!defined($o_login)) { print "Put snmp V3 login info with protocols!\n"; print_usage(); exit $ERRORS{"UNKNOWN"}}
+	my @v3proto=split(/,/,$v3protocols);
+	if ((defined ($v3proto[0])) && ($v3proto[0] ne "")) {$o_authproto=$v3proto[0];  }	# Auth protocol
+	if (defined ($v3proto[1])) {$o_privproto=$v3proto[1];	}	# Priv  protocol
+	if ((defined ($v3proto[1])) && (!defined($o_privpass)))
+	  { print "Put snmp V3 priv login info with priv protocols!\n"; print_usage(); exit $ERRORS{"UNKNOWN"}}
     }
     if (defined($o_timeout) && (isnnum($o_timeout) || ($o_timeout < 2) || ($o_timeout > 60))) 
 	{ print "Timeout must be >1 and <60 !\n"; print_usage(); exit $ERRORS{"UNKNOWN"}}
     if (!defined($o_timeout)) {$o_timeout=5;}
+    # Check snmpv2c or v3 with 64 bit counters
+    if ( defined ($o_highperf) && (!defined($o_version2) && defined($o_community)))
+      { print "Can't get 64 bit counters with snmp version 1\n"; print_usage(); exit $ERRORS{"UNKNOWN"}}
+    if (defined ($o_highperf)) {
+      if (eval "require bigint") {
+        use bigint;
+      } else  { print "Need bigint module for 64 bit counters\n"; print_usage(); exit $ERRORS{"UNKNOWN"}}
+    }
 
     # check if -e without -f
     if ( defined($o_perfe) && !defined($o_perf))
@@ -1089,6 +1048,17 @@ sub check_options {
     if (defined ($o_short)) {
       #TODO maybe some basic tests ? characters return empty string
     }
+    if (defined($o_maxminsnmp)) { 
+	if (defined($o_minsnmp)) {
+		print "You dont need to use -m when you already specified -mm."; print_usage(); exit $ERRORS{"UNKNOWN"};
+	}
+	else {
+		$o_minsnmp=1;
+	}
+    }
+    $o_minsnmp=1 if defined($o_minsnmp[0]);
+    $o_maxminsnmp=1 if defined($o_minsnmp[1]);
+    $perfcache_recache_trigger=$perfcache_recache_max if defined($o_maxminsnmp);
     if (defined($o_prevperf)) {
 	if (defined($o_perf)) {
 		%prev_perf=process_perf($o_prevperf);
@@ -1169,11 +1139,15 @@ sub check_options {
 	print "-M -G and -u options are exclusives\n"; print_usage(); exit $ERRORS{"UNKNOWN"};
       }
     }
+    if (defined($o_commentoid) && $o_commentoid!~/\.$/) {
+	$o_commentoid.='.';
+    }
+    #### octet length checks
+    if (defined ($o_octetlength) && (isnnum($o_octetlength) || $o_octetlength > 65535 || $o_octetlength < 484 )) {
+        print "octet length must be < 65535 and > 484\n";print_usage(); exit $ERRORS{"UNKNOWN"};
+    }
     # cisco hacks to use or show user-specified port names (WL)
     if (defined($o_ciscocat)) {
-	if (!defined($o_host)) {
-	    print "Cisco option is only valid with SNMP when checking remote host\n";print_usage(); exit $ERRORS{"UNKNOWN"};
-	}
 	$o_cisco{$_}=$_ foreach (split ',',$o_ciscocat);
         if (defined($o_cisco{use_portnames})) {
 	    if (defined($o_descroid)) {
@@ -1196,9 +1170,6 @@ sub check_options {
     }
     # stp support
     if (defined($o_stp) && $o_stp ne '') {
-	if (!defined($o_host)) {
-	    print "STP option is currently only valid with SNMP when checking remote host\n";print_usage(); exit $ERRORS{"UNKNOWN"};
-	}
 	$stp_portstate_reverse{$stp_portstate{$_}}=$_ foreach keys %stp_portstate;
 	if (!defined($stp_portstate_reverse{$o_stp})) {
 		print "Incorrect STP state specified after --stp=\n"; print_usage(); exit $ERRORS{'UNKNOWN'};
@@ -1210,79 +1181,7 @@ sub check_options {
     $expected_speed = $expected_speed*1000*1000 if $expected_speed!=0 && $o_perfs =~ /Mb/;
     $expected_speed = $expected_speed*1000 if $expected_speed!=0 && $o_perfs =~ /Kb/;
 }
-
-sub create_snmp_session {
-  my ($session,$error);
-
-  if ( defined($o_login) && defined($o_passwd)) {
-    # SNMPv3 login
-    if (!defined ($o_privpass)) {
-    verb("SNMPv3 AuthNoPriv login : $o_login, $o_authproto");
-      ($session, $error) = Net::SNMP->session(
-	-hostname   	=> $o_host,
-	-version	=> '3',
-	-port      	=> $o_port,
-	-username	=> $o_login,
-	-authpassword	=> $o_passwd,
-	-authprotocol	=> $o_authproto,
-	-timeout        => $o_timeout
-      );  
-    } else {
-      verb("SNMPv3 AuthPriv login : $o_login, $o_authproto, $o_privproto");
-      ($session, $error) = Net::SNMP->session(
-	-hostname   	=> $o_host,
-	-version	=> '3',
-	-username	=> $o_login,
-	-port      	=> $o_port,
-	-authpassword	=> $o_passwd,
-	-authprotocol	=> $o_authproto,
-	-privpassword	=> $o_privpass,
-	-privprotocol     => $o_privproto,
-	-timeout          => $o_timeout
-      );
-    }
-  } else {
-    if (defined ($o_version2)) {
-      # SNMPv2c Login
-      verb("SNMP v2c login");
-      ($session, $error) = Net::SNMP->session(
-	-hostname  => $o_host,
-	-version   => 2,
-	-community => $o_community,
-	-port      => $o_port,
-	-timeout   => $o_timeout
-      );
-    } else {
-      # SNMPV1 login
-      verb("SNMP v1 login");
-      ($session, $error) = Net::SNMP->session(
-	-hostname  => $o_host,
-	-community => $o_community,
-	-port      => $o_port,
-	-timeout   => $o_timeout
-      );
-    }
-  }
-  if (!defined($session)) {
-   printf("ERROR opening session: %s.\n", $error);
-   exit $ERRORS{"UNKNOWN"};
-  }
-  if (defined($o_octetlength)) {
-	my $oct_resultat=undef;
-	my $oct_test=$session->max_msg_size();
-	verb(" actual max octets:: $oct_test");
-	$oct_resultat = $session->max_msg_size($o_octetlength);
-	if (!defined($oct_resultat)) {
-		 printf("ERROR: Session settings : %s.\n", $session->error);
-		 $session->close;
-		 exit $ERRORS{"UNKNOWN"};
-	}
-	$oct_test= $session->max_msg_size();
-	verb(" new max octets:: $oct_test");
-  }
-  return $session;
-}
-
+    
 ########## MAIN #######
 
 check_options();
@@ -1297,18 +1196,78 @@ if (defined($TIMEOUT)) {
 }
 
 $SIG{'ALRM'} = sub {
- if ($defined($o_host)) {
-      print "ERROR: alarm timeout. No answer from host $o_host\n";
- }
- else {
-      print "ERROR: alarm timeout\n";
-      kill 9, $shell_pid if defined($shell_pid);
- }
+ print "No answer from host $o_host\n";
  exit $ERRORS{"UNKNOWN"};
 };
 
-if (!$o_snmp) {
-  my $session = create_snmp_session();
+# Connect to host
+my ($session,$error);
+if ( defined($o_login) && defined($o_passwd)) {
+  # SNMPv3 login
+  if (!defined ($o_privpass)) {
+  verb("SNMPv3 AuthNoPriv login : $o_login, $o_authproto");
+    ($session, $error) = Net::SNMP->session(
+      -hostname   	=> $o_host,
+      -version		=> '3',
+      -port      	=> $o_port,
+      -username		=> $o_login,
+      -authpassword	=> $o_passwd,
+      -authprotocol	=> $o_authproto,
+      -timeout          => $o_timeout
+    );  
+  } else {
+    verb("SNMPv3 AuthPriv login : $o_login, $o_authproto, $o_privproto");
+    ($session, $error) = Net::SNMP->session(
+      -hostname   	=> $o_host,
+      -version		=> '3',
+      -username		=> $o_login,
+      -port      	=> $o_port,
+      -authpassword	=> $o_passwd,
+      -authprotocol	=> $o_authproto,
+      -privpassword	=> $o_privpass,
+      -privprotocol     => $o_privproto,
+      -timeout          => $o_timeout
+    );
+  }
+} else {
+  if (defined ($o_version2)) {
+    # SNMPv2c Login
+	verb("SNMP v2c login");
+	($session, $error) = Net::SNMP->session(
+       -hostname  => $o_host,
+       -version   => 2,
+       -community => $o_community,
+       -port      => $o_port,
+       -timeout   => $o_timeout
+    );
+  } else {
+    # SNMPV1 login
+	verb("SNMP v1 login");
+    ($session, $error) = Net::SNMP->session(
+       -hostname  => $o_host,
+       -community => $o_community,
+       -port      => $o_port,
+       -timeout   => $o_timeout
+    );
+  }
+}
+if (!defined($session)) {
+   printf("ERROR opening session: %s.\n", $error);
+   exit $ERRORS{"UNKNOWN"};
+}
+
+if (defined($o_octetlength)) {
+	my $oct_resultat=undef;
+	my $oct_test=$session->max_msg_size();
+	verb(" actual max octets:: $oct_test");
+	$oct_resultat = $session->max_msg_size($o_octetlength);
+	if (!defined($oct_resultat)) {
+		 printf("ERROR: Session settings : %s.\n", $session->error);
+		 $session->close;
+		 exit $ERRORS{"UNKNOWN"};
+	}
+	$oct_test= $session->max_msg_size();
+	verb(" new max octets:: $oct_test");
 }
 
 my @tindex = ();
@@ -1337,8 +1296,7 @@ my ($result,$resultp,$resultf,$resulto,$resultc,$results) = (undef,undef,undef,u
 # WL: check if '-m' option is passed and previous description ids & names are available from
 #     previous performance data (caching to minimize SNMP lookups and only get specific data
 #     instead of getting description table every time)
-$perfcache_time = $prev_perf{cache_descr_time} if exists($prev_perf{cache_descr_time});
-if (!$no_snmp && defined($o_minsnmp) && %prev_perf) {
+if (defined($o_minsnmp) && %prev_perf) {
    @tindex = split(',', $prev_perf{cache_descr_ids}) if exists($prev_perf{cache_descr_ids});
    @descr = split(',', $prev_perf{cache_descr_names}) if exists($prev_perf{cache_descr_names});
    @tindex = () if scalar(@tindex) != scalar(@descr);
@@ -1346,12 +1304,12 @@ if (!$no_snmp && defined($o_minsnmp) && %prev_perf) {
    @tindex = () if defined($o_ciscocat) && !exists($prev_perf{cache_descr_cport});
    @stpport = split(',', $prev_perf{cache_descr_stpport}) if exists($prev_perf{cache_descr_stpport});
    @tindex = () if defined($o_stp) && !exists($prev_perf{cache_descr_stpport});
+   $perfcache_time = $prev_perf{cache_descr_time} if exists($prev_perf{cache_descr_time});
+   @tindex = () if !defined($perfcache_time) || $timenow < $perfcache_time || ($timenow - $perfcache_time) > $perfcache_recache_trigger; 
    @portspeed = split(',', $prev_perf{cache_int_speed}) if exists($prev_perf{cache_int_speed}) && $expected_speed==0;
    if (exists($prev_perf{cache_cisco_opt})) {
    	$copt{$_}=$_ foreach(split ',',$prev_perf{cache_cisco_opt});
    }
-   # this checks that time of last saved indeces is not way too long ago, in which case we check them again
-   @tindex = () if !defined($perfcache_time) || $timenow < $perfcache_time || ($timenow - $perfcache_time) > $perfcache_recache_trigger; 
 }
 
 if (scalar(@tindex)>0) {
@@ -1369,44 +1327,6 @@ if (scalar(@tindex)>0) {
      verb("  stpport=".join(',',@stpport));
      @stpport=() if $stpport[0]==-1; # perf data with previous check done with --stp but no stp data was found
    }
-}
-elsif ($no_snmp) {
-   # try to get data on a local server
-   my $shell_command;
-   my $os = `uname`;
-   chomp $os;
-   switch ($os) {
-        case "Linux" {
-            $shell_command = 'ifconfig -a';
-        }
-        else {
-	    printf("Only Linux is currently support for local interfaces\n");
-	    exit $ERRORS{"UNKNOWN"};
-        }
-    }
-    verb("Executing: $shell_command");
-    $shell_pid=open(SHELL_DATA, "$shell_command 2>&1 |");
-    if (!$shell_pid) {
-	print "UNKNOWN ERROR - could not execute $shell_command - $!";
-	exit $ERRORS{'UNKNOWN'};
-    }
-    my @interfaces=();
-    my $int_num=0;
-    my $int_lines=0;
-    while (<SHELL_DATA>) {
-	verb("got line: $_");
-	my @words = split;
-	verb("words[0]=$words[0] words[1]=$words[1]");
-	if (!$int_lines && $words[1] == 'Link') {
-	      $interfaces[$int_num]={ 'name' = $words[0], 'rx_bytes' => 0, 'tx_bytes' => 0, 'rx_packets' => 0, 'tx_packets' => 0, 'rx_errors' => 0, 'tx_errors' => 0,  'rx_dropped' => 0, 'tx_dropped' => 0, 'rx_overruns' => 0, 'tx_overruns' => 0, 'collisions' => 0, 'txqueuelen' => 0, 'metric' => 0, 'mtu'=>0 };
-	      $int_lines=1;
-	}
-	if ($int_lines && scalar(@words)<2) {
-	      $int_lines=0;
-	      $int_num++;
-	}
-
-    }
 }
 else {
    # WL: Get cisco port->ifindex map table
@@ -1493,17 +1413,14 @@ else {
    }
 }
 
-# No interface found -> error
-if ( $num_int == 0 ) { print "ERROR : Unknown interface $o_descr\n" ; exit $ERRORS{"UNKNOWN"};}
+# Change to 64 bit counters if option is set : 
+if (defined($o_highperf)) {
+  $out_octet_table=$out_octet_table_64;
+  $in_octet_table=$in_octet_table_64;
+}
 
-if (!$no_snmp) {
-  # Change to 64 bit counters if option is set : 
-  if (defined($o_highperf)) {
-    $out_octet_table=$out_octet_table_64;
-    $in_octet_table=$in_octet_table_64;
-  }
-  # WL: Prepare list of all OIDs to be retrieved for interfaces we want to check
-  for (my $i=0;$i<$num_int;$i++) {
+# WL: Prepare list of all OIDs to be retrieved for interfaces we want to check
+for (my $i=0;$i<$num_int;$i++) {
      verb("Name : $descr[$i], Index : $tindex[$i]");
      # put the admin or oper oid in an array
      $oids[$i]= defined ($o_admin) ? $admin_table . $tindex[$i] 
@@ -1558,40 +1475,45 @@ if (!$no_snmp) {
 	 $oid_commentlabel[$i]=$o_commentoid . $tindex[$i];
        }
      }
+}
+
+# No interface found -> error
+if ( $num_int == 0 ) { print "ERROR : Unknown interface $o_descr\n" ; exit $ERRORS{"UNKNOWN"};}
+
+# WL: do it as one query when -m option is used 
+if (defined($o_perf) || defined($o_checkperf) || $expected_speed!=0) {
+  @oid_perf=(@oid_perf_outoct,@oid_perf_inoct,@oid_speed);
+  if (defined($o_highperf)) {
+    @oid_perf=(@oid_perf,@oid_speed_high);
   }
-  # WL: do it as one query when -m option is used 
-  if (defined($o_perf) || defined($o_checkperf) || $expected_speed!=0) {
-    @oid_perf=(@oid_perf_outoct,@oid_perf_inoct,@oid_speed);
-    if (defined($o_highperf)) {
-      @oid_perf=(@oid_perf,@oid_speed_high);
-    }
-    if (defined ($o_ext_checkperf) || defined($o_perfe)) {
-      @oid_perf=(@oid_perf,@oid_perf_inerr,@oid_perf_outerr,@oid_perf_indisc,@oid_perf_outdisc);
-    } 
-  }
-  if (defined($o_ciscocat)) {
+  if (defined ($o_ext_checkperf) || defined($o_perfe)) {
+    @oid_perf=(@oid_perf,@oid_perf_inerr,@oid_perf_outerr,@oid_perf_indisc,@oid_perf_outdisc);
+  } 
+}
+if (defined($o_ciscocat)) {
 	@oid_ciscostatus=(@oid_ciscofaultstatus,@oid_ciscooperstatus,@oid_ciscoaddoperstatus);
-  }
-  if (defined($o_minsnmp)) {
+}
+if (defined($o_minsnmp)) {
 	push @oids, @oid_perf if scalar(@oid_perf)>0;
 	push @oids, @oid_descr if scalar(@oid_descr)>0;
 	push @oids, @oid_commentlabel if defined($o_commentoid) && scalar(@oid_commentlabel)>0;
 	push @oids, @oid_ciscostatus if defined($o_ciscocat) && scalar(@oid_ciscostatus)>0;
 	push @oids, @oid_stpstate if defined($o_stp) && scalar(@oid_stpstate)>0;
 	verb("Retrieving OIDs: ".join(' ',@oids));
-  }
-  # Get the requested oid values
-  $result = $session->get_request(
-    Varbindlist => \@oids
-  );
-  if (!defined($result)) {
-    printf("ERROR: Status table : %s.\n", $session->error); 
-    $session->close;
-    exit $ERRORS{"UNKNOWN"};
-  }
-  # Get the perf value if -f (performance) option defined or -k (check bandwidth)
-  if (defined($o_perf) || defined($o_checkperf) || $expected_speed!=0) {
-    if (!defined($o_minsnmp)) {
+}
+
+# Get the requested oid values
+$result = $session->get_request(
+   Varbindlist => \@oids
+);
+if (!defined($result)) {
+   printf("ERROR: Status table : %s.\n", $session->error); 
+   $session->close;
+   exit $ERRORS{"UNKNOWN"};
+}
+# Get the perf value if -f (performance) option defined or -k (check bandwidth)
+if (defined($o_perf) || defined($o_checkperf) || $expected_speed!=0) {
+   if (!defined($o_minsnmp)) {
 	verb("Retrieving OIDs: ".join(' ',@oid_perf));
   	$resultf = $session->get_request(
    	    Varbindlist => \@oid_perf
@@ -1601,14 +1523,14 @@ if (!$no_snmp) {
 	    $session->close;
             exit $ERRORS{"UNKNOWN"};
 	}
-    }
-    else {
+   }
+   else {
         $resultf = $result;
-    }
-  }
-  # Additional cisco status tables
-  if (defined($o_ciscocat)) {
-    if (!defined($o_minsnmp) && scalar(@oid_ciscostatus)>0) {
+   }
+}
+# Additional cisco status tables
+if (defined($o_ciscocat)) {
+   if (!defined($o_minsnmp) && scalar(@oid_ciscostatus)>0) {
         $resultc = $session->get_request(
                 Varbindlist => \@oid_ciscostatus
         );
@@ -1617,14 +1539,14 @@ if (!$no_snmp) {
             $session->close;
             exit $ERRORS{"UNKNOWN"};
         }
-    }
-    else {
+   }
+   else {
         $resultc = $result;
-    }
-  }
-  # Addditional stp state table
-  if (defined($o_stp)) {
-    if (!defined($o_minsnmp) && scalar(@oid_stpstate)>0) {
+   }
+}
+# Addditional stp state table
+if (defined($o_stp)) {
+   if (!defined($o_minsnmp) && scalar(@oid_stpstate)>0) {
 	$results = $session->get_request(
 		Varbindlist => \@oid_stpstate
 	);
@@ -1633,14 +1555,15 @@ if (!$no_snmp) {
             $session->close;
             exit $ERRORS{"UNKNOWN"};
         }
-    }
-    else {
+   }
+   else {
         $results = $result;
-    }
-  }
-  # Suport for comments/description table (WL)
-  if (defined($o_commentoid)) {
-    if  (!defined($o_minsnmp) && scalar(@oid_commentlabel)>0) {
+   }
+}
+
+# Suport for comments/description table (WL)
+if (defined($o_commentoid)) {
+   if  (!defined($o_minsnmp) && scalar(@oid_commentlabel)>0) {
 	$resulto = $session->get_request(
 	    Varbindlist => \@oid_commentlabel
 	);
@@ -1649,13 +1572,13 @@ if (!$no_snmp) {
 	    $session->close;
 	    exit $ERRORS{"UNKNOWN"};
 	}
-    }
-    else {
+   }
+   else {
 	$resulto = $result;
-    }
-  }
-  $session->close;
+   }
 }
+
+$session->close;
 
 my $num_ok=0;
 my @checkperf_out_raw=undef;

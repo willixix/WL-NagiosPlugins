@@ -994,15 +994,19 @@ my %dbs=();	# database-specific info, this is almost unused right now
 my %slaves=();
 my $chk = "";
 my $i;
+$dataresults{$_} = [undef, 0, 0] foreach(@o_varsL);
+$dataresults{$_} = [undef, 0, 0] foreach(@o_perfvarsL);
 
 # This returns hashref of various statistics/info data
 my $stats = $redis->info();
 
-# Check specified key if option -q was used_cpu_sys
+# Check specified key if option -q was used
 if (defined($key_query)) {
   my $result  = $redis->get($key_query);
   if (defined($result) && $result) {
       $key_result=$result;
+      dataresults_addvar($key_name, $key_result);
+      verb("Result of querying $key_query is: $key_result");
   }
   else {
       if ($key_alert) {
@@ -1015,9 +1019,7 @@ if (defined($key_query)) {
 # end redis session
 $redis->quit;
 
-# load all data into internal hash array
-$dataresults{$_} = [undef, 0, 0] foreach(@o_varsL);
-$dataresults{$_} = [undef, 0, 0] foreach(@o_perfvarsL);
+# load stats data into internal hash array
 my $total_keys=0;
 my $total_expires=0;
 foreach $vnam (keys %{$stats}) {
@@ -1180,14 +1182,16 @@ if (defined($o_memutilization) && defined($dataresults{'used_memory_rss'})) {
 # We split into prefix/suffix again but without lowercasing $o_ratelabel first
 ($o_rprefix,$o_rsuffix)=split(/,/,$o_ratelabel) if defined($o_ratelabel) && $o_ratelabel ne '';
 
-# main loop to check if warning & critical attributes are ok
+# main loop to check for warning & critical thresholds
 for ($i=0;$i<scalar(@o_varsL);$i++) {
   $avar=$o_varsL[$i];
   my $avar_out = $avar;
+  # this is for output of rate variables which name internally start with &
   if ($avar =~ /^&(.*)/) {
 	$avar_out = $o_rprefix.$1.$o_rsuffix;
   }
   if (defined($dataresults{$avar}[0])) {
+    # main check, The below appears to except case of hitrate=0, don't remember why I added it
     if ($avar ne 'hitrate' || $dataresults{$avar}[0]>0) {
         if ($chk = check_threshold($avar,lc $dataresults{$avar}[0],$o_critL[$i])) {
 	    $dataresults{$avar}[1]++;
@@ -1200,12 +1204,14 @@ for ($i=0;$i<scalar(@o_varsL);$i++) {
 	    $statusinfo .= $chk;
 	}
     }
+    # if we did not output to status line yet, do so
     if ($dataresults{$avar}[1]==0) {
 	  $dataresults{$avar}[1]++;
 	  $statusdata .= ", " if $statusdata;
 	  $statusdata .= $avar_out . " is " . $dataresults{$avar}[0];
     }
-    if (defined($o_perf) && $dataresults{$avar}[2]==0) {
+    # if we were asked to output performance, prepare it but do not output until later loop
+    if (defined($o_perf) && $dataresults{$avar}[2]==0 && $dataresults{$avar}[3] eq '') {
 	  $dataresults{$avar}[3]=$avar_out."=".$dataresults{$avar}[0];
 	  if (defined($KNOWN_STATUS_VARS{$avar})) {
 		$dataresults{$avar}[3] .= $KNOWN_STATUS_VARS{$avar}[1];

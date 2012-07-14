@@ -3,8 +3,8 @@
 # ============================== SUMMARY =====================================
 #
 # Program : check_redis.pl
-# Version : 0.51
-# Date    : June 16, 2012
+# Version : 0.53
+# Date    : July 13, 2012
 # Author  : William Leibzon - william@leibzon.org
 # Licence : GPL - summary below, full text at http://www.fsf.org/licenses/gpl.txt
 #
@@ -230,6 +230,8 @@
 #  [0.52 - Jul 10, 2012] Patch by Jon Schulz to support credentials with -C
 #			 (credentials file) and addition by me to support
 #			 password as command argument.
+#  [0.53 - Jul 13, 2012] Adding special option to do query on one redis key and
+#                        and do threshold checking of results if its numeric
 #
 # TODO or consider for future:
 #
@@ -281,7 +283,7 @@ if ($@) {
  %ERRORS = ('OK'=>0,'WARNING'=>1,'CRITICAL'=>2,'UNKNOWN'=>3,'DEPENDENT'=>4);
 }
 
-my $Version='0.51';
+my $Version='0.53';
 
 # This is a list of known stat and info variables including variables added by plugin,
 # used in order to designate COUNTER variables with 'c' in perfout for graphing programs
@@ -376,6 +378,14 @@ my $o_ratelabel=undef;		# prefix and suffix for creating rate variables
 my $o_rsuffix='_rate';		# default suffix	
 my $o_rprefix='';
 
+# support for '-q' and '-k' options to query one redis key and checking data using specified thresholds
+my $o_querykey=undef;		# query this key
+my $o_keythreshold=undef;	# and threshold to check key data against
+my $key_query=undef;		# key to query for -q option
+my $key_alert=undef;		# what alert to issue if key is not found
+my $key_name=undef;		# what to name this key variable
+my $key_result=undef;		# where results of the query get put into
+
 ## Additional global variables
 my $redis= undef;               # DB connection object
 my %prev_perf=  ();		# array that is populated with previous performance data
@@ -464,6 +474,14 @@ sub help {
  -r, --replication_delay=WARN,CRIT
    Allows to set threshold on replication delay info. Only valid if this is a slave!
    The threshold value is in seconds and fractions are acceptable.
+ -q, --query_key=key[,name],[WARNING|CRITICAL]
+ -k, --key_threshold=WARN,CRIT
+   Key to query and optional variable name to assign the results to (if not specified
+   it would be same as key). If key is not available the plugin can issue either
+   warning or critical alert depending on if you put either "WARN" or "CRIT" as
+   the ending of -q parameter. Numeric results can also be checked with specified
+   thresholds at -A with redis stats variables but additional parameter -k is also
+   provided if you want to specify thresholds separately.
  -f, --perfparse
    This should only be used with '-a' and causes variable data not only as part of
    main status line but also as perfparse compatible output (for graphing, etc).
@@ -681,6 +699,8 @@ sub check_options {
         'E:s'   => \$o_prevtime,        'prev_checktime:s'=> \$o_prevtime,
         'm:s'   => \$o_memutilization,  'memory_utilization:s' => \$o_memutilization,
 	'M:s'	=> \$o_totalmemory,	'total_memory:s' => \$o_totalmemory,
+	'q:s'	=> \$o_querykey,	'query_key:s'	 => \$o_querykey,
+	'k:s'	=> \$o_keythreshold,	'key_threshold:s' => \$o_keythreshold,
 	'rate_label:s'	=> \$o_ratelabel,
     );
     if (defined($o_help)) { help(); exit $ERRORS{"UNKNOWN"} };
@@ -749,7 +769,7 @@ sub check_options {
           unshift(@ar_warnLv,$o_usize[0]);
           unshift(@ar_critLv,$o_usize[1]);
         }
-       if (defined($o_repdelay) && $o_repdelay ne '') {
+        if (defined($o_repdelay) && $o_repdelay ne '') {
           my @o_rdelay=split(/,/, lc $o_repdelay);
           verb("Processing replication delay thresholds: $o_repdelay");
           if (scalar(@o_rdelay)!=2) {
@@ -761,6 +781,45 @@ sub check_options {
           unshift(@ar_warnLv,$o_rdelay[0]);
           unshift(@ar_critLv,$o_rdelay[1]);
         }
+        if (defined($o_querykey) && $o_querykey) {
+	  verb("Processing query key argument: $o_querykey");
+	  my @key_query=split(/,/, $o_querykey)
+          $key_query = shift @o_keyquery;
+          my $wc = '';
+          if (scalar(@key_query)>0) {
+	     $wc=pop @key_query;
+	     if ($wc eq 'WARNING' || $wc eq 'CRITICAL') {
+		 $key_alert=$wc;
+		 $wc='';
+		 verb("Alert $key_alert will be issued if key is not present");
+	     }
+	  }
+	  if (!$wc && scalar(@key_query)>0) {
+	     $wc=shift @key_query;
+	  }
+	  if ($wc) {
+	     $key_name=$wc
+	  }
+	  else {
+	     $key_name=$key_query;
+	  }
+	  verb("Variable $key_name will receive data from $key_query");
+	}
+	if (defined($o_keythreshold) && $o_keythreshold) {
+	  if (!$key_name) {
+	      printf "You can not use -k without specifying key to query with -q.\n"; print_usage(); exit $ERRORS{"UNKNOWN"};
+	  }
+          my @o_keyth=split(/,/, lc $o_keythreshold);
+          verb("Processing key query thresholds: $o_keythreshold");
+          if (scalar(@o_keythreshold)!=2) {
+              printf "Incorrect value '%s' for Query Threshold. You must include both warning and critical thresholds separated by ','\n", $o_keythreshold;
+              print_usage();
+              exit $ERRORS{"UNKNOWN"};
+          }
+          unshift(@o_varsL,$key_name);
+          unshift(@ar_warnLv,$o_keyth[0]);
+          unshift(@ar_critLv,$o_keyth[1]);
+	}
 	if (scalar(@ar_warnLv)!=scalar(@o_varsL) || scalar(@ar_critLv)!=scalar(@o_varsL)) {
 	  printf "Number of specified warning levels (%d) and critical levels (%d) must be equal to the number of attributes specified at '-a' (%d). If you need to ignore some attribute do it as ',,'\n", scalar(@ar_warnLv), scalar(@ar_critLv), scalar(@o_varsL); 
 	  verb("Warning Levels: ".join(",",@ar_warnLv));
@@ -837,7 +896,7 @@ sub check_options {
                 print "need -f option first \n"; print_usage(); exit $ERRORS{"UNKNOWN"};
         }
     }
-    if ($o_pwfile) {
+    if (defined($o_pwfile) && $o_pwfile) {
         if ($o_password) {
 	    print "use either -x or -C to enter credentials\n"; print_usage(); exit $ERRORS{"UNKNOWN"};
 	}
@@ -852,7 +911,7 @@ sub check_options {
         close $file;
         print 'Password file is empty' and exit $ERRORS{"UNKNOWN"} if !$PASSWORD;
     }
-    if ($o_password) {
+    if (defined($o_password) && $o_password) {
 	$PASSWORD = $o_password;
     }
 
@@ -922,11 +981,7 @@ if (!$redis->ping) {
   exit $ERRORS{'CRITICAL'};
 }
 
-# This returns hashref of various statistics/info data
-my $stats = $redis->info();
-$redis->quit;
-
-# Now process the results we got
+# define variables for processing of the results
 my $dbversion = "";
 my $statuscode = "OK";
 my $statusinfo = "";
@@ -939,6 +994,26 @@ my %dbs=();	# database-specific info, this is almost unused right now
 my %slaves=();
 my $chk = "";
 my $i;
+
+# This returns hashref of various statistics/info data
+my $stats = $redis->info();
+
+# Check specified key if option -q was used_cpu_sys
+if (defined($key_query)) {
+  my $result  = $redis->get($key_query);
+  if (defined($result) && $result) {
+      $key_result=$result;
+  }
+  else {
+      if ($key_alert) {
+	$statuscode=$key_alert;
+	$statusinfo .= "Query key $query data is missing";
+      }
+  }
+}
+
+# end redis session
+$redis->quit;
 
 # load all data into internal hash array
 $dataresults{$_} = [undef, 0, 0] foreach(@o_varsL);

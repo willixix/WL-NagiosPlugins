@@ -227,6 +227,9 @@
 #			 Documentation changes, but no code updates.
 #  [0.51 - Jun 16, 2012] Added support to specify filename to '-v' option
 #			 for debug output and '--debug' as alias to '--verbose'
+#  [0.52 - Jul 10, 2012] Patch by Jon Schulz to support credentials with -C
+#			 (credentials file) and addition by me to support
+#			 password as command argument.
 #
 # TODO or consider for future:
 #
@@ -266,6 +269,7 @@ use Getopt::Long qw(:config no_ignore_case);
 # default hostname, port, database, user and password, see NOTES above
 my $HOSTNAME= 'localhost';
 my $PORT=     6379;
+my $PASSWORD= undef;
 
 # Add path to additional libraries if necessary
 use lib '/usr/lib/nagios/plugins';
@@ -344,6 +348,8 @@ my $PERF_OK_STATUS_REGEX = 'GAUGE|COUNTER|^DATA$|BOOLEAN';
 
 my $o_host=     undef;		# hostname
 my $o_port=     undef;		# port
+my $o_pwfile=   undef;          # password file
+my $o_password= undef;		# password as parameter
 my $o_help=     undef;          # help option
 my $o_verb=     undef;          # verbose mode
 my $o_version=  undef;          # version info option
@@ -380,7 +386,7 @@ my %dataresults= ();		# this is where data is loaded into
 sub p_version { print "check_redis.pl version : $Version\n"; }
 
 sub print_usage {
-   print "Usage: $0 [-v [debugfilename]] -H <host> [-p <port>] [-a <statistics variables> -w <variables warning thresholds> -c <variables critical thresholds>] [-A <performance output variables>] [-T [conntime_warn,conntime_crit]] [-R [hitrate_warn,hitrate_crit]] [-m [mem_utilization_warn,mem_utilization_crit] [-M <maxmemory>[B|K|M|G]]] [-r replication_delay_time_warn,replication_delay_time_crit]  [-f] [-T <timeout>] [-V] [-P <previous performance data in quoted string>]\n";
+   print "Usage: $0 [-v [debugfilename]] -H <host> [-p <port>] [-x password | -C credentials_file] [-a <statistics variables> -w <variables warning thresholds> -c <variables critical thresholds>] [-A <performance output variables>] [-T [conntime_warn,conntime_crit]] [-R [hitrate_warn,hitrate_crit]] [-m [mem_utilization_warn,mem_utilization_crit] [-M <maxmemory>[B|K|M|G]]] [-r replication_delay_time_warn,replication_delay_time_crit]  [-f] [-T <timeout>] [-V] [-P <previous performance data in quoted string>]\n";
    print "For more details on options do: $0 --help\n";
 }
 
@@ -400,6 +406,10 @@ sub help {
    Hostname or IP Address to check
  -p, --port=INTEGER
    port number (default: 3306)
+ -x, --password=STRING
+    Password for Redis authentication. Safer alternative is to put them in a file and use -C
+ -C, --credentials=FILENAME
+    Credentials file to read for Redis authentication
  -t, --timeout=NUMBER
    Allows to set timeout for execution of this plugin. This overrides nagios default.
  -a, --variables=STRING[,STRING[,STRING...]]
@@ -655,6 +665,8 @@ sub check_options {
         'h'     => \$o_help,            'help'          => \$o_help,
         'H:s'   => \$o_host,            'hostname:s'    => \$o_host,
         'p:i'   => \$o_port,            'port:i'        => \$o_port,
+        'C:s'   => \$o_pwfile,          'credentials:s' => \$o_pwfile,
+        'x:s'   => \$o_password,	'password:s'	=> \$o_password,
         't:i'   => \$o_timeout,         'timeout:i'     => \$o_timeout,
         'V'     => \$o_version,         'version'       => \$o_version,
 	'a:s'   => \$o_variables,       'variables:s'   => \$o_variables,
@@ -825,6 +837,24 @@ sub check_options {
                 print "need -f option first \n"; print_usage(); exit $ERRORS{"UNKNOWN"};
         }
     }
+    if ($o_pwfile) {
+        if ($o_password) {
+	    print "use either -x or -C to enter credentials\n"; print_usage(); exit $ERRORS{"UNKNOWN"};
+	}
+        open my $file, '<', $o_pwfile or die $!;
+        while (<$file>) {
+            # Match first non-blank line that doesn't start with a comment
+            if (!($_ =~ /^\s*#/) && $_ =~ /\S+/) {
+                chomp($PASSWORD = $_);
+                last;
+            }
+        }
+        close $file;
+        print 'Password file is empty' and exit $ERRORS{"UNKNOWN"} if !$PASSWORD;
+    }
+    if ($o_password) {
+	$PASSWORD = $o_password;
+    }
 
     # if (scalar(@o_varsL)==0 && scalar(@o_perfvarsL)==0) {
     #	print "You must specify list of attributes with either '-a' or '-A'\n";
@@ -878,13 +908,17 @@ $start_time = [ Time::HiRes::gettimeofday() ] if defined($o_timecheck);
 
 $redis = Redis-> new ( server => $dsn );
 
+if ($PASSWORD) {
+    $redis->auth($PASSWORD);
+}
+
 if (!$redis) {
-  print "CRITICAL ERROR - Redis Library Error connecting to '$HOSTNAME' on port $PORT\n"; 
+  print "CRITICAL ERROR - Redis Library - can not connect to '$HOSTNAME' on port $PORT\n"; 
   exit $ERRORS{'CRITICAL'};
 }
 
 if (!$redis->ping) {
-  print "CRITICAL ERROR - Redis Library can not ping '$HOSTNAME' on port $PORT\n";
+  print "CRITICAL ERROR - Redis Library - can not ping '$HOSTNAME' on port $PORT\n";
   exit $ERRORS{'CRITICAL'};
 }
 

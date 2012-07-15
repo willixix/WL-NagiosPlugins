@@ -287,53 +287,57 @@ my $Version='0.53';
 
 # This is a list of known stat and info variables including variables added by plugin,
 # used in order to designate COUNTER variables with 'c' in perfout for graphing programs
+# The format is:
+#        VAR_NAME => [ TYPE, PerfSuffix, DESCRIPTION] 
+# If option has description, the variable will also become available as a long option so for example
+# you can specify "--connected_clients=WARN,CRIT" instead of specifying "-a connected_clients -w WARN -c CRIT'
 my %KNOWN_STATUS_VARS = ( 
-	 'memory_utilization' => [ 'GAUGE', '%' ],      # calculated by plugin
-	 'redis_version' => [ 'VERSION', '' ],		# version string variable
-	 'response_time' => [ 'GAUGE', 's' ],		# measured by plugin
-	 'total_keys' => [ 'GAUGE', '' ],		# total number of keys from all dbs
-	 'total_expires' => ['GAUGE', '' ],		# total expires summed for all dbs
+	 'memory_utilization' => [ 'GAUGE', '%' ],      				# calculated by plugin
+	 'redis_version' => [ 'VERSION', '' ],						# version string variable
+	 'response_time' => [ 'GAUGE', 's' ],						# measured by plugin
+	 'total_keys' => [ 'GAUGE', '', 'Total Number of Keys on the Server' ],
+	 'total_expires' => ['GAUGE', '', 'Number of Expired Keys for All DBs' ],
 	 'last_save_time' => [ 'GAUGE', 's' ],
 	 'bgsave_in_progress' => [ 'BOOLEAN', '' ],
 	 'vm_enabled' => [ 'BOOLEAN', '' ],
 	 'uptime_in_seconds' => [ 'COUNTER', 'c' ],
-	 'total_connections_received' => [ 'COUNTER', 'c' ],
-	 'used_memory_rss' => [ 'GAUGE', 'B' ],		# RSS - Resident Set Size
-	 'used_cpu_sys' => [ 'GAUGE', '' ],
-	 'redis_git_dirty' => [ 'BOOLEAN', '' ],
+	 'total_connections_received' => [ 'COUNTER', 'c', 'Total Connections Received' ],
+	 'used_memory_rss' => [ 'GAUGE', 'B', 'Resident Set Size, Used Memory in Bytes' ],  # RSS - Resident Set Size
+	 'used_cpu_sys' => [ 'GAUGE', '', 'Main Process Used System CPU' ],
+	 'redis_git_dirty' => [ 'BOOLEAN', '', 'Git Dirty Set Bit' ],
 	 'loading' => [ 'BOOLEAN', '' ],
 	 'latest_fork_usec' => [ 'GAUGE', '' ],
-	 'connected_clients' => [ 'GAUGE', '' ],
+	 'connected_clients' => [ 'GAUGE', '', 'Total Number of Connected Clients' ],
 	 'used_memory_peak_human' => [ 'GAUGE', '' ],
 	 'mem_allocator' => [ 'TEXTINFO', '' ],
-	 'uptime_in_days' => [ 'COUNTER', 'c' ],
-	 'keyspace_hits' => [ 'COUNTER', 'c' ],
+	 'uptime_in_days' => [ 'COUNTER', 'c', 'Total Uptime in Days' ],
+	 'keyspace_hits' => [ 'COUNTER', 'c', 'Total Keyspace Hits' ],
 	 'client_biggest_input_buf' => [ 'GAUGE', '' ],
 	 'gcc_version' => [ 'TEXTINFO', '' ],
 	 'changes_since_last_save' => [ 'COUNTER', 'c' ],
 	 'arch_bits' => [ 'GAUGE', '' ],
-	 'lru_clock' => [ 'GAUGE', '' ], # LRU is page replacement algorithm (least recently used), I'm unsure what this represents though
+	 'lru_clock' => [ 'GAUGE', '' ], 	# LRU is page replacement algorithm (least recently used), I'm unsure what this represents though
 	 'role' => [ 'SETTING', '' ],
 	 'multiplexing_api' => [ 'SETTING' , '' ],
 	 'slave' => [ 'TEXTDATA', '' ],
-	 'pubsub_channels' => [ 'GAUGE', '' ],
+	 'pubsub_channels' => [ 'GAUGE', '', 'Number of Pubsub Channels' ],
 	 'redis_git_sha1' => [ 'TEXTDATA', '' ],
-	 'used_cpu_user_children' => [ 'GAUGE', '' ],
+	 'used_cpu_user_children' => [ 'GAUGE', '', 'Child Processes Used User CPU' ],
 	 'process_id' => [ 'GAUGE', '' ],
 	 'used_memory_human' => [ 'GAUGE', '' ],
-	 'keyspace_misses' => [ 'COUNTER', 'c' ],
-	 'used_cpu_user' => [ 'GAUGE', '' ],
-	 'total_commands_processed' => [ 'COUNTER', '' ],
-	 'mem_fragmentation_ratio' => [ 'GAUGE', '' ],
+	 'keyspace_misses' => [ 'COUNTER', 'c', 'Keyspace Misses' ],
+	 'used_cpu_user' => [ 'GAUGE', '', 'Main Process Used User CPU' ],
+	 'total_commands_processed' => [ 'COUNTER', '', 'Total Number of Commands Processed from Start' ],
+	 'mem_fragmentation_ratio' => [ 'GAUGE', '', 'Memory Fragmentation Ratio' ],
 	 'client_longest_output_list' => [ 'GAUGE', '' ],
-	 'blocked_clients' => [ 'GAUGE', '' ],
+	 'blocked_clients' => [ 'GAUGE', '', 'Number of Currently Blocked Clients' ],
 	 'aof_enabled' => [ 'BOOLEAN', '' ],
-	 'evicted_keys' => [ 'COUNTER', 'c' ],
+	 'evicted_keys' => [ 'COUNTER', 'c', 'Total Number of Evicted Keys' ],
 	 'bgrewriteaof_in_progress' => [ 'BOOLEAN', '' ],
-	 'expired_keys' => [ 'COUNTER', 'c', ],
+	 'expired_keys' => [ 'COUNTER', 'c', 'Total Number of Expired Keys' ],
 	 'used_memory_peak' => [ 'GAUGE', 'B' ],
-	 'connected_slaves' => [ 'GAUGE', '' ],
-	 'used_cpu_sys_children' => [ 'GAUGE', '' ],
+	 'connected_slaves' => [ 'GAUGE', '', 'Number of Connected Slaves' ],
+	 'used_cpu_sys_children' => [ 'GAUGE', '', 'Child Processed Used System CPU' ],
 	 'master_host' => [ 'TEXTINFO', '' ],
 	 'slave0' => [ 'TEXTINFO', '' ],
 	 'slave1' => [ 'TEXTINFO', '' ],
@@ -726,7 +730,7 @@ sub option_query {
 	  foreach (@ar) {
 		my $v = uc $_;
 		if ($v =~ /^ABSENT\:(.*)/) {
-	     		if ($1 eq 'WARNING' || $1 eq 'CRITICAL') {
+	     		if ($1 eq 'WARNING' || $1 eq 'CRITICAL' || $1 eq 'NONE') {
 				$key_alert=$1;
 		 		verb("Alert $key_alert will be issued if key $key_query is not present");
 	    		}
@@ -860,8 +864,8 @@ sub options_processprevperf {
 
 # parse command line options
 sub check_options {
-    Getopt::Long::Configure ("bundling");
-    GetOptions(
+    Getopt::Long::Configure("bundling");
+    my %Options = (
    	'v:s'	=> \$o_verb,		'verbose:s' => \$o_verb, "debug:s" => \$o_verb,
         'h'     => \$o_help,            'help'          => \$o_help,
         'H:s'   => \$o_host,            'hostname:s'    => \$o_host,
@@ -882,15 +886,20 @@ sub check_options {
         'E:s'   => \$o_prevtime,        'prev_checktime:s'=> \$o_prevtime,
         'm:s'   => \$o_memutilization,  'memory_utilization:s' => \$o_memutilization,
 	'M:s'	=> \$o_totalmemory,	'total_memory:s' => \$o_totalmemory,
-	'q:s'	=> \@o_querykey,	'query:s'	 => \@o_querykey,
+	'q=s'	=> \@o_querykey,	'query=s'	 => \@o_querykey,
 	'rate_label:s'	=> \$o_ratelabel,
     );
-    if (defined($o_help)) { help(); exit $ERRORS{"UNKNOWN"} };
-    if (defined($o_version)) { p_version(); exit $ERRORS{"UNKNOWN"} };
+    GetOptions(\%Options, 'q=s@', 'query=s@');
 
     # below code is common for number of my plugins, including check_snmp_?, netstat, etc
     # it is mostly compliant with nagios threshold specification (except use of '~')
     # and adds number of additional format options using '>','<','!','=' prefixes
+
+    # Standard nagios plugin required options
+    if (defined($o_help)) { help(); exit $ERRORS{"UNKNOWN"} };
+    if (defined($o_version)) { p_version(); exit $ERRORS{"UNKNOWN"} };
+
+    # Processing of variables-list -a, -A and thresholds -w, -c options
     @o_perfvarsL=split( /,/ , lc $o_perfvars ) if defined($o_perfvars) && $o_perfvars ne '*';
     $o_perfvars='*' if defined($o_perfvars) && scalar(@o_perfvarsL)==0;
     for (my $i=0; $i<scalar(@o_perfvarsL); $i++) {
@@ -914,6 +923,15 @@ sub check_options {
 	  exit $ERRORS{"UNKNOWN"};
 	}
     }
+
+    # this is a special loop to check stats-variables options such as "connected_clients=WARN,CRIT"
+    # which are specifies as long options
+    foreach(keys(%KNOWN_STATUS_VARS)) {
+
+
+    }
+
+    # additional variables/options calculated and added by this plugin
     if (defined($o_timecheck) && $o_timecheck ne '') {
           my @o_timeth=split(/,/, lc $o_timecheck);
           verb("Processing timecheck thresholds: $o_timecheck");
@@ -981,6 +999,8 @@ sub check_options {
 		exit $ERRORS{"UNKNOWN"};
 	} 
     }
+
+    # query option
     if (defined(@o_querykey)) {
 	options_query();
     }
@@ -1108,7 +1128,7 @@ for (my $i; $i<scalar(@query);$i++) {
       verb("Result of querying ".$query[$i]{'key_query'}." is: $result");
   }
   else {
-      if (defined($query[$i]{'alert'}) {
+      if (defined($query[$i]{'alert'} && $query[$i]{'alert'} ne 'NONE') {
 	$statuscode=$query[$i]{'alert'} if $statuscode ne 'CRITICAL';
 	$statusinfo.= "Query on ".$query[$i]{'$key_query'}." did not succeed";
       }

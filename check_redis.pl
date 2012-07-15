@@ -4,7 +4,7 @@
 #
 # Program : check_redis.pl
 # Version : 0.53
-# Date    : July 14, 2012
+# Date    : July 15, 2012
 # Author  : William Leibzon - william@leibzon.org
 # Licence : GPL - summary below, full text at http://www.fsf.org/licenses/gpl.txt
 #
@@ -230,7 +230,7 @@
 #  [0.52 - Jul 10, 2012] Patch by Jon Schulz to support credentials with -C
 #			 (credentials file) and addition by me to support
 #			 password as command argument.
-#  [0.53 - Jul 14, 2012] Adding special option to do query on one redis key and
+#  [0.53 - Jul 15, 2012] Adding special option to do query on one redis key and
 #                        and do threshold checking of results if its numeric
 #
 # TODO or consider for future:
@@ -247,7 +247,7 @@
 #  2. REDIS Specific:
 #     - Add option to check from master that slave is connected and working.
 #     - Look into replication delay from master and how it can be done. Look
-#       for into replication_delay from slave as well
+#       for into on replication_delay from slave as well
 #     - How to better calculate memory utilization and get max memory available
 #       without directly specifying it
 #     - Maybe special options to measure cpu use and set thresholds
@@ -379,7 +379,9 @@ my $o_rsuffix='_rate';		# default suffix
 my $o_rprefix='';
 
 # support for '-q' options to query redis key and check data using specified thresholds
-my $o_querykey=undef;		# query this key
+my @o_querykey=undef;		# query this key, this option maybe repeated
+my @query=undef;		# array of queries with each entry being hash of data on how to query
+
 my @key_querytype=undef;        # what typeof query - get,lrange:avg:start:end,etc
 my $key_query=undef;		# key to query for -q option
 my $key_alert=undef;		# what alert to issue if key is not found
@@ -387,6 +389,8 @@ my $key_name=undef;		# what to name this key variable
 my $key_result=undef;		# where results of the query get put into
 
 ## Additional global variables
+my @ar_warnLv = ();		# used in options processing
+my @ar_critLV = ();		# used in options processing
 my $redis= undef;               # DB connection object
 my %prev_perf=  ();		# array that is populated with previous performance data
 my @prev_time=  ();     	# timestamps if more then one set of previois performance data
@@ -481,16 +485,17 @@ sub help {
    Allows to set threshold on replication delay info. Only valid if this is a slave!
    The threshold value is in seconds and fractions are acceptable.
  -q, --query=query_type,key[:varname][,ABSENT:WARNING|CRITICAL][,WARN:threshold,CRIT:threshold]
+   This option maybe repeated more than once!
      query_type is one of: GET - get one value
 			   LRANGE:AVG:start:end - retrieve list and average results
 			   LRANGE:SUM:start:end - retrieve list and sum results
 			   LRANGE:MIN:start:end - retrieve list and return minimum
 			   LRANGE:MAX:start:end - retrieve list and return maximum
-   Key to query and optional variable name to assign the results to after : (if not
-   specified it would be same as key). If key is not available the plugin can issue
+   Option specifies key to query and optional variable name to assign the results to after :
+   (if not specified it would be same as key). If key is not available the plugin can issue
    either warning or critical alert depending on what you specified after ABSENT.
-   Numeric results can also be checked with specified thresholds together with
-   with redis stats variables or you can specify thresholds in this parameter.
+   Numeric results are calculated for ranges and can be checked with specified thresholds
+   or you can do together with standard with redis stats variables and -a option.
  -f, --perfparse
    This should only be used with '-a' and causes variable data not only as part of
    main status line but also as perfparse compatible output (for graphing, etc).
@@ -684,117 +689,14 @@ sub uptime_info {
   return $upinfo;
 }
 
-# parse command line options
-sub check_options {
-    Getopt::Long::Configure ("bundling");
-    GetOptions(
-   	'v:s'	=> \$o_verb,		'verbose:s' => \$o_verb, "debug:s" => \$o_verb,
-        'h'     => \$o_help,            'help'          => \$o_help,
-        'H:s'   => \$o_host,            'hostname:s'    => \$o_host,
-        'p:i'   => \$o_port,            'port:i'        => \$o_port,
-        'C:s'   => \$o_pwfile,          'credentials:s' => \$o_pwfile,
-        'x:s'   => \$o_password,	'password:s'	=> \$o_password,
-        't:i'   => \$o_timeout,         'timeout:i'     => \$o_timeout,
-        'V'     => \$o_version,         'version'       => \$o_version,
-	'a:s'   => \$o_variables,       'variables:s'   => \$o_variables,
-        'c:s'   => \$o_crit,            'critical:s'    => \$o_crit,
-        'w:s'   => \$o_warn,            'warn:s'        => \$o_warn,
-	'f:s'   => \$o_perf,            'perfparse:s'   => \$o_perf,
-	'A:s'   => \$o_perfvars,        'perfvars:s'    => \$o_perfvars,
-        'T:s'   => \$o_timecheck,       'response_time:s' => \$o_timecheck,
-        'R:s'   => \$o_hitrate,         'hitrate:s'     => \$o_hitrate,
-        'r:s'   => \$o_repdelay,        'replication_delay:s' => \$o_repdelay,
-        'P:s'   => \$o_prevperf,        'prev_perfdata:s' => \$o_prevperf,
-        'E:s'   => \$o_prevtime,        'prev_checktime:s'=> \$o_prevtime,
-        'm:s'   => \$o_memutilization,  'memory_utilization:s' => \$o_memutilization,
-	'M:s'	=> \$o_totalmemory,	'total_memory:s' => \$o_totalmemory,
-	'q:s'	=> \$o_querykey,	'query:s'	 => \$o_querykey,
-	'rate_label:s'	=> \$o_ratelabel,
-    );
-    if (defined($o_help)) { help(); exit $ERRORS{"UNKNOWN"} };
-    if (defined($o_version)) { p_version(); exit $ERRORS{"UNKNOWN"} };
-    if (!defined($o_host)) { print "Please specify hostname (-H)\n"; print_usage(); exit $ERRORS{"UNKNOWN"}; } 
-
-    # below code is common for number of my plugins, including check_snmp_?, netstat, etc
-    # it is mostly compliant with nagios threshold specification (except use of '~')
-    # and adds number of additional format options using '>','<','!','=' prefixes
-    my (@ar_warnLv,@ar_critLv);
-    @o_perfvarsL=split( /,/ , lc $o_perfvars ) if defined($o_perfvars) && $o_perfvars ne '*';
-    $o_perfvars='*' if defined($o_perfvars) && scalar(@o_perfvarsL)==0;
-    for (my $i=0; $i<scalar(@o_perfvarsL); $i++) {
-        $o_perfvarsL[$i] = '&'.$1 if $o_perfvarsL[$i] =~ /^$o_rprefix(.*)$o_rsuffix$/;
-    }
-    if (defined($o_warn) || defined($o_crit) || defined($o_variables) || (defined($o_timecheck) && $o_timecheck ne '') || (defined($o_hitrate) && $o_hitrate ne '') || (defined($o_repdelay) && $o_repdelay ne '') || (defined($o_querykey) && $o_querykey ne '')) {
-	if (defined($o_variables)) {
-	  @o_varsL=split( /,/ , lc $o_variables );
-	  if (defined($o_warn)) {
-	     $o_warn.="~" if $o_warn =~ /,$/;
-	     @ar_warnLv=split( /,/ , lc $o_warn );
-	  }
-	  if (defined($o_crit)) {
-	     $o_crit.="~" if $o_crit =~ /,$/;
-    	     @ar_critLv=split( /,/ , lc $o_crit );
-	  }
-	}
-	elsif (!defined($o_hitrate) && !defined($o_timecheck) && !defined($o_repdelay) && !defined($o_querykey)) {
-	  print "Specifying warning and critical levels requires '-a' parameter with list of variables\n";
-	  print_usage();
-	  exit $ERRORS{"UNKNOWN"};
-        }
-        if (defined($o_timecheck) && $o_timecheck ne '') {
-          my @o_timeth=split(/,/, lc $o_timecheck);
-          verb("Processing timecheck thresholds: $o_timecheck");
-          if (scalar(@o_timeth)!=2) {
-              printf "Incorrect value '%s' for Connection Time Thresholds. Connection time threshold must include both warning and critical thresholds separated by ','\n", $o_timecheck;
-              print_usage();
-              exit $ERRORS{"UNKNOWN"};
-          }
-          unshift(@o_varsL,"response_time");
-          unshift(@ar_warnLv,$o_timeth[0]);
-          unshift(@ar_critLv,$o_timeth[1]);
-        }
-        if (defined($o_hitrate) && $o_hitrate ne '') {
-          my @o_hrate=split(/,/, lc $o_hitrate);
-          verb("Processing hitrate thresholds: $o_hitrate");
-          if (scalar(@o_hrate)!=2) {
-              printf "Incorrect value '%s' for Hitrate Threshold. You must include both warning and critical thresholds separated by ','\n", $o_hitrate;
-              print_usage();
-              exit $ERRORS{"UNKNOWN"};
-          }
-          unshift(@o_varsL,"hitrate");
-          unshift(@ar_warnLv,$o_hrate[0]);
-          unshift(@ar_critLv,$o_hrate[1]);
-        }
-        if (defined($o_memutilization) && $o_memutilization ne '') {
-          my @o_usize=split(/,/, lc $o_memutilization);
-          verb("Processing memory utilization thresholds: $o_memutilization");
-          if (scalar(@o_usize)!=2) {
-              printf "Incorrect value '%s' for Utilization Threshold. You must include both warning and critical thresholds separated by ','\n", $o_memutilization;
-              print_usage();
-              exit $ERRORS{"UNKNOWN"};
-          }
-          unshift(@o_varsL,"memory_utilization");
-          unshift(@ar_warnLv,$o_usize[0]);
-          unshift(@ar_critLv,$o_usize[1]);
-        }
-        if (defined($o_repdelay) && $o_repdelay ne '') {
-          my @o_rdelay=split(/,/, lc $o_repdelay);
-          verb("Processing replication delay thresholds: $o_repdelay");
-          if (scalar(@o_rdelay)!=2) {
-              printf "Incorrect value '%s' for Replication Delay Threshold. You must include both warning and critical thresholds separated by ','\n", $o_repdelay;
-              print_usage();
-              exit $ERRORS{"UNKNOWN"};
-          }
-          unshift(@o_varsL,"replication_delay");
-          unshift(@ar_warnLv,$o_rdelay[0]);
-          unshift(@ar_critLv,$o_rdelay[1]);
-        }
-        if (defined($o_querykey)) {
-	  verb("Processing query key argument: $o_querykey");
-	  my @ar=split(/,/, $o_querykey);
+# process --query options (which maybe repeated, that's why loop)
+sub option_query {
+      for(my $i=0;$i<scalar(@o_querykey);$i++) {
+	  verb("Processing query key option: $o_querykey[$i]");
+	  my @ar=split(/,/, $o_querykey[$i]);
 	  # how to query
-	  @key_querytype = split(':', uc shift @ar);
-	  verb("Processing query type specification: ".join(':',@key_querytype));
+	  my @key_querytype = split(':', uc shift @ar);
+	  verb("- processing query type specification: ".join(':',@key_querytype));
 	  if ($key_querytype[0] eq 'GET') {}
 	  elsif ($key_querytype[0] eq 'LRANGE') {
 		if (scalar(@key_querytype)<2 || scalar(@key_querytype)>4) {
@@ -814,19 +716,19 @@ sub check_options {
 		print_usage();
 		exit $ERRORS{"UNKNOWN"};
 	  }
-	  verb("Will be doing $key_querytype[0] query");
+	  verb("- will be doing $key_querytype[0] query");
 	  # key to query and how to name it
-          ($key_query,$key_name) = split(':', shift @ar);
+          my ($key_query,$key_name) = split(':', shift @ar);
 	  $key_name = $key_query if !defined($key_name) || ! $key_name;
 	  verb("Variable $key_name will receive data from $key_query");
 	  # thresholds and what to do if its not there
-	  my ($warn,$crit)=(undef,undef);
+	  my ($key_alert,$warn,$crit)=(undef,undef,undef);
 	  foreach (@ar) {
 		my $v = uc $_;
 		if ($v =~ /^ABSENT\:(.*)/) {
 	     		if ($1 eq 'WARNING' || $1 eq 'CRITICAL') {
 				$key_alert=$1;
-		 		verb("Alert $key_alert will be issued if key is not present");
+		 		verb("Alert $key_alert will be issued if key $key_query is not present");
 	    		}
 			else {
 				print "Invalid value $1 after ABSENT. Please specify it as either WARNING or CRITICAL\n";
@@ -848,21 +750,34 @@ sub check_options {
 	  }
 	  $warn = "~" if !defined($warn) && defined($crit);
 	  $crit = "~" if !defined($crit) && defined($warn);
+	  # finish processing assigning results to global arrays
+	  $query[$i] = { 'key_query' => $key_query, 'key_name' => $key_name, 'query_type' => $key_querytype[0] };
+	  $query[$i]{'query_subtype'} = $key_querytype[1] if defined($key_querytype[1]);
+          $query[$i]{'query_range_start'} = $key_querytype[2] if defined($key_querytype[2]);
+	  $query[$i]{'query_range_end'} = $key_querytype[3] if defined($key_querytype[3]);	  
+	  $query[$i]{'alert'} = $key_alert if defined($key_alert);
+	  $query[$i]{'warn'} = $warn if defined($warn);
+	  $query[$i]{'crit'} = $crit if defined($crit);
 	  if (defined($warn) && defined($crit)) {
 		unshift(@o_varsL,$key_name);
 		unshift(@ar_warnLv,$warn);
 		unshift(@ar_critLv,$crit);
-                verb("Warning threshold $warn and critical threshold $crit for key $key_name");
-	  }
+                verb("Warning threshold $warn and critical threshold $crit set for key $key_query");
+	  }	  
 	}
-	if (scalar(@ar_warnLv)!=scalar(@o_varsL) || scalar(@ar_critLv)!=scalar(@o_varsL)) {
+    }
+}
+
+# sets thresholds after options have been processed
+sub options_setthresholds {
+    if (scalar(@ar_warnLv)!=scalar(@o_varsL) || scalar(@ar_critLv)!=scalar(@o_varsL)) {
 	  printf "Number of specified warning levels (%d) and critical levels (%d) must be equal to the number of attributes specified at '-a' (%d). If you need to ignore some attribute do it as ',,'\n", scalar(@ar_warnLv), scalar(@ar_critLv), scalar(@o_varsL); 
 	  verb("Warning Levels: ".join(",",@ar_warnLv));
 	  verb("Critical Levels: ".join(",",@ar_critLv));
 	  print_usage();
 	  exit $ERRORS{"UNKNOWN"};
-	}
-	for (my $i=0; $i<scalar(@o_varsL); $i++) {
+    }
+    for (my $i=0; $i<scalar(@o_varsL); $i++) {
 	  $o_varsL[$i] = '&'.$1 if $o_varsL[$i] =~ /^$o_rprefix(.*)$o_rsuffix$/; # always lowercase here
 	  if ($o_varsL[$i] =~ /^&(.*)/) {
 		if (!defined($o_prevperf)) {
@@ -884,27 +799,37 @@ sub check_options {
                  print_usage();
                  exit $ERRORS{"UNKNOWN"};
            }
-	}
     }
-    if (defined($o_totalmemory)) {
-	if ($o_totalmemory =~ /^(\d+)B/) {
-	   $o_totalmemory = $1;
+}
+
+# sets password, host, port and other data based on options entered
+sub options_setaccess {
+    if (!defined($o_host)) { print "Please specify hostname (-H)\n"; print_usage(); exit $ERRORS{"UNKNOWN"}; } 
+    if (defined($o_pwfile) && $o_pwfile) {
+        if ($o_password) {
+	    print "use either -x or -C to enter credentials\n"; print_usage(); exit $ERRORS{"UNKNOWN"};
 	}
-	elsif ($o_totalmemory =~ /^(\d+K)/) {
-	   $o_totalmemory = $1*1024;
-	}
-	elsif ($o_totalmemory =~ /^(\d+M)/) {
-	   $o_totalmemory = $1*1024*1024;
-	}
-	elsif ($o_totalmemory =~ /^(\d+)G/) {
-	   $o_totalmemory = $1*1024*1024*1024;
-	}
-	elsif ($o_totalmemory !~ /^(\d+)$/) {
-		print "Total memory value $o_totalmemory can not be interpreted\n";
-		print_usage();
-		exit $ERRORS{"UNKNOWN"};
-	} 
+        open my $file, '<', $o_pwfile or die $!;
+        while (<$file>) {
+            # Match first non-blank line that doesn't start with a comment
+            if (!($_ =~ /^\s*#/) && $_ =~ /\S+/) {
+                chomp($PASSWORD = $_);
+                last;
+            }
+        }
+        close $file;
+        print 'Password file is empty' and exit $ERRORS{"UNKNOWN"} if !$PASSWORD;
     }
+    if (defined($o_password) && $o_password) {
+	$PASSWORD = $o_password;
+    }
+    $HOSTNAME = $o_host if defined($o_host);
+    $PORT     = $o_port if defined($o_port);
+    $TIMEOUT  = $o_timeout if defined($o_timeout);
+}
+
+# processes previous perf data if present
+sub options_processprevperf {
     if (defined($o_prevperf)) {
         if (defined($o_perf)) {
                 %prev_perf=process_perf($o_prevperf);
@@ -931,34 +856,144 @@ sub check_options {
                 print "need -f option first \n"; print_usage(); exit $ERRORS{"UNKNOWN"};
         }
     }
-    if (defined($o_pwfile) && $o_pwfile) {
-        if ($o_password) {
-	    print "use either -x or -C to enter credentials\n"; print_usage(); exit $ERRORS{"UNKNOWN"};
-	}
-        open my $file, '<', $o_pwfile or die $!;
-        while (<$file>) {
-            # Match first non-blank line that doesn't start with a comment
-            if (!($_ =~ /^\s*#/) && $_ =~ /\S+/) {
-                chomp($PASSWORD = $_);
-                last;
-            }
-        }
-        close $file;
-        print 'Password file is empty' and exit $ERRORS{"UNKNOWN"} if !$PASSWORD;
-    }
-    if (defined($o_password) && $o_password) {
-	$PASSWORD = $o_password;
-    }
+}
 
+# parse command line options
+sub check_options {
+    Getopt::Long::Configure ("bundling");
+    GetOptions(
+   	'v:s'	=> \$o_verb,		'verbose:s' => \$o_verb, "debug:s" => \$o_verb,
+        'h'     => \$o_help,            'help'          => \$o_help,
+        'H:s'   => \$o_host,            'hostname:s'    => \$o_host,
+        'p:i'   => \$o_port,            'port:i'        => \$o_port,
+        'C:s'   => \$o_pwfile,          'credentials:s' => \$o_pwfile,
+        'x:s'   => \$o_password,	'password:s'	=> \$o_password,
+        't:i'   => \$o_timeout,         'timeout:i'     => \$o_timeout,
+        'V'     => \$o_version,         'version'       => \$o_version,
+	'a:s'   => \$o_variables,       'variables:s'   => \$o_variables,
+        'c:s'   => \$o_crit,            'critical:s'    => \$o_crit,
+        'w:s'   => \$o_warn,            'warn:s'        => \$o_warn,
+	'f:s'   => \$o_perf,            'perfparse:s'   => \$o_perf,
+	'A:s'   => \$o_perfvars,        'perfvars:s'    => \$o_perfvars,
+        'T:s'   => \$o_timecheck,       'response_time:s' => \$o_timecheck,
+        'R:s'   => \$o_hitrate,         'hitrate:s'     => \$o_hitrate,
+        'r:s'   => \$o_repdelay,        'replication_delay:s' => \$o_repdelay,
+        'P:s'   => \$o_prevperf,        'prev_perfdata:s' => \$o_prevperf,
+        'E:s'   => \$o_prevtime,        'prev_checktime:s'=> \$o_prevtime,
+        'm:s'   => \$o_memutilization,  'memory_utilization:s' => \$o_memutilization,
+	'M:s'	=> \$o_totalmemory,	'total_memory:s' => \$o_totalmemory,
+	'q:s'	=> \@o_querykey,	'query:s'	 => \@o_querykey,
+	'rate_label:s'	=> \$o_ratelabel,
+    );
+    if (defined($o_help)) { help(); exit $ERRORS{"UNKNOWN"} };
+    if (defined($o_version)) { p_version(); exit $ERRORS{"UNKNOWN"} };
+
+    # below code is common for number of my plugins, including check_snmp_?, netstat, etc
+    # it is mostly compliant with nagios threshold specification (except use of '~')
+    # and adds number of additional format options using '>','<','!','=' prefixes
+    @o_perfvarsL=split( /,/ , lc $o_perfvars ) if defined($o_perfvars) && $o_perfvars ne '*';
+    $o_perfvars='*' if defined($o_perfvars) && scalar(@o_perfvarsL)==0;
+    for (my $i=0; $i<scalar(@o_perfvarsL); $i++) {
+        $o_perfvarsL[$i] = '&'.$1 if $o_perfvarsL[$i] =~ /^$o_rprefix(.*)$o_rsuffix$/;
+    }
+    if (defined($o_warn) || defined($o_crit) || defined($o_variables)) {
+	if (defined($o_variables)) {
+	  @o_varsL=split( /,/ , lc $o_variables );
+	  if (defined($o_warn)) {
+	     $o_warn.="~" if $o_warn =~ /,$/;
+	     @ar_warnLv=split( /,/ , lc $o_warn );
+	  }
+	  if (defined($o_crit)) {
+	     $o_crit.="~" if $o_crit =~ /,$/;
+    	     @ar_critLv=split( /,/ , lc $o_crit );
+	  }
+	}
+	else {
+	  print "Specifying warning and critical levels requires '-a' parameter with list of variables\n";
+	  print_usage();
+	  exit $ERRORS{"UNKNOWN"};
+	}
+    }
+    if (defined($o_timecheck) && $o_timecheck ne '') {
+          my @o_timeth=split(/,/, lc $o_timecheck);
+          verb("Processing timecheck thresholds: $o_timecheck");
+          if (scalar(@o_timeth)!=2) {
+              printf "Incorrect value '%s' for Connection Time Thresholds. Connection time threshold must include both warning and critical thresholds separated by ','\n", $o_timecheck;
+              print_usage();
+              exit $ERRORS{"UNKNOWN"};
+          }
+          unshift(@o_varsL,"response_time");
+          unshift(@ar_warnLv,$o_timeth[0]);
+          unshift(@ar_critLv,$o_timeth[1]);
+    }
+    if (defined($o_hitrate) && $o_hitrate ne '') {
+          my @o_hrate=split(/,/, lc $o_hitrate);
+          verb("Processing hitrate thresholds: $o_hitrate");
+          if (scalar(@o_hrate)!=2) {
+              printf "Incorrect value '%s' for Hitrate Threshold. You must include both warning and critical thresholds separated by ','\n", $o_hitrate;
+              print_usage();
+              exit $ERRORS{"UNKNOWN"};
+          }
+          unshift(@o_varsL,"hitrate");
+          unshift(@ar_warnLv,$o_hrate[0]);
+          unshift(@ar_critLv,$o_hrate[1]);
+    }
+    if (defined($o_repdelay) && $o_repdelay ne '') {
+          my @o_rdelay=split(/,/, lc $o_repdelay);
+          verb("Processing replication delay thresholds: $o_repdelay");
+          if (scalar(@o_rdelay)!=2) {
+              printf "Incorrect value '%s' for Replication Delay Threshold. You must include both warning and critical thresholds separated by ','\n", $o_repdelay;
+              print_usage();
+              exit $ERRORS{"UNKNOWN"};
+          }
+          unshift(@o_varsL,"replication_delay");
+          unshift(@ar_warnLv,$o_rdelay[0]);
+          unshift(@ar_critLv,$o_rdelay[1]);
+    }
+    if (defined($o_memutilization) && $o_memutilization ne '') {
+          my @o_usize=split(/,/, lc $o_memutilization);
+          verb("Processing memory utilization thresholds: $o_memutilization");
+          if (scalar(@o_usize)!=2) {
+              printf "Incorrect value '%s' for Utilization Threshold. You must include both warning and critical thresholds separated by ','\n", $o_memutilization;
+              print_usage();
+              exit $ERRORS{"UNKNOWN"};
+          }
+          unshift(@o_varsL,"memory_utilization");
+          unshift(@ar_warnLv,$o_usize[0]);
+          unshift(@ar_critLv,$o_usize[1]);
+    }
+    if (defined($o_totalmemory)) {
+	if ($o_totalmemory =~ /^(\d+)B/) {
+	   $o_totalmemory = $1;
+	}
+	elsif ($o_totalmemory =~ /^(\d+K)/) {
+	   $o_totalmemory = $1*1024;
+	}
+	elsif ($o_totalmemory =~ /^(\d+M)/) {
+	   $o_totalmemory = $1*1024*1024;
+	}
+	elsif ($o_totalmemory =~ /^(\d+)G/) {
+	   $o_totalmemory = $1*1024*1024*1024;
+	}
+	elsif ($o_totalmemory !~ /^(\d+)$/) {
+		print "Total memory value $o_totalmemory can not be interpreted\n";
+		print_usage();
+		exit $ERRORS{"UNKNOWN"};
+	} 
+    }
+    if (defined(@o_querykey)) {
+	options_query();
+    }
     # if (scalar(@o_varsL)==0 && scalar(@o_perfvarsL)==0) {
     #	print "You must specify list of attributes with either '-a' or '-A'\n";
     #	print_usage();
     #	exit $ERRORS{"UNKNOWN"};
     #    }
 
-    $HOSTNAME = $o_host if defined($o_host);
-    $PORT     = $o_port if defined($o_port);
-    $TIMEOUT  = $o_timeout if defined($o_timeout);
+    # finish it up
+    options_processprevperf();
+    options_setthresholds();
+    options_setaccess();
 }
 
 # Get the alarm signal (just in case nagios screws up)
@@ -1036,37 +1071,46 @@ $dataresults{$_} = [undef, 0, 0] foreach(@o_perfvarsL);
 my $stats = $redis->info();
 
 # Check specified key if option -q was used
-if (defined($key_query)) {
+for (my $i; $i<scalar(@query);$i++) {
   my $result=undef;
-  if ($key_querytype[0] eq 'GET') {
+  if ($query[$i]{'query_type'} eq 'GET') {
   	$result  = $redis->get($key_query);
   }
-  elsif ($key_querytype[0] eq 'LRANGE') {
-	my @list;
-	$key_querytype[2] = 0 if !defined($key_querytype[2]) || $key_querytype[2] eq '';
-	$key_querytype[3] = $redis->llen($key_query) if !defined($key_querytype[3]) || $key_querytype[3] eq '';
-	if ($key_querytype[2] && $key_querytype[3]) {
-	   @list = $redis->lrange($key_query, $key_querytype[2], $key_querytype[3]);
+  elsif ($query[$i]{'query_type'} eq 'LRANGE') {
+	my $range_start;
+	my $range_end;
+	if (defined($query[$i]{'query_range_start'}) && $query[$i]{'query_range_start'} ne '') {
+	    $range_start=$query[$i]{'query_range_start'};
+	}
+        else {
+	    $range_start=0;
+	}
+	if (defined($query[$i]{'query_range_end'}) && $query[$i]{'query_range_end'} ne '') {
+	    $range_end= $query[$i]{'query_range_end'} if defined
+	}
+	else {
+	    $range_end = $redis->llen($query[$i]{'key_query'})-1;
+	}
+	my @list = $redis->lrange($query[$i]{'key_query'}, $range_start, $range_end);
 	   if (scalar(@list)>0) {
 		$result=shift @list;
 		foreach(@list) {
-		    $result+=$_ if $key_querytype[1] eq 'SUM' || $key_querytype[2] eq 'AVG';
-		    $result=$_ if ($key_querytype[1] eq 'MIN' && $_ < $result) ||
-				  ($key_querytype[1] eq 'MAX' && $_ > $result);
+		    $result+=$_ if $query[$i]{'query_subtype'} eq 'SUM' || $query[$i]{'query_subtype'} eq 'AVG';
+		    $result=$_ if ($query[$i]{'query_subtype'} eq 'MIN' && $_ < $result) ||
+				  ($query[$i]{'query_subtype'} eq 'MAX' && $_ > $result);
 		}
-		$result = $result / (scalar(@list)+1) if $key_querytype[1] eq 'AVG';
-	   }
+		$result = $result / (scalar(@list)+1) if $query[$i]{'query_subtype'} eq 'AVG';
 	}
   }
   if (defined($result) && $result) {
-      $key_result=$result;
-      dataresults_addvar($key_name, $key_result);
-      verb("Result of querying $key_query is: $key_result");
+      $query[$i]{'result'} = $result;
+      dataresults_addvar($query[$i]{'key_name'}, $result);
+      verb("Result of querying ".$query[$i]{'key_query'}." is: $result");
   }
   else {
-      if ($key_alert) {
-	$statuscode=$key_alert;
-	$statusinfo .= "Query on $key_query did not succeed";
+      if (defined($query[$i]{'alert'}) {
+	$statuscode=$query[$i]{'alert'} if $statuscode ne 'CRITICAL';
+	$statusinfo.= "Query on ".$query[$i]{'$key_query'}." did not succeed";
       }
   }
 }

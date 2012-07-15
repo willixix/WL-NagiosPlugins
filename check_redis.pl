@@ -383,18 +383,12 @@ my $o_rsuffix='_rate';		# default suffix
 my $o_rprefix='';
 
 # support for '-q' options to query redis key and check data using specified thresholds
-my @o_querykey=undef;		# query this key, this option maybe repeated
-my @query=undef;		# array of queries with each entry being hash of data on how to query
-
-my @key_querytype=undef;        # what typeof query - get,lrange:avg:start:end,etc
-my $key_query=undef;		# key to query for -q option
-my $key_alert=undef;		# what alert to issue if key is not found
-my $key_name=undef;		# what to name this key variable
-my $key_result=undef;		# where results of the query get put into
+my @o_querykey=();		# query this key, this option maybe repeated
+my @query=();			# array of queries with each entry being keyed hash of processedoption data on howto query
 
 ## Additional global variables
 my @ar_warnLv = ();		# used in options processing
-my @ar_critLV = ();		# used in options processing
+my @ar_critLv = ();		# used in options processing
 my $redis= undef;               # DB connection object
 my %prev_perf=  ();		# array that is populated with previous performance data
 my @prev_time=  ();     	# timestamps if more then one set of previois performance data
@@ -695,7 +689,7 @@ sub uptime_info {
 
 # process --query options (which maybe repeated, that's why loop)
 sub option_query {
-      for(my $i=0;$i<scalar(@o_querykey);$i++) {
+   for(my $i=0;$i<scalar(@o_querykey);$i++) {
 	  verb("Processing query key option: $o_querykey[$i]");
 	  my @ar=split(/,/, $o_querykey[$i]);
 	  # how to query
@@ -720,11 +714,10 @@ sub option_query {
 		print_usage();
 		exit $ERRORS{"UNKNOWN"};
 	  }
-	  verb("- will be doing $key_querytype[0] query");
 	  # key to query and how to name it
           my ($key_query,$key_name) = split(':', shift @ar);
 	  $key_name = $key_query if !defined($key_name) || ! $key_name;
-	  verb("Variable $key_name will receive data from $key_query");
+	  verb("- variable $key_name will receive data from $key_query");
 	  # thresholds and what to do if its not there
 	  my ($key_alert,$warn,$crit)=(undef,undef,undef);
 	  foreach (@ar) {
@@ -732,7 +725,7 @@ sub option_query {
 		if ($v =~ /^ABSENT\:(.*)/) {
 	     		if ($1 eq 'WARNING' || $1 eq 'CRITICAL' || $1 eq 'NONE') {
 				$key_alert=$1;
-		 		verb("Alert $key_alert will be issued if key $key_query is not present");
+		 		verb("- alert $key_alert will be issued if key is not present");
 	    		}
 			else {
 				print "Invalid value $1 after ABSENT. Please specify it as either WARNING or CRITICAL\n";
@@ -766,10 +759,9 @@ sub option_query {
 		unshift(@o_varsL,$key_name);
 		unshift(@ar_warnLv,$warn);
 		unshift(@ar_critLv,$crit);
-                verb("Warning threshold $warn and critical threshold $crit set for key $key_query");
+                verb("- warning threshold $warn and critical threshold $crit set");
 	  }	  
-	}
-    }
+     }
 }
 
 # sets thresholds after options have been processed
@@ -1000,10 +992,9 @@ sub check_options {
 	} 
     }
 
-    # query option
-    if (defined(@o_querykey)) {
-	options_query();
-    }
+    # query option processing
+    option_query();
+
     # if (scalar(@o_varsL)==0 && scalar(@o_perfvarsL)==0) {
     #	print "You must specify list of attributes with either '-a' or '-A'\n";
     #	print_usage();
@@ -1091,10 +1082,10 @@ $dataresults{$_} = [undef, 0, 0] foreach(@o_perfvarsL);
 my $stats = $redis->info();
 
 # Check specified key if option -q was used
-for (my $i; $i<scalar(@query);$i++) {
+for (my $i=0; $i<scalar(@query);$i++) {
   my $result=undef;
   if ($query[$i]{'query_type'} eq 'GET') {
-  	$result  = $redis->get($key_query);
+  	$result  = $redis->get($query[$i]{'key_query'});
   }
   elsif ($query[$i]{'query_type'} eq 'LRANGE') {
 	my $range_start;
@@ -1130,7 +1121,8 @@ for (my $i; $i<scalar(@query);$i++) {
   else {
       if (defined($query[$i]{'alert'} && $query[$i]{'alert'} ne 'NONE') {
 	$statuscode=$query[$i]{'alert'} if $statuscode ne 'CRITICAL';
-	$statusinfo.= "Query on ".$query[$i]{'$key_query'}." did not succeed";
+	$statusinfo.=", " if $statusinfo;
+	$statusinfo.= "Query on ".$query[$i]{'key_query'}." did not succeed";
       }
   }
 }

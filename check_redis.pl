@@ -4,7 +4,7 @@
 #
 # Program : check_redis.pl
 # Version : 0.53
-# Date    : July 13, 2012
+# Date    : July 14, 2012
 # Author  : William Leibzon - william@leibzon.org
 # Licence : GPL - summary below, full text at http://www.fsf.org/licenses/gpl.txt
 #
@@ -230,7 +230,7 @@
 #  [0.52 - Jul 10, 2012] Patch by Jon Schulz to support credentials with -C
 #			 (credentials file) and addition by me to support
 #			 password as command argument.
-#  [0.53 - Jul 13, 2012] Adding special option to do query on one redis key and
+#  [0.53 - Jul 14, 2012] Adding special option to do query on one redis key and
 #                        and do threshold checking of results if its numeric
 #
 # TODO or consider for future:
@@ -378,9 +378,9 @@ my $o_ratelabel=undef;		# prefix and suffix for creating rate variables
 my $o_rsuffix='_rate';		# default suffix	
 my $o_rprefix='';
 
-# support for '-q' and '-k' options to query one redis key and checking data using specified thresholds
+# support for '-q' options to query redis key and check data using specified thresholds
 my $o_querykey=undef;		# query this key
-my $o_keythreshold=undef;	# and threshold to check key data against
+my @key_querytype=undef;        # what typeof query - get,lrange:avg:start:end,etc
 my $key_query=undef;		# key to query for -q option
 my $key_alert=undef;		# what alert to issue if key is not found
 my $key_name=undef;		# what to name this key variable
@@ -395,17 +395,23 @@ my %dataresults= ();		# this is where data is loaded into
 
 sub p_version { print "check_redis.pl version : $Version\n"; }
 
+sub print_usage_line {
+   print "Usage: $0 [-v [debugfilename]] -H <host> [-p <port>] [-x password | -C credentials_file] [-a <statistics variables> -w <variables warning thresholds> -c <variables critical thresholds>] [-A <performance output variables>] [-T [conntime_warn,conntime_crit]] [-R [hitrate_warn,hitrate_crit]] [-m [mem_utilization_warn,mem_utilization_crit] [-M <maxmemory>[B|K|M|G]]] [-r replication_delay_time_warn,replication_delay_time_crit]  [-f] [-T <timeout>] [-V] [-P <previous performance data in quoted string>] [-q (GET|LRANGE:(AVG|SUM|MIN|MAX):start:end),query_type,query_key_name[:data_name][,ABSENT:WARNING|CRITICAL][,WARN:threshold,CRIT:threshold]] \n";
+}
+
 sub print_usage {
-   print "Usage: $0 [-v [debugfilename]] -H <host> [-p <port>] [-x password | -C credentials_file] [-a <statistics variables> -w <variables warning thresholds> -c <variables critical thresholds>] [-A <performance output variables>] [-T [conntime_warn,conntime_crit]] [-R [hitrate_warn,hitrate_crit]] [-m [mem_utilization_warn,mem_utilization_crit] [-M <maxmemory>[B|K|M|G]]] [-r replication_delay_time_warn,replication_delay_time_crit]  [-f] [-T <timeout>] [-V] [-P <previous performance data in quoted string>]\n";
+   print_usage_line();
    print "For more details on options do: $0 --help\n";
 }
 
 sub help {
-   print "\nRedis Check for Nagios version ",$Version,"\n";
+   print "Redis Check for Nagios version ",$Version,"\n";
    print " by William Leibzon - william(at)leibzon.org\n\n";
-   print "This monitoring plugin lets you do threshold checks on replication and other info\n";
-   print "data which are also returned as performance output for graphing.\n\n";
-   print_usage();
+   print "This is redis monitoring plugin to check its stats variables, replication, response time\n";
+   print "hitrate, memory utilization andother info. The plugin can also query and test key data\n";
+   print "against specified thresholds. All data is available as performance output for graphing.\n\n";
+   print_usage_line();
+   print "\n";
    print <<EOT;
  -v, --verbose[=FILENAME], --debug[=FILENAME]
    Print extra debugging information.
@@ -474,14 +480,17 @@ sub help {
  -r, --replication_delay=WARN,CRIT
    Allows to set threshold on replication delay info. Only valid if this is a slave!
    The threshold value is in seconds and fractions are acceptable.
- -q, --query_key=key[,name],[WARNING|CRITICAL]
- -k, --key_threshold=WARN,CRIT
-   Key to query and optional variable name to assign the results to (if not specified
-   it would be same as key). If key is not available the plugin can issue either
-   warning or critical alert depending on if you put either "WARN" or "CRIT" as
-   the ending of -q parameter. Numeric results can also be checked with specified
-   thresholds at -A with redis stats variables but additional parameter -k is also
-   provided if you want to specify thresholds separately.
+ -q, --query=query_type,key[:varname][,ABSENT:WARNING|CRITICAL][,WARN:threshold,CRIT:threshold]
+     query_type is one of: GET - get one value
+			   LRANGE:AVG:start:end - retrieve list and average results
+			   LRANGE:SUM:start:end - retrieve list and sum results
+			   LRANGE:MIN:start:end - retrieve list and return minimum
+			   LRANGE:MAX:start:end - retrieve list and return maximum
+   Key to query and optional variable name to assign the results to after : (if not
+   specified it would be same as key). If key is not available the plugin can issue
+   either warning or critical alert depending on what you specified after ABSENT.
+   Numeric results can also be checked with specified thresholds together with
+   with redis stats variables or you can specify thresholds in this parameter.
  -f, --perfparse
    This should only be used with '-a' and causes variable data not only as part of
    main status line but also as perfparse compatible output (for graphing, etc).
@@ -699,8 +708,7 @@ sub check_options {
         'E:s'   => \$o_prevtime,        'prev_checktime:s'=> \$o_prevtime,
         'm:s'   => \$o_memutilization,  'memory_utilization:s' => \$o_memutilization,
 	'M:s'	=> \$o_totalmemory,	'total_memory:s' => \$o_totalmemory,
-	'q:s'	=> \$o_querykey,	'query_key:s'	 => \$o_querykey,
-	'k:s'	=> \$o_keythreshold,	'key_threshold:s' => \$o_keythreshold,
+	'q:s'	=> \$o_querykey,	'query:s'	 => \$o_querykey,
 	'rate_label:s'	=> \$o_ratelabel,
     );
     if (defined($o_help)) { help(); exit $ERRORS{"UNKNOWN"} };
@@ -716,7 +724,7 @@ sub check_options {
     for (my $i=0; $i<scalar(@o_perfvarsL); $i++) {
         $o_perfvarsL[$i] = '&'.$1 if $o_perfvarsL[$i] =~ /^$o_rprefix(.*)$o_rsuffix$/;
     }
-    if (defined($o_warn) || defined($o_crit) || defined($o_variables) || (defined($o_timecheck) && $o_timecheck ne '') || (defined($o_hitrate) && $o_hitrate ne '') || (defined($o_repdelay) && $o_repdelay ne '')) {
+    if (defined($o_warn) || defined($o_crit) || defined($o_variables) || (defined($o_timecheck) && $o_timecheck ne '') || (defined($o_hitrate) && $o_hitrate ne '') || (defined($o_repdelay) && $o_repdelay ne '') || (defined($o_querykey) && $o_querykey ne '')) {
 	if (defined($o_variables)) {
 	  @o_varsL=split( /,/ , lc $o_variables );
 	  if (defined($o_warn)) {
@@ -728,7 +736,7 @@ sub check_options {
     	     @ar_critLv=split( /,/ , lc $o_crit );
 	  }
 	}
-	elsif (!defined($o_timecheck) && !defined($o_repdelay)) {
+	elsif (!defined($o_hitrate) && !defined($o_timecheck) && !defined($o_repdelay) && !defined($o_querykey)) {
 	  print "Specifying warning and critical levels requires '-a' parameter with list of variables\n";
 	  print_usage();
 	  exit $ERRORS{"UNKNOWN"};
@@ -781,44 +789,71 @@ sub check_options {
           unshift(@ar_warnLv,$o_rdelay[0]);
           unshift(@ar_critLv,$o_rdelay[1]);
         }
-        if (defined($o_querykey) && $o_querykey) {
+        if (defined($o_querykey)) {
 	  verb("Processing query key argument: $o_querykey");
-	  my @key_query=split(/,/, $o_querykey)
-          $key_query = shift @o_keyquery;
-          my $wc = '';
-          if (scalar(@key_query)>0) {
-	     $wc=pop @key_query;
-	     if ($wc eq 'WARNING' || $wc eq 'CRITICAL') {
-		 $key_alert=$wc;
-		 $wc='';
-		 verb("Alert $key_alert will be issued if key is not present");
-	     }
-	  }
-	  if (!$wc && scalar(@key_query)>0) {
-	     $wc=shift @key_query;
-	  }
-	  if ($wc) {
-	     $key_name=$wc
+	  my @ar=split(/,/, $o_querykey);
+	  # how to query
+	  @key_querytype = split(':', uc shift @ar);
+	  verb("Processing query type specification: ".join(':',@key_querytype));
+	  if ($key_querytype[0] eq 'GET') {}
+	  elsif ($key_querytype[0] eq 'LRANGE') {
+		if (scalar(@key_querytype)<2 || scalar(@key_querytype)>4) {
+                	print "Incorrect specification of LRANGE. Must include type and start and end range.\n";
+			print_usage();
+			exit $ERRORS{"UNKNOWN"};
+		}
+		elsif ($key_querytype[1] ne 'MAX' && $key_querytype[1] ne 'MIN' &&
+		    $key_querytype[1] ne 'AVG' && $key_querytype[1] ne 'SUM') {
+			print "Invalid LRANGE type $key_querytype[1]. This must be either MAX or MIN or AVG or SUM\n";
+			print_usage();
+			exit $ERRORS{"UNKNOWN"};
+		}
 	  }
 	  else {
-	     $key_name=$key_query;
+		print "Invalid key query $key_querytype[0]. Currently supported are GET and LRANGE.\n";
+		print_usage();
+		exit $ERRORS{"UNKNOWN"};
 	  }
+	  verb("Will be doing $key_querytype[0] query");
+	  # key to query and how to name it
+          ($key_query,$key_name) = split(':', shift @ar);
+	  $key_name = $key_query if !defined($key_name) || ! $key_name;
 	  verb("Variable $key_name will receive data from $key_query");
-	}
-	if (defined($o_keythreshold) && $o_keythreshold) {
-	  if (!$key_name) {
-	      printf "You can not use -k without specifying key to query with -q.\n"; print_usage(); exit $ERRORS{"UNKNOWN"};
+	  # thresholds and what to do if its not there
+	  my ($warn,$crit)=(undef,undef);
+	  foreach (@ar) {
+		my $v = uc $_;
+		if ($v =~ /^ABSENT\:(.*)/) {
+	     		if ($1 eq 'WARNING' || $1 eq 'CRITICAL') {
+				$key_alert=$1;
+		 		verb("Alert $key_alert will be issued if key is not present");
+	    		}
+			else {
+				print "Invalid value $1 after ABSENT. Please specify it as either WARNING or CRITICAL\n";
+				print_usage();
+				exit $ERRORS{"UNKNOWN"};
+			}
+		}
+		elsif ($v =~ /^WARN\:(.*)/) {
+			$warn = $1;
+		}
+		elsif ($v =~/^CRIT:\:(.*)/) {
+			$crit = $1;
+		}
+		else {
+			print "Invalid value $v in query specification.\n";
+			print_usage();
+			exit $ERRORS{"UNKNOWN"};
+		}
 	  }
-          my @o_keyth=split(/,/, lc $o_keythreshold);
-          verb("Processing key query thresholds: $o_keythreshold");
-          if (scalar(@o_keythreshold)!=2) {
-              printf "Incorrect value '%s' for Query Threshold. You must include both warning and critical thresholds separated by ','\n", $o_keythreshold;
-              print_usage();
-              exit $ERRORS{"UNKNOWN"};
-          }
-          unshift(@o_varsL,$key_name);
-          unshift(@ar_warnLv,$o_keyth[0]);
-          unshift(@ar_critLv,$o_keyth[1]);
+	  $warn = "~" if !defined($warn) && defined($crit);
+	  $crit = "~" if !defined($crit) && defined($warn);
+	  if (defined($warn) && defined($crit)) {
+		unshift(@o_varsL,$key_name);
+		unshift(@ar_warnLv,$warn);
+		unshift(@ar_critLv,$crit);
+                verb("Warning threshold $warn and critical threshold $crit for key $key_name");
+	  }
 	}
 	if (scalar(@ar_warnLv)!=scalar(@o_varsL) || scalar(@ar_critLv)!=scalar(@o_varsL)) {
 	  printf "Number of specified warning levels (%d) and critical levels (%d) must be equal to the number of attributes specified at '-a' (%d). If you need to ignore some attribute do it as ',,'\n", scalar(@ar_warnLv), scalar(@ar_critLv), scalar(@o_varsL); 
@@ -1002,7 +1037,27 @@ my $stats = $redis->info();
 
 # Check specified key if option -q was used
 if (defined($key_query)) {
-  my $result  = $redis->get($key_query);
+  my $result=undef;
+  if ($key_querytype[0] eq 'GET') {
+  	$result  = $redis->get($key_query);
+  }
+  elsif ($key_querytype[0] eq 'LRANGE') {
+	my @list;
+	$key_querytype[2] = 0 if !defined($key_querytype[2]) || $key_querytype[2] eq '';
+	$key_querytype[3] = $redis->llen($key_query) if !defined($key_querytype[3]) || $key_querytype[3] eq '';
+	if ($key_querytype[2] && $key_querytype[3]) {
+	   @list = $redis->lrange($key_query, $key_querytype[2], $key_querytype[3]);
+	   if (scalar(@list)>0) {
+		$result=shift @list;
+		foreach(@list) {
+		    $result+=$_ if $key_querytype[1] eq 'SUM' || $key_querytype[2] eq 'AVG';
+		    $result=$_ if ($key_querytype[1] eq 'MIN' && $_ < $result) ||
+				  ($key_querytype[1] eq 'MAX' && $_ > $result);
+		}
+		$result = $result / (scalar(@list)+1) if $key_querytype[1] eq 'AVG';
+	   }
+	}
+  }
   if (defined($result) && $result) {
       $key_result=$result;
       dataresults_addvar($key_name, $key_result);
@@ -1011,7 +1066,7 @@ if (defined($key_query)) {
   else {
       if ($key_alert) {
 	$statuscode=$key_alert;
-	$statusinfo .= "Query key $query data is missing";
+	$statusinfo .= "Query on $key_query did not succeed";
       }
   }
 }
@@ -1258,7 +1313,7 @@ foreach $avar (keys %dataresults) {
 }
 
 # now output the results
-print $statuscode . $statusinfo." ";
+print $statuscode . ': '.$statusinfo." ";
 print "- " if $statusinfo;
 print "REDIS " . $dbversion . ' on ' . $HOSTNAME. ':'. $PORT;
 print ' has '.scalar(keys %dbs).' databases ('.join(',',keys(%dbs)).')';

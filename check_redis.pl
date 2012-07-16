@@ -546,7 +546,7 @@ Stats Variable Options (this is alternative to specifying them as list with -a):
         num1:num2  - warn if data is outside range i.e. if data<num1 or data>num2
         \@num1:num2 - warn if data is in range i.e. data>=num1 && data<=num2
     ABSENT:OK|WARNING|CRITICAL|UNKNOWN - Nagios alert (or lock of thereof) if data is absent
-    ZERO:OK|WARNING|CRITICAL|UNKNOWN    - Nagios alert (or lock of thereof) if data is 0
+    ZERO:OK|WARNING|CRITICAL|UNKNOWN   - Nagios alert (or lock of thereof) if result is 0
     DISPLAY:YES|NO  - Specifies if data should be included in nagios status line output
     PERF:YES|NO     - Output results as performance data or not (always YES if asked for rate)
 
@@ -839,6 +839,19 @@ sub parse_thresholds_optionsline {
    return $thres;
 }
 
+sub additional_options_list {
+    my @VarOptions = ();
+    foreach(keys %KNOWN_STATUS_VARS) {
+        my $v = $_;
+        my $v2 = $o_rprefix.$v.$o_rsuffix;
+        if (exists($KNOWN_STATUS_VARS{$v}[2]) && $KNOWN_STATUS_VARS{$v}[2] ne '') {
+              push @VarOptions,$v."=s";
+              push @VarOptions,$v2."=s" if $KNOWN_STATUS_VARS{$v}[0] eq 'COUNTER'; 
+        }
+    }
+    return @VarOptions;
+}
+
 sub options_startprocessing {
     my $Options = shift;
     # Processing of variables-list -a, -A and thresholds -w, -c options
@@ -1003,7 +1016,7 @@ sub main_checkvars {
 		}
 	    }
 	    # if we were asked to output performance, prepare it but do not output until later loop
-	    if ($dataresults{$avar}[2]==0 && $dataresults{$avar}[3] eq '' && 
+	    if ($dataresults{$avar}[2]==0 && exists($dataresults{$avar}[3]) && $dataresults{$avar}[3] eq '' && 
 		((defined($o_perf) && !exists($thresholds{$avar}{'PERF'})) || 
 		 (exists($thresholds{$avar}{'PERF'}) && $thresholds{$avar}{'PERF'} eq 'YES'))) {
 		$dataresults{$avar}[3]=$avar_out."=".$dataresults{$avar}[0];
@@ -1178,17 +1191,6 @@ sub options_setaccess {
 sub check_options {
     Getopt::Long::Configure("bundling");
     my %Options = ();
-    my @VarOptions = ();
-    foreach(keys %KNOWN_STATUS_VARS) {
-        my $v = $_;
-        my $v2 = $o_rprefix.$v.$o_rsuffix;
-        if (exists($KNOWN_STATUS_VARS{$v}[2]) && $KNOWN_STATUS_VARS{$v}[2] ne '') {
-              push @VarOptions,$v;
-              if ($KNOWN_STATUS_VARS{$v}[0] eq 'COUNTER') {
-              	push @VarOptions, $v2;
-	      }
-        }
-    }
     GetOptions(\%Options, 
    	'v:s'	=> \$o_verb,		'verbose:s' => \$o_verb, "debug:s" => \$o_verb,
         'h'     => \$o_help,            'help'          => \$o_help,
@@ -1212,7 +1214,7 @@ sub check_options {
 	'M:s'	=> \$o_totalmemory,	'total_memory:s' => \$o_totalmemory,
 	'q=s'	=> \@o_querykey,	'query=s'	 => \@o_querykey,
 	'rate_label:s'	=> \$o_ratelabel,
-	map { ("$_:s") } @VarOptions
+	map { ($_) } additional_options_list()
     );
 
     # below code is common for number of my plugins, including check_snmp_?, netstat, etc

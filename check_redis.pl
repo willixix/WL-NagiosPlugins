@@ -3,8 +3,8 @@
 # ============================== SUMMARY =====================================
 #
 # Program : check_redis.pl
-# Version : 0.53
-# Date    : July 15, 2012
+# Version : 0.6
+# Date    : July 16, 2012
 # Author  : William Leibzon - william@leibzon.org
 # Licence : GPL - summary below, full text at http://www.fsf.org/licenses/gpl.txt
 #
@@ -223,6 +223,7 @@
 #			 replacing check_memcached examples. Bugs fixed.
 #			 Made "_rate" as default rate variables suffix in
 #		         place of &delta. Changed -D option to -r.
+#
 #  [0.5  - Jun 01, 2012] First official release will start with version 0.5
 #			 Documentation changes, but no code updates.
 #  [0.51 - Jun 16, 2012] Added support to specify filename to '-v' option
@@ -232,6 +233,14 @@
 #			 password as command argument.
 #  [0.53 - Jul 15, 2012] Adding special option to do query on one redis key and
 #                        and do threshold checking of results if its numeric
+#
+#  [0.6  - Jul 16, 2012] Rewrote parts of thresholds checking code and moved code
+#			 that checks and parses thresholds from main into separate
+#			 functions that are to become part of plugin library.
+#			 Added support for variable thresholds specified as:
+#			   option=WARN:threshold,CRIT:threshold,ABSENT:OK|WARNING|CRITICAL,ZERO:..
+#			 which are to be used for stats-variable based long options such as
+#			   --connected_clients=WARN:threshold,CRIT:threshold
 #
 # TODO or consider for future:
 #
@@ -265,8 +274,8 @@
 use strict;
 use IO::Socket;
 use Time::HiRes;
-use Redis;
 use Getopt::Long qw(:config no_ignore_case);
+use Redis;
 
 # default hostname, port, database, user and password, see NOTES above
 my $HOSTNAME= 'localhost';
@@ -364,9 +373,7 @@ my @o_varsL=    ();             # array from above list
 my $o_perfvars= undef;          # list of variables to include in perfomance data
 my @o_perfvarsL=();             # array from above list
 my $o_warn=     undef;          # warning level option
-my @o_warnL=    ();             # array of warn data processing threshold 
 my $o_crit=     undef;          # Critical level option
-my @o_critL=    ();             # array of critical data processing thresholds 
 my $o_perf=     undef;          # Performance data option
 my $o_timeout=  undef;          # Timeout to use - note that normally timeout is from nagios
 my $o_timecheck=undef;          # threshold spec for connection time
@@ -374,6 +381,7 @@ my $o_memutilization=undef;     # threshold spec for memory utilization%
 my $o_totalmemory=undef;	# total memory on a system
 my $o_hitrate=  undef;          # threshold spec for hitrate%
 my $o_repdelay=undef;           # replication delay time
+my @o_querykey=();		# query this key, this option maybe repeated so its an array
 
 # previous performance data and ratio calculation related options
 my $o_prevperf= undef;		# performance data given with $SERVICEPERFDATA$ macro
@@ -382,18 +390,21 @@ my $o_ratelabel=undef;		# prefix and suffix for creating rate variables
 my $o_rsuffix='_rate';		# default suffix	
 my $o_rprefix='';
 
-# support for '-q' options to query redis key and check data using specified thresholds
-my @o_querykey=();		# query this key, this option maybe repeated
-my @query=();			# array of queries with each entry being keyed hash of processedoption data on howto query
-
 ## Additional global variables
+my @allVars = ();		# all variables after options processing
 my @ar_warnLv = ();		# used in options processing
 my @ar_critLv = ();		# used in options processing
+my @query=();			# array of queries with each entry being keyed hash of processedoption data on howto query
+my %thresholds=()		# this replaces @o_warnL and @o_critL with a hash array of all threshold data
 my $redis= undef;               # DB connection object
 my %prev_perf=  ();		# array that is populated with previous performance data
 my @prev_time=  ();     	# timestamps if more then one set of previois performance data
 my $perfcheck_time=undef;	# time when data was last checked 
 my %dataresults= ();		# this is where data is loaded into
+my $statuscode = "OK";		# final status code
+my $statusinfo = "";		# if there is an error, this has human info about what it is
+my $statusdata = "";		# if there is no error but we want some data in status line, this var gets it
+my $perfdata = "";		# this variable collects performance data line
 
 sub p_version { print "check_redis.pl version : $Version\n"; }
 
@@ -415,6 +426,7 @@ sub help {
    print_usage_line();
    print "\n";
    print <<EOT;
+General and Server Connection Options:
  -v, --verbose[=FILENAME], --debug[=FILENAME]
    Print extra debugging information.
    If filename is specified instead of STDOUT the debug data is written to that file.
@@ -430,6 +442,10 @@ sub help {
     Credentials file to read for Redis authentication
  -t, --timeout=NUMBER
    Allows to set timeout for execution of this plugin. This overrides nagios default.
+ -V, --version
+   Prints version number
+
+Variables and Thresholds Set as List Options:
  -a, --variables=STRING[,STRING[,STRING...]]
    List of variables from info data to do threshold checks on.
    The default (if option is not used) is not to monitor any variable.
@@ -456,6 +472,38 @@ sub help {
    variables specified with '-a'. The values specify critical threshold
    for when Nagios should send CRITICAL alert. The format is exactly same
    as with -w option except no '^' prefix.
+
+Performance Data Processing Options:
+ -f, --perfparse
+   This should only be used with '-a' and causes variable data not only as part of
+   main status line but also as perfparse compatible output (for graphing, etc).
+ -A, --perfvars=[STRING[,STRING[,STRING...]]]
+   This allows to list variables which values will go only into perfparse
+   output (and not for threshold checking). The option by itself (emply value)
+   is same as a special value '*' and specify to output all variables.
+ -P, --prev_perfdata
+   Previous performance data (normally put '-P \$SERVICEPERFDATA\$' in nagios
+   command definition). This is used to calculate rate of change for counter
+   statistics variables and for proper calculation of hitrate.
+ --rate_label=[PREFIX_STRING[,SUFFIX_STRING]]
+   Prefix or Suffix label used to create a new variable which has rate of change
+   of another base variable. You can specify PREFIX or SUFFIX or both. Default
+   if not specified is suffix '_rate' i.e. --rate_label=,_rate
+
+Key Query Option (maybe repeated more than once):
+ -q, --query=query_type,key[:varname][,ABSENT:OK|WARNING|CRITICAL][,WARN:threshold,CRIT:threshold]
+     query_type is one of: GET - get one value
+			   LRANGE:AVG:start:end - retrieve list and average results
+			   LRANGE:SUM:start:end - retrieve list and sum results
+			   LRANGE:MIN:start:end - retrieve list and return minimum
+			   LRANGE:MAX:start:end - retrieve list and return maximum
+   Option specifies key to query and optional variable name to assign the results to after :
+   (if not specified it would be same as key). If key is not available the plugin can issue
+   either warning or critical alert depending on what you specified after ABSENT.
+   Numeric results are calculated for ranges and can be checked with specified thresholds
+   or you can do together with standard with redis stats variables and -a option.
+
+Measured and Calculated Data Options:
  -T, --response_time=[WARN,CRIT]
    If this is used as just -T the plugin will measure and output connection 
    response time in seconds. With -f this would also be provided on perf variables.
@@ -482,37 +530,44 @@ sub help {
  -r, --replication_delay=WARN,CRIT
    Allows to set threshold on replication delay info. Only valid if this is a slave!
    The threshold value is in seconds and fractions are acceptable.
- -q, --query=query_type,key[:varname][,ABSENT:WARNING|CRITICAL][,WARN:threshold,CRIT:threshold]
-   This option maybe repeated more than once!
-     query_type is one of: GET - get one value
-			   LRANGE:AVG:start:end - retrieve list and average results
-			   LRANGE:SUM:start:end - retrieve list and sum results
-			   LRANGE:MIN:start:end - retrieve list and return minimum
-			   LRANGE:MAX:start:end - retrieve list and return maximum
-   Option specifies key to query and optional variable name to assign the results to after :
-   (if not specified it would be same as key). If key is not available the plugin can issue
-   either warning or critical alert depending on what you specified after ABSENT.
-   Numeric results are calculated for ranges and can be checked with specified thresholds
-   or you can do together with standard with redis stats variables and -a option.
- -f, --perfparse
-   This should only be used with '-a' and causes variable data not only as part of
-   main status line but also as perfparse compatible output (for graphing, etc).
- -A, --perfvars=[STRING[,STRING[,STRING...]]]
-   This allows to list variables which values will go only into perfparse
-   output (and not for threshold checking). The option by itself (emply value)
-   is same as a special value '*' and specify to output all variables.
- -P, --prev_perfdata
-   Previous performance data (normally put '-P \$SERVICEPERFDATA\$' in nagios
-   command definition). This is used to calculate rate of change for counter
-   statistics variables and for proper calculation of hitrate.
- --rate_label=[PREFIX_STRING[,SUFFIX_STRING]]
-   Prefix or Suffix label used to create a new variable which has rate of change
-   of another base variable. You can specify PREFIX or SUFFIX or both. Default
-   if not specified is suffix '_rate' i.e. --rate_label=,_rate
- -V, --version
-   Prints version number
+
+Options for Known Status Variables:
 EOT
+  # add more options based on KNOWN_STATUS_VARS array
+  my $vname,$vname2;
+  foreach (keys(%KNOWN_STATUS_VARS)) {
+     $vname = $_;
+     $vname2=$o_rprefix.$vname.$o_rsuffix;
+     if (exists($KNOWN_STATUS_VARS{$vname}[2])) {
+	printf(' --'.$vname."=[WARN:threshold][,CRIT:threshold][,ABSENT:OK|WARNING|CRITICAL|UNKNOWN]\n");
+	printf("   Check ".$KNOWN_STATUS_VARS{$vname}[2]."\n");
+	if ($KNOWN_STATUS_VARS{$vname}[0]=='COUNTER') {
+	    printf(' --'.$vname2."=[WARN:threshold][,CRIT:threshold][,ABSENT:OK|WARNING|CRITICAL|UNKNOWN]\n");
+	    printf("   Rate of Change of ".$KNOWN_STATUS_VARS{$vname}[2]."\n");
+	}
+     }
+  }
+  printf("\n");
 }
+
+sub div_mod { return int( $_[0]/$_[1]) , ($_[0] % $_[1]); }
+
+# this converts uptime in seconds to nice & short output format
+sub uptime_info {
+  my $uptime_seconds = shift;
+  my $upinfo = "";
+  my ($secs,$mins,$hrs,$days) = (undef,undef,undef,undef);
+  ($mins,$secs) = div_mod($uptime_seconds,60);
+  ($hrs,$mins) = div_mod($mins,60);
+  ($days,$hrs) = div_mod($hrs,24);
+  $upinfo .= "$days days " if $days>0;
+  $upinfo .= "$hrs hours " if $hrs>0;
+  $upinfo .= "$mins minutes" if $mins>0 && ($days==0 || $hrs==0);
+  $upinfo .= "$secs seconds" if $secs>0 && $days==0 && $hrs==0; 
+  return $upinfo;
+}
+
+############################## START OF THE LIBRARY FUNCTIONS ####################################
 
 # For verbose output (updated 06/06/12 to write to debug file if specified)
 sub verb {
@@ -539,8 +594,6 @@ sub isnum {
   if (defined($num) && $num =~ /^[-|+]?((\d+\.?\d*)|(^\.\d+))$/ ) { return 1 ;}
   return 0;
 }
-
-sub div_mod { return int( $_[0]/$_[1]) , ($_[0] % $_[1]); }
 
 # load previous performance data 
 sub process_perf {
@@ -586,7 +639,8 @@ sub parse_threshold {
     my $thin = shift;
 
     # link to an array that holds processed threshold data
-    # array: 1st is type of check, 2nd is threshold value or value1 in range, 3rd is value2 in range, 4th is option, 5th is nagios spec string representation for perf out
+    # array: 1st is type of check, 2nd is threshold value or value1 in range, 3rd is value2 in range,
+    #        4th is extra options such as ^, 5th is nagios spec string representation for perf out
     my $th_array = [ '', undef, undef, '', '' ]; 
     my $th = $thin;
     my $at = '';
@@ -660,32 +714,335 @@ sub threshold_specok {
 }
 
 sub dataresults_addvar {
-   my ($dnam, $dval) = @_;
-   if (exists($dataresults{$dnam})) {
+    my ($dnam, $dval) = @_;
+    if (exists($dataresults{$dnam})) {
    	$dataresults{$dnam}[0] = $dval;
-   }
-   else { 
+    }
+    else { 
 	$dataresults{$dnam} = [$dval, 0, 0];
-   }
-   if (defined($o_perfvars) && $o_perfvars eq '*') {
+    }
+    if (defined($o_perfvars) && $o_perfvars eq '*') {
         push @o_perfvarsL, $dnam;
-   }
+    }
 }
 
-# this converts uptime in seconds to nice & short output format
-sub uptime_info {
-  my $uptime_seconds = shift;
-  my $upinfo = "";
-  my ($secs,$mins,$hrs,$days) = (undef,undef,undef,undef);
-  ($mins,$secs) = div_mod($uptime_seconds,60);
-  ($hrs,$mins) = div_mod($mins,60);
-  ($days,$hrs) = div_mod($hrs,24);
-  $upinfo .= "$days days " if $days>0;
-  $upinfo .= "$hrs hours " if $hrs>0;
-  $upinfo .= "$mins minutes" if $mins>0 && ($days==0 || $hrs==0);
-  $upinfo .= "$secs seconds" if $secs>0 && $days==0 && $hrs==0; 
-  return $upinfo;
+sub thresholds_addvar {
+    my ($var,$th) = @_;
+    push @allVars, $var if !exists($thresholds{$var});
+    $thresholds{$var}=$th;
 }
+
+# this function parses "WARN:threshold,CRIT:threshold,ABSENT:OK|WARNING|CRITICAL|UNKNOWN" text
+# parsing of actual threshold after WARN, CRIT is done by parse_threshold function
+sub parse_thresholds_optionsline {
+   my $in = shift;
+   my $thres = {};
+   my @tin = split (',', uc $in);
+   # old format with =warn,crit thresolds without specifying which one
+   if ($tin[0] != /^WARN/ && $tin[0] != /^CRIT/ && $tin[0] != /^ABSENT/ && $tin[0] != /^ZERO/) {
+	if (scalar(@tin)==2) {
+	     $thres->{'WARN'} = parse_threshold($tin[0]); 
+	     $thres->{'CRIT'} = parse_threshold($tin[1]);
+	}
+	else {
+	     print "Can not parse. Unknown threshold specification: $thin\n";
+	     print "Threshold line should be either both warning and critical thresholds separated by ',' or \n");
+	     print "new format of: WARN:threshold,CRIT:threshold,ABSENT:OK|WARNING|CRITICAL|UNKNOWN\n";
+	     print "which allows to specify all 3 (CRIT,WARN,ABSENT) checks or any one of them in any order\n"
+             print_usage();
+             exit $ERRORS{"UNKNOWN"};
+	}
+   }
+   # new format with prefix specifying if its WARN or CRIT and support of ABSENT
+   else {
+	foreach(@tin) {
+	     if (/^WARN\:(.*)/) {
+		    $thres->{'WARN'} = parse_threshold($1);
+	     }
+	     elsif (/^CRIT\:(.*)/) {
+		    $thres->{'CRIT'} = parse_threshold($1);
+	     }
+	     elsif (/^ABSENT\:(.*)/) {
+		    if (exists($ERRORS{$1})) {
+			$thres->{'ABSENT'} = $1;
+		    }
+		    else {
+			print "Invalid value $1 after ABSENT. Acceptable values are: OK, WARNING, CRITICAL, UNKNOWN\n";
+			print_usage();
+			exit $ERRORS{"UNKNOWN"};
+		    }
+	     }
+	     elsif (/^ZERO\:(.*)/) {
+		    if (exists($ERRORS{$1})) {
+			$thres->{'ZERO'} = $1;
+		    }
+		    else {
+			print "Invalid value $1 after ZERO. Acceptable values are: OK, WARNING, CRITICAL, UNKNOWN\n";
+			print_usage();
+			exit $ERRORS{"UNKNOWN"};
+		    }
+	     }
+	     else {
+		    print "Can not parse. Unknown threshold specification: $_\n";
+		    print "Threshold line should be WARN:threshold,CRIT:threshold,ABSENT:OK|WARNING|CRITICAL|UNKNOWN,ZERO:OK|WARNING|CRITICAL|UNKNOWN\n";
+		    print_usage();
+		    exit $ERRORS{"UNKNOWN"};
+	     }
+	}
+   }
+   if (exists($thres->{'WARN'}) && exists($thres->{'CRIT'}) {
+	  if (threshold_specok($thres->{'WARN'},$thres->{'CRIT'})) {
+                 print "All numeric warning values must be less then critical (or greater then when '<' is used)\n";
+                 print "Note: to override this check prefix warning value with ^\n";
+                 print_usage();
+                 exit $ERRORS{"UNKNOWN"};
+          }
+   }
+   return $thres;
+}
+
+sub options_startprocessing {
+    # Processing of variables-list -a, -A and thresholds -w, -c options
+    @ar_warnLv = ();
+    @ar_critLv = ();
+    ($o_rprefix,$o_rsuffix)=split(/,/,lc $o_ratelabel) if defined($o_ratelabel) && $o_ratelabel ne '';
+    @o_perfvarsL=split( /,/ , lc $o_perfvars ) if defined($o_perfvars) && $o_perfvars ne '*';
+    $o_perfvars='*' if defined($o_perfvars) && scalar(@o_perfvarsL)==0;
+    for (my $i=0; $i<scalar(@o_perfvarsL); $i++) {
+        $o_perfvarsL[$i] = '&'.$1 if $o_perfvarsL[$i] =~ /^$o_rprefix(.*)$o_rsuffix$/;
+    }
+    if (defined($o_warn) || defined($o_crit) || defined($o_variables)) {
+	if (defined($o_variables)) {
+	  @o_varsL=split( /,/ , lc $o_variables );
+	  if (defined($o_warn)) {
+	     $o_warn.="~" if $o_warn =~ /,$/;
+	     @ar_warnLv=split( /,/ , lc $o_warn );
+	  }
+	  if (defined($o_crit)) {
+	     $o_crit.="~" if $o_crit =~ /,$/;
+    	     @ar_critLv=split( /,/ , lc $o_crit );
+	  }
+	}
+	else {
+	  print "Specifying warning and critical thresholds with -w and -c requires '-a' parameter with list of variables to be checked\n";
+	  print_usage();
+	  exit $ERRORS{"UNKNOWN"};
+	}
+    }
+    # this is a special loop to check stats-variables options such as "connected_clients=WARN,CRIT"
+    # which are specifies as long options
+    my $vname,$vname2;
+    foreach (keys(%KNOWN_STATUS_VARS)) {
+	$vname = $_;
+	$vname2=$o_rprefix.$vname.$o_rsuffix;
+	if (exists($KNOWN_STATUS_VARS{$vname}[2])) {
+	    if (exists($Options{$vname}) {
+		 verb("Option $vname found with spec parameter: ".$Options{$vname});
+		 thresholds_addvar($vname,parse_thresholds_optionsline($Options{$vname}));
+	    }
+	    if (exists($Options{$vname2}) {
+		 verb("Rate option $vname2 found with spec parameter: ".$Options{$vname2});
+		 thresholds_addvar('&'.$vname,parse_thresholds_optionsline($Options{$vname2}));
+	    }
+	}
+    }
+}
+
+# sets thresholds for given list of variables after options have been processed
+sub options_setthresholds {
+    if (scalar(@ar_warnLv)!=scalar(@o_varsL) || scalar(@ar_critLv)!=scalar(@o_varsL)) {
+	  printf "Number of specified warning levels (%d) and critical levels (%d) must be equal to the number of attributes specified at '-a' (%d). If you need to ignore some attribute do it as ',,'\n", scalar(@ar_warnLv), scalar(@ar_critLv), scalar(@o_varsL); 
+	  verb("Warning Levels: ".join(",",@ar_warnLv));
+	  verb("Critical Levels: ".join(",",@ar_critLv));
+	  print_usage();
+	  exit $ERRORS{"UNKNOWN"};
+    }
+    for (my $i=0; $i<scalar(@o_varsL); $i++) {
+	  $o_varsL[$i] = '&'.$1 if $o_varsL[$i] =~ /^$o_rprefix(.*)$o_rsuffix$/; # always lowercase here
+	  if ($o_varsL[$i] =~ /^&(.*)/) {
+		if (!defined($o_prevperf)) {
+			print "Calculating rate variable such as ".$o_varsL[$i]." requires previous performance data. Please add '-P \$SERVICEPERFDATA\$' to your nagios command line.\n";
+			print_usge();
+			exit $ERRORS{"UNKNOWN"};
+		}
+		if (defined($KNOWN_STATUS_VARS{$1}) && $KNOWN_STATUS_VARS{$1}[0] ne 'COUNTER') {
+                	print "$1 is not a COUNTER variable for which rate of change should be calculated\n";
+			print_usage();
+                	exit $ERRORS{"UNKNOWN"};
+		}
+	  }
+	  if (!exists($thresholds{$o_varsL[$i])) {
+	      my $warn = parse_threshold($ar_warnLv[$i]);
+	      my $crit = parse_threshold($ar_critLv[$i]);
+	      if (threshold_specok($warn,$crit)) {
+                 print "All numeric warning values must be less then critical (or greater then when '<' is used)\n";
+                 print "Note: to override this check prefix warning value with ^\n";
+                 print_usage();
+                 exit $ERRORS{"UNKNOWN"};
+	      }
+	      thresholds_addvar($o_varsL[$i], {'WARN'=>$warn,'CRIT'=>$crit} );
+	  }
+    }
+}
+
+# processes previous perf data if present
+sub options_processprevperf {
+    if (defined($o_prevperf)) {
+        if (defined($o_perf)) {
+                %prev_perf=process_perf($o_prevperf);
+                # put last time nagios was checked in timestamp array
+                if (defined($prev_perf{_ptime})) {
+                        # push @prev_time, $prev_perf{ptime};
+			$perfcheck_time=$prev_perf{_ptime};
+                }
+                elsif (defined($o_prevtime)) {
+                        # push @prev_time, $o_prevtime;
+                        # $prev_perf{ptime}=$o_prevtime;
+			$perfcheck_time=$o_prevtime;
+                }
+                else {
+                        # @prev_time=();
+			$perfcheck_time=undef;
+                }
+                # numeric sort for timestamp array (this is from lowest time to highiest, i.e. to latest)
+                # my %ptimes=();
+                # $ptimes{$_}=$_ foreach @prev_time;
+                # @prev_time = sort { $a <=> $b } keys(%ptimes);
+        }
+        else {
+                print "need -f option first \n"; print_usage(); exit $ERRORS{"UNKNOWN"};
+        }
+    }
+}
+
+# this is the main function called closer to end of the code that checks al checks all variables
+# (after we assigned values to them) against thresholds that had been processed before
+sub main_checkvars {
+    # We split into prefix/suffix again but without lowercasing $o_ratelabel first
+    ($o_rprefix,$o_rsuffix)=split(/,/,$o_ratelabel) if defined($o_ratelabel) && $o_ratelabel ne '';
+
+    my ($avar,$avar_out,$chk)=(undef,undef,undef);
+    # main loop to check for warning & critical thresholds
+    for (my $i=0;$i<scalar(@allVars);$i++) {
+	$avar=$allVars[$i];
+	$avar_out = $avar;
+	# this is for output of rate variables which name internally start with &
+	if ($avar =~ /^&(.*)/) {
+	    $avar_out = $o_rprefix.$1.$o_rsuffix;
+	}
+	if (defined($dataresults{$avar}[0])) {
+	    # main check
+	    if ($dataresults{$avar}[0]==0 && exists($thresholds{$avar}{'ZERO'}) {
+		$statuscode=$thresholds{$avar}{'ZERO'} if $statuscode ne 'CRITICAL' && $statuscode ne 'OK';
+		$statusinfo .= " $avar is zero" if $statuscode ne 'OK';
+	    }
+	    else {
+		if (exists($thresholds{$avar}{'CRIT'} && $chk = check_threshold($avar,lc $dataresults{$avar}[0], $thresholds{$avar}{'CRIT'})) {
+		    $dataresults{$avar}[1]++;
+		    $statuscode = "CRITICAL";
+		    $statusinfo .= $chk;
+		}
+		elsif (exists($tresholds{$avar}{'WARN'} && $chk = check_threshold($avar,lc $dataresults{$avar}[0], $thresholds{$avar}{'WARN'})) {
+		    $dataresults{$avar}[1]++;
+		    $statuscode="WARNING" if $statuscode eq "OK";
+		    $statusinfo .= $chk;
+		}
+	    }
+	    # if we did not output to status line yet, do so
+	    if ($dataresults{$avar}[1]==0) {
+		$dataresults{$avar}[1]++;
+		$statusdata .= ", " if $statusdata;
+		$statusdata .= $avar_out . " is " . $dataresults{$avar}[0];
+	    }
+	    # if we were asked to output performance, prepare it but do not output until later loop
+	    if (defined($o_perf) && $dataresults{$avar}[2]==0 && $dataresults{$avar}[3] eq '') {
+		$dataresults{$avar}[3]=$avar_out."=".$dataresults{$avar}[0];
+		if (defined($KNOWN_STATUS_VARS{$avar})) {
+		    $dataresults{$avar}[3] .= $KNOWN_STATUS_VARS{$avar}[1];
+		}
+		if (exists($thresholds{$avar}{'WARN'}[5]) || exists($thresholds{$avar}{'CRIT'}[5])) {
+		    $dataresults{$avar}[3] .= ';' if (exists($thresholds{$avar}{'WARN'}[5]) && $thresholds{$avar}{'WARN'}[5] ne '') ||
+					     (exists($thresholds{$avar}{'CRIT'}[5]) && $thresholds{$avar}{'CRIT'}[5] ne '');
+		    $dataresults{$avar}[3] .= $thresholds{$avar}{'WARN'}[5] if exists($thresholds{$avar}{'WARN'}[5]) && $thresholds{$avar}{'WARN'}[5] ne '';
+		    $dataresults{$avar}[3] .= ';'.$thresholds{$avar}{'CRIT'}[5] if exists($thresholds{$avar}{'CRIT'}[5]) && $thresholds{$avar}{'CRIT'}[5] ne '';
+		}
+	    }
+	}
+	else {
+	    if (exists($thresholds{$avar}{'ABSENT'})) {
+		$statuscode=$thresholds{$avar}{'ABSENT'} if $statuscode ne "CRITICAL";
+	    }
+	    else {
+		$statuscode="CRITICAL";
+	    }
+	    $statusinfo .= " $avar data is missing";
+	}
+    }
+}
+
+# adds performance variables data to performance data line
+sub main_perfvars {
+    my $avar;
+    for ($i=0;$i<scalar(@o_perfvarsL);$i++) {
+	$avar=$o_perfvarsL[$i];
+	if (defined($dataresults{$avar}[0]) && $dataresults{$avar}[2]==0 &&
+	    (!defined($KNOWN_STATUS_VARS{$avar}) || $KNOWN_STATUS_VARS{$avar}[0] =~ /$PERF_OK_STATUS_REGEX/ )) {
+		if (defined($dataresults{$avar}[3])) {
+		    $perfdata .= " " . $dataresults{$avar}[3];
+		}
+		else {
+		    $perfdata .= " " . $avar . "=" . $dataresults{$avar}[0];
+		    if (defined($KNOWN_STATUS_VARS{$avar})) {
+			$perfdata .= $KNOWN_STATUS_VARS{$avar}[1];
+		    }
+		}
+		$dataresults{$avar}[2]++;
+	}
+    }
+    if (defined($o_prevperf)) {
+	$perfdata .= " _ptime=".$timenow;
+    }
+    foreach $avar (keys %dataresults) {
+	if (defined($dataresults{$avar}[3]) && $dataresults{$avar}[2]==0) {
+	    $perfdata .= " " . $dataresults{$avar}[3];
+	    $dataresults{$avar}[2]++;
+	}
+    }
+}
+
+# Calculate rate variables
+sub calculate_ratevars {
+    my $avar;
+    my $timenow=time();
+    my $ptime=undef;
+    $ptime=$prev_perf{'_ptime'} if defined($prev_perf{'_ptime'});
+    if (defined($o_prevperf) && defined($o_perf)) {
+	for ($i=0;$i<scalar(@allVars);$i++) {
+	    if ($allVars[$i] =~ /^&(.*)/) {
+		$avar = $1;
+		if (defined($dataresults{$avar}) && $dataresults{$avar}[2]==0) {
+		    $dataresults{$avar}[3]= $avar."=".$dataresults{$avar}[0];
+		    if (defined($KNOWN_STATUS_VARS{$avar})) {
+                	$dataresults{$avar}[3].= $KNOWN_STATUS_VARS{$avar}[1];
+		    }
+		}
+		if (defined($prev_perf{$avar}) && defined($ptime)) {
+		    $dataresults{$allVars[$i]}=[0,0,0] if !defined($dataresults{$allVars[$i]});
+		    $dataresults{$allVars[$i]}[0]= sprintf("%.2f",
+		      ($dataresults{$avar}[0]-$prev_perf{$avar})/($timenow-$ptime));
+		    verb("Calculating Rate of Change for $avar : ".$allVars[$i]."=".$dataresults{$allVars[$i]}[0]);
+		}
+	    }
+	}
+    }
+}
+
+sub prepare_dataresults {
+    $dataresults{$_} = [undef, 0, 0] foreach(@allVars);
+    $dataresults{$_} = [undef, 0, 0] foreach(@o_perfvarsL);
+}
+
+############################## END OF THE LIBRARY FUNCTIONS ####################################
 
 # process --query options (which maybe repeated, that's why loop)
 sub option_query {
@@ -718,84 +1075,26 @@ sub option_query {
           my ($key_query,$key_name) = split(':', shift @ar);
 	  $key_name = $key_query if !defined($key_name) || ! $key_name;
 	  verb("- variable $key_name will receive data from $key_query");
-	  # thresholds and what to do if its not there
-	  my ($key_alert,$warn,$crit)=(undef,undef,undef);
-	  foreach (@ar) {
-		my $v = uc $_;
-		if ($v =~ /^ABSENT\:(.*)/) {
-	     		if ($1 eq 'WARNING' || $1 eq 'CRITICAL' || $1 eq 'NONE') {
-				$key_alert=$1;
-		 		verb("- alert $key_alert will be issued if key is not present");
-	    		}
-			else {
-				print "Invalid value $1 after ABSENT. Please specify it as either WARNING or CRITICAL\n";
-				print_usage();
-				exit $ERRORS{"UNKNOWN"};
-			}
-		}
-		elsif ($v =~ /^WARN\:(.*)/) {
-			$warn = $1;
-		}
-		elsif ($v =~/^CRIT:\:(.*)/) {
-			$crit = $1;
-		}
-		else {
-			print "Invalid value $v in query specification.\n";
-			print_usage();
-			exit $ERRORS{"UNKNOWN"};
-		}
-	  }
-	  $warn = "~" if !defined($warn) && defined($crit);
-	  $crit = "~" if !defined($crit) && defined($warn);
-	  # finish processing assigning results to global arrays
+	  # parse thresholds and finish processing assigning values to arrays
+	  my $th = parse_thresholds_optionsline(join(',',@ar));
 	  $query[$i] = { 'key_query' => $key_query, 'key_name' => $key_name, 'query_type' => $key_querytype[0] };
 	  $query[$i]{'query_subtype'} = $key_querytype[1] if defined($key_querytype[1]);
           $query[$i]{'query_range_start'} = $key_querytype[2] if defined($key_querytype[2]);
-	  $query[$i]{'query_range_end'} = $key_querytype[3] if defined($key_querytype[3]);	  
-	  $query[$i]{'alert'} = $key_alert if defined($key_alert);
-	  $query[$i]{'warn'} = $warn if defined($warn);
-	  $query[$i]{'crit'} = $crit if defined($crit);
-	  if (defined($warn) && defined($crit)) {
-		unshift(@o_varsL,$key_name);
-		unshift(@ar_warnLv,$warn);
-		unshift(@ar_critLv,$crit);
-                verb("- warning threshold $warn and critical threshold $crit set");
-	  }	  
-     }
-}
-
-# sets thresholds after options have been processed
-sub options_setthresholds {
-    if (scalar(@ar_warnLv)!=scalar(@o_varsL) || scalar(@ar_critLv)!=scalar(@o_varsL)) {
-	  printf "Number of specified warning levels (%d) and critical levels (%d) must be equal to the number of attributes specified at '-a' (%d). If you need to ignore some attribute do it as ',,'\n", scalar(@ar_warnLv), scalar(@ar_critLv), scalar(@o_varsL); 
-	  verb("Warning Levels: ".join(",",@ar_warnLv));
-	  verb("Critical Levels: ".join(",",@ar_critLv));
-	  print_usage();
-	  exit $ERRORS{"UNKNOWN"};
-    }
-    for (my $i=0; $i<scalar(@o_varsL); $i++) {
-	  $o_varsL[$i] = '&'.$1 if $o_varsL[$i] =~ /^$o_rprefix(.*)$o_rsuffix$/; # always lowercase here
-	  if ($o_varsL[$i] =~ /^&(.*)/) {
-		if (!defined($o_prevperf)) {
-			print "Calculating rate variable such as ".$o_varsL[$i]." requires previous performance data. Please add '-P \$SERVICEPERFDATA\$' to your nagios command line.\n";
-			print_usge();
-			exit $ERRORS{"UNKNOWN"};
-		}
-		if (defined($KNOWN_STATUS_VARS{$1}) && $KNOWN_STATUS_VARS{$1}[0] ne 'COUNTER') {
-                	print "$1 is not a COUNTER variable for which rate of changee should be calculated\n";
-			print_usage();
-                	exit $ERRORS{"UNKNOWN"};
-		}
+	  $query[$i]{'query_range_end'} = $key_querytype[3] if defined($key_querytype[3]);
+	  if (exists($th{'ABSENT'})) {
+	      verb("- ".$th{'ABSENT'}." alert will be issued if $key_query is not present";
+	      $query[$i]{'alert'} = $th{'ABSENT'};
 	  }
-          $o_warnL[$i] = parse_threshold($ar_warnLv[$i]);
-          $o_critL[$i] = parse_threshold($ar_critLv[$i]);
-	  if (threshold_specok($o_warnL[$i],$o_critL[$i])) {
-                 print "All numeric warning values must be less then critical (or greater then when '<' is used)\n";
-                 print "Note: to override this check prefix warning value with ^\n";
-                 print_usage();
-                 exit $ERRORS{"UNKNOWN"};
-           }
-    }
+	  if (exists($th{'WARN'})) {
+	      verb("- warning threshold ".$th{'WARN'}." set");
+	      $query[$i]{'warn'} = $th{'WARN'};
+	  }
+	  if (exists($th{'CRIT'})) {
+	      verb("- critical threshold ".$th{'CRIT'}." set");
+	      $query[$i]{'crit'} = $th{'CRIT'};
+	  }
+	  thresholds_addvar($key_name,$th);
+     }
 }
 
 # sets password, host, port and other data based on options entered
@@ -822,36 +1121,6 @@ sub options_setaccess {
     $HOSTNAME = $o_host if defined($o_host);
     $PORT     = $o_port if defined($o_port);
     $TIMEOUT  = $o_timeout if defined($o_timeout);
-}
-
-# processes previous perf data if present
-sub options_processprevperf {
-    if (defined($o_prevperf)) {
-        if (defined($o_perf)) {
-                %prev_perf=process_perf($o_prevperf);
-                # put last time nagios was checked in timestamp array
-                if (defined($prev_perf{_ptime})) {
-                        # push @prev_time, $prev_perf{ptime};
-			$perfcheck_time=$prev_perf{_ptime};
-                }
-                elsif (defined($o_prevtime)) {
-                        # push @prev_time, $o_prevtime;
-                        # $prev_perf{ptime}=$o_prevtime;
-			$perfcheck_time=$o_prevtime;
-                }
-                else {
-                        # @prev_time=();
-			$perfcheck_time=undef;
-                }
-                # numeric sort for timestamp array (this is from lowest time to highiest, i.e. to latest)
-                # my %ptimes=();
-                # $ptimes{$_}=$_ foreach @prev_time;
-                # @prev_time = sort { $a <=> $b } keys(%ptimes);
-        }
-        else {
-                print "need -f option first \n"; print_usage(); exit $ERRORS{"UNKNOWN"};
-        }
-    }
 }
 
 # parse command line options
@@ -887,90 +1156,30 @@ sub check_options {
     # it is mostly compliant with nagios threshold specification (except use of '~')
     # and adds number of additional format options using '>','<','!','=' prefixes
 
+    # This gets list of variables into $o_varsL and $o_perfvarsL
+    options_startprocessing();
+
     # Standard nagios plugin required options
     if (defined($o_help)) { help(); exit $ERRORS{"UNKNOWN"} };
     if (defined($o_version)) { p_version(); exit $ERRORS{"UNKNOWN"} };
 
-    # Processing of variables-list -a, -A and thresholds -w, -c options
-    @o_perfvarsL=split( /,/ , lc $o_perfvars ) if defined($o_perfvars) && $o_perfvars ne '*';
-    $o_perfvars='*' if defined($o_perfvars) && scalar(@o_perfvarsL)==0;
-    for (my $i=0; $i<scalar(@o_perfvarsL); $i++) {
-        $o_perfvarsL[$i] = '&'.$1 if $o_perfvarsL[$i] =~ /^$o_rprefix(.*)$o_rsuffix$/;
-    }
-    if (defined($o_warn) || defined($o_crit) || defined($o_variables)) {
-	if (defined($o_variables)) {
-	  @o_varsL=split( /,/ , lc $o_variables );
-	  if (defined($o_warn)) {
-	     $o_warn.="~" if $o_warn =~ /,$/;
-	     @ar_warnLv=split( /,/ , lc $o_warn );
-	  }
-	  if (defined($o_crit)) {
-	     $o_crit.="~" if $o_crit =~ /,$/;
-    	     @ar_critLv=split( /,/ , lc $o_crit );
-	  }
-	}
-	else {
-	  print "Specifying warning and critical levels requires '-a' parameter with list of variables\n";
-	  print_usage();
-	  exit $ERRORS{"UNKNOWN"};
-	}
-    }
-
-    # this is a special loop to check stats-variables options such as "connected_clients=WARN,CRIT"
-    # which are specifies as long options
-    foreach(keys(%KNOWN_STATUS_VARS)) {
-
-
-    }
-
     # additional variables/options calculated and added by this plugin
     if (defined($o_timecheck) && $o_timecheck ne '') {
-          my @o_timeth=split(/,/, lc $o_timecheck);
           verb("Processing timecheck thresholds: $o_timecheck");
-          if (scalar(@o_timeth)!=2) {
-              printf "Incorrect value '%s' for Connection Time Thresholds. Connection time threshold must include both warning and critical thresholds separated by ','\n", $o_timecheck;
-              print_usage();
-              exit $ERRORS{"UNKNOWN"};
-          }
-          unshift(@o_varsL,"response_time");
-          unshift(@ar_warnLv,$o_timeth[0]);
-          unshift(@ar_critLv,$o_timeth[1]);
+	  thresholds_addvar('response_time',parse_thresholds_optionsline($o_timecheck));
     }
     if (defined($o_hitrate) && $o_hitrate ne '') {
-          my @o_hrate=split(/,/, lc $o_hitrate);
           verb("Processing hitrate thresholds: $o_hitrate");
-          if (scalar(@o_hrate)!=2) {
-              printf "Incorrect value '%s' for Hitrate Threshold. You must include both warning and critical thresholds separated by ','\n", $o_hitrate;
-              print_usage();
-              exit $ERRORS{"UNKNOWN"};
-          }
-          unshift(@o_varsL,"hitrate");
-          unshift(@ar_warnLv,$o_hrate[0]);
-          unshift(@ar_critLv,$o_hrate[1]);
+	  thresholds_addvar('hitrate',parse_thresholds_optionsline($o_hitrate));
+	  $thresholds{'hitrate'}{'ZERO'}="OK" if !exists($thresholds{'hitrate'}{'ZERO'}); # except case of hitrate=0, don't remember why I added it
     }
     if (defined($o_repdelay) && $o_repdelay ne '') {
-          my @o_rdelay=split(/,/, lc $o_repdelay);
           verb("Processing replication delay thresholds: $o_repdelay");
-          if (scalar(@o_rdelay)!=2) {
-              printf "Incorrect value '%s' for Replication Delay Threshold. You must include both warning and critical thresholds separated by ','\n", $o_repdelay;
-              print_usage();
-              exit $ERRORS{"UNKNOWN"};
-          }
-          unshift(@o_varsL,"replication_delay");
-          unshift(@ar_warnLv,$o_rdelay[0]);
-          unshift(@ar_critLv,$o_rdelay[1]);
+	  thresholds_addvar('replication_delay',parse_thresholds_optionsline($o_repdelay));
     }
     if (defined($o_memutilization) && $o_memutilization ne '') {
-          my @o_usize=split(/,/, lc $o_memutilization);
           verb("Processing memory utilization thresholds: $o_memutilization");
-          if (scalar(@o_usize)!=2) {
-              printf "Incorrect value '%s' for Utilization Threshold. You must include both warning and critical thresholds separated by ','\n", $o_memutilization;
-              print_usage();
-              exit $ERRORS{"UNKNOWN"};
-          }
-          unshift(@o_varsL,"memory_utilization");
-          unshift(@ar_warnLv,$o_usize[0]);
-          unshift(@ar_critLv,$o_usize[1]);
+	  thresholds_addvar('memory_utilization',parse_thresholds_optionsline($o_memutilization));
     }
     if (defined($o_totalmemory)) {
 	if ($o_totalmemory =~ /^(\d+)B/) {
@@ -1028,6 +1237,15 @@ else {
   alarm ($o_timeout+10);
 }
 
+# some more variables for processing of the results
+my $dbversion = "";
+my $vnam;
+my $vval;
+my %dbs=();	# database-specific info, this is almost unused right now
+my %slaves=();
+
+prepare_dataresults();
+
 # connect using tcp and verify the port is working
 my $sock = new IO::Socket::INET(
   PeerAddr => $HOSTNAME,
@@ -1061,22 +1279,6 @@ if (!$redis->ping) {
   print "CRITICAL ERROR - Redis Library - can not ping '$HOSTNAME' on port $PORT\n";
   exit $ERRORS{'CRITICAL'};
 }
-
-# define variables for processing of the results
-my $dbversion = "";
-my $statuscode = "OK";
-my $statusinfo = "";
-my $statusdata = "";
-my $perfdata = "";
-my $vnam;
-my $dnam;
-my $vval;
-my %dbs=();	# database-specific info, this is almost unused right now
-my %slaves=();
-my $chk = "";
-my $i;
-$dataresults{$_} = [undef, 0, 0] foreach(@o_varsL);
-$dataresults{$_} = [undef, 0, 0] foreach(@o_perfvarsL);
 
 # This returns hashref of various statistics/info data
 my $stats = $redis->info();
@@ -1119,7 +1321,7 @@ for (my $i=0; $i<scalar(@query);$i++) {
       verb("Result of querying ".$query[$i]{'key_query'}." is: $result");
   }
   else {
-      if (defined($query[$i]{'alert'} && $query[$i]{'alert'} ne 'NONE') {
+      if (defined($query[$i]{'alert'} && $query[$i]{'alert'} ne 'OK') {
 	$statuscode=$query[$i]{'alert'} if $statuscode ne 'CRITICAL';
 	$statusinfo.=", " if $statusinfo;
 	$statusinfo.= "Query on ".$query[$i]{'key_query'}." did not succeed";
@@ -1178,30 +1380,8 @@ if (defined($o_timecheck)) {
     }
 }
 
-# Calculate rate variables
-my $timenow=time();
-my $ptime=undef;
-my $avar;
-$ptime=$prev_perf{'_ptime'} if defined($prev_perf{'_ptime'});
-if (defined($o_prevperf) && defined($o_perf)) {
-   for ($i=0;$i<scalar(@o_varsL);$i++) {
-	if ($o_varsL[$i] =~ /^&(.*)/) {
-	    $avar = $1;
-	    if (defined($dataresults{$avar}) && $dataresults{$avar}[2]==0) {
-		$dataresults{$avar}[3]= $avar."=".$dataresults{$avar}[0];
-		if (defined($KNOWN_STATUS_VARS{$avar})) {
-                	$dataresults{$avar}[3].= $KNOWN_STATUS_VARS{$avar}[1];
-          	}
-	    }
-	    if (defined($prev_perf{$avar}) && defined($ptime)) {
-		$dataresults{$o_varsL[$i]}=[0,0,0] if !defined($dataresults{$o_varsL[$i]});
-		$dataresults{$o_varsL[$i]}[0]= sprintf("%.2f",
-		   ($dataresults{$avar}[0]-$prev_perf{$avar})/($timenow-$ptime));
-		verb("Calculating Rate of Change for $avar : ".$o_varsL[$i]."=".$dataresults{$o_varsL[$i]}[0]);
-	    }
-	}
-   }
-}
+# calculate rate variables
+calculate_ratevars();
 
 # Hitrate
 my $hits_total=0;
@@ -1290,83 +1470,9 @@ if (defined($o_memutilization) && defined($dataresults{'used_memory_rss'})) {
     }
 }
 
-# We split into prefix/suffix again but without lowercasing $o_ratelabel first
-($o_rprefix,$o_rsuffix)=split(/,/,$o_ratelabel) if defined($o_ratelabel) && $o_ratelabel ne '';
-
-# main loop to check for warning & critical thresholds
-for ($i=0;$i<scalar(@o_varsL);$i++) {
-  $avar=$o_varsL[$i];
-  my $avar_out = $avar;
-  # this is for output of rate variables which name internally start with &
-  if ($avar =~ /^&(.*)/) {
-	$avar_out = $o_rprefix.$1.$o_rsuffix;
-  }
-  if (defined($dataresults{$avar}[0])) {
-    # main check, The below appears to except case of hitrate=0, don't remember why I added it
-    if ($avar ne 'hitrate' || $dataresults{$avar}[0]>0) {
-        if ($chk = check_threshold($avar,lc $dataresults{$avar}[0],$o_critL[$i])) {
-	    $dataresults{$avar}[1]++;
-	    $statuscode = "CRITICAL";
-            $statusinfo .= $chk;
-        }
-        elsif ($chk = check_threshold($avar,lc $dataresults{$avar}[0],$o_warnL[$i])) {
-	    $dataresults{$avar}[1]++;
-	    $statuscode="WARNING" if $statuscode eq "OK";
-	    $statusinfo .= $chk;
-	}
-    }
-    # if we did not output to status line yet, do so
-    if ($dataresults{$avar}[1]==0) {
-	  $dataresults{$avar}[1]++;
-	  $statusdata .= ", " if $statusdata;
-	  $statusdata .= $avar_out . " is " . $dataresults{$avar}[0];
-    }
-    # if we were asked to output performance, prepare it but do not output until later loop
-    if (defined($o_perf) && $dataresults{$avar}[2]==0 && $dataresults{$avar}[3] eq '') {
-	  $dataresults{$avar}[3]=$avar_out."=".$dataresults{$avar}[0];
-	  if (defined($KNOWN_STATUS_VARS{$avar})) {
-		$dataresults{$avar}[3] .= $KNOWN_STATUS_VARS{$avar}[1];
-	  }
-	  if (defined($o_warnL[$i][5]) && defined($o_critL[$i][5])) {
-	    $dataresults{$avar}[3] .= ';' if $o_warnL[$i][5] ne '' || $o_critL[$i][5] ne '';
-	    $dataresults{$avar}[3] .= $o_warnL[$i][5] if $o_warnL[$i][5] ne '';
-	    $dataresults{$avar}[3] .= ';'.$o_critL[$i][5] if $o_critL[$i][5] ne '';
-	  }
-    }
-  }
-  else {
-	$statuscode="CRITICAL";
-	$statusinfo .= " $o_varsL[$i] data is missing";
-  }
-}
-
-# add performance data variables
-for ($i=0;$i<scalar(@o_perfvarsL);$i++) {
-  $avar=$o_perfvarsL[$i];
-  if (defined($dataresults{$avar}[0]) && $dataresults{$avar}[2]==0 && 
-	(!defined($KNOWN_STATUS_VARS{$avar}) || 
-         $KNOWN_STATUS_VARS{$avar}[0] =~ /$PERF_OK_STATUS_REGEX/ )) {
-    if (defined($dataresults{$avar}[3])) {
-	$perfdata .= " " . $dataresults{$avar}[3];
-    }
-    else {
-        $perfdata .= " " . $avar . "=" . $dataresults{$avar}[0];
-        if (defined($KNOWN_STATUS_VARS{$avar})) {
-            $perfdata .= $KNOWN_STATUS_VARS{$avar}[1];
-        }
-    }
-    $dataresults{$avar}[2]++;
-  }
-}
-if (defined($o_prevperf)) {
-  $perfdata .= " _ptime=".$timenow;
-}
-foreach $avar (keys %dataresults) {
-  if (defined($dataresults{$avar}[3]) && $dataresults{$avar}[2]==0) {
-    $perfdata .= " " . $dataresults{$avar}[3];
-    $dataresults{$avar}[2]++;
-  }
-}
+# Check thresholds in all variables and prepare status and performance data for output
+main_checkvars();
+main_perfvars();
 
 # now output the results
 print $statuscode . ': '.$statusinfo." ";
@@ -1379,5 +1485,5 @@ print " -" . $statusdata if $statusdata;
 print " |" . $perfdata if $perfdata;
 print "\n";
 
-# end exit
+# exit
 exit $ERRORS{$statuscode};

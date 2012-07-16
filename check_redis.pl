@@ -281,6 +281,7 @@ use Redis;
 my $HOSTNAME= 'localhost';
 my $PORT=     6379;
 my $PASSWORD= undef;
+my $DATABASE= undef;
 
 # Add path to additional libraries if necessary
 use lib '/usr/lib/nagios/plugins';
@@ -365,6 +366,7 @@ my $o_host=     undef;		# hostname
 my $o_port=     undef;		# port
 my $o_pwfile=   undef;          # password file
 my $o_password= undef;		# password as parameter
+my $o_database= undef;		# database name (usually a number)
 my $o_help=     undef;          # help option
 my $o_verb=     undef;          # verbose mode
 my $o_version=  undef;          # version info option
@@ -409,7 +411,7 @@ my $perfdata = "";		# this variable collects performance data line
 sub p_version { print "check_redis.pl version : $Version\n"; }
 
 sub print_usage_line {
-   print "Usage: $0 [-v [debugfilename]] -H <host> [-p <port>] [-x password | -C credentials_file] [-a <statistics variables> -w <variables warning thresholds> -c <variables critical thresholds>] [-A <performance output variables>] [-T [conntime_warn,conntime_crit]] [-R [hitrate_warn,hitrate_crit]] [-m [mem_utilization_warn,mem_utilization_crit] [-M <maxmemory>[B|K|M|G]]] [-r replication_delay_time_warn,replication_delay_time_crit]  [-f] [-T <timeout>] [-V] [-P <previous performance data in quoted string>] [-q (GET|LRANGE:(AVG|SUM|MIN|MAX):start:end),query_type,query_key_name[:data_name][,ABSENT:WARNING|CRITICAL][,WARN:threshold,CRIT:threshold]] \n";
+   print "Usage: $0 [-v [debugfilename]] -H <host> [-p <port>] [-x password | -C credentials_file] [-D <database>] [-a <statistics variables> -w <variables warning thresholds> -c <variables critical thresholds>] [-A <performance output variables>] [-T [conntime_warn,conntime_crit]] [-R [hitrate_warn,hitrate_crit]] [-m [mem_utilization_warn,mem_utilization_crit] [-M <maxmemory>[B|K|M|G]]] [-r replication_delay_time_warn,replication_delay_time_crit]  [-f] [-T <timeout>] [-V] [-P <previous performance data in quoted string>] [-q (GET|LRANGE:(AVG|SUM|MIN|MAX):start:end),query_type,query_key_name[:data_name][,ABSENT:WARNING|CRITICAL][,WARN:threshold,CRIT:threshold]] \n";
 }
 
 sub print_usage {
@@ -436,6 +438,8 @@ General and Server Connection Options:
    Hostname or IP Address to check
  -p, --port=INTEGER
    port number (default: 3306)
+ -D, --database=NAME
+   optional database name (usually a number), needed for --query but otherwise not needed
  -x, --password=STRING
     Password for Redis authentication. Safer alternative is to put them in a file and use -C
  -C, --credentials=FILENAME
@@ -1185,6 +1189,7 @@ sub options_setaccess {
     $HOSTNAME = $o_host if defined($o_host);
     $PORT     = $o_port if defined($o_port);
     $TIMEOUT  = $o_timeout if defined($o_timeout);
+    $DATABASE = $o_database if defined($o_database);
 }
 
 # parse command line options
@@ -1198,6 +1203,7 @@ sub check_options {
         'p:i'   => \$o_port,            'port:i'        => \$o_port,
         'C:s'   => \$o_pwfile,          'credentials:s' => \$o_pwfile,
         'x:s'   => \$o_password,	'password:s'	=> \$o_password,
+	'D:s'	=> \$o_database,	'database:s'	=> \$o_database,
         't:i'   => \$o_timeout,         'timeout:i'     => \$o_timeout,
         'V'     => \$o_version,         'version'       => \$o_version,
 	'a:s'   => \$o_variables,       'variables:s'   => \$o_variables,
@@ -1335,6 +1341,9 @@ $redis = Redis-> new ( server => $dsn );
 if ($PASSWORD) {
     $redis->auth($PASSWORD);
 }
+if ($DATABASE) {
+    $redis->select($DATABASE);
+}
 
 if (!$redis) {
   print "CRITICAL ERROR - Redis Library - can not connect to '$HOSTNAME' on port $PORT\n"; 
@@ -1353,6 +1362,7 @@ my $stats = $redis->info();
 for (my $i=0; $i<scalar(@query);$i++) {
   my $result=undef;
   if ($query[$i]{'query_type'} eq 'GET') {
+	verb("Getting redis key: ".$query[$i]{'key_query'});
   	$result  = $redis->get($query[$i]{'key_query'});
   }
   elsif ($query[$i]{'query_type'} eq 'LRANGE') {
@@ -1368,6 +1378,7 @@ for (my $i=0; $i<scalar(@query);$i++) {
 	    $range_end= $query[$i]{'query_range_end'} if defined
 	}
 	else {
+	    verb("Getting (lrange) redis key: ".$query[$i]{'key_query'});
 	    $range_end = $redis->llen($query[$i]{'key_query'})-1;
 	}
 	my @list = $redis->lrange($query[$i]{'key_query'}, $range_start, $range_end);
@@ -1541,13 +1552,13 @@ main_checkvars();
 main_perfvars();
 
 # now output the results
-print $statuscode . ': '.$statusinfo." ";
-print "- " if $statusinfo;
+print $statuscode . ': '.$statusinfo;
+print " - " if $statusinfo;
 print "REDIS " . $dbversion . ' on ' . $HOSTNAME. ':'. $PORT;
 print ' has '.scalar(keys %dbs).' databases ('.join(',',keys(%dbs)).')';
 print " with ".$dataresults{'total_keys'}[0]." keys" if $dataresults{'total_keys'}[0] > 0;
 print ', up '.uptime_info($dataresults{'uptime_in_seconds'}[0]) if defined($dataresults{'uptime_in_seconds'}); 
-print " -" . $statusdata if $statusdata;
+print "- " . $statusdata if $statusdata;
 print " |" . $perfdata if $perfdata;
 print "\n";
 

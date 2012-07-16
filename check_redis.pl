@@ -757,7 +757,7 @@ sub parse_thresholds_optionsline {
    my $thres = {};
    my @tin = split (',', uc $in);
    # old format with =warn,crit thresolds without specifying which one
-   if (exists($tin[0]) && $tin[0] != /^WARN/ && $tin[0] != /^CRIT/ && $tin[0] != /^ABSENT/ && $tin[0] != /^ZERO/ && $tin[0] != /^DISPLAY/ && $tin[0] != /^PERF/) {
+   if (exists($tin[0]) && $tin[0] !~ /^WARN/ && $tin[0] !~ /^CRIT/ && $tin[0] !~ /^ABSENT/ && $tin[0] !~ /^ZERO/ && $tin[0] !~ /^DISPLAY/ && $tin[0] !~ /^PERF/) {
 	if (scalar(@tin)==2) {
 	     $thres->{'WARN'} = parse_threshold($tin[0]); 
 	     $thres->{'CRIT'} = parse_threshold($tin[1]);
@@ -1020,12 +1020,13 @@ sub main_checkvars {
 	}
 	else {
 	    if (exists($thresholds{$avar}{'ABSENT'})) {
-		$statuscode=$thresholds{$avar}{'ABSENT'} if $statuscode ne "CRITICAL";
+		$statuscode=$thresholds{$avar}{'ABSENT'} if $statuscode ne "CRITICAL" && $thresholds{$avar}{'ABSENT'} ne "OK";
 	    }
 	    else {
 		$statuscode="CRITICAL";
 	    }
-	    $statusinfo .= " $avar data is missing";
+	    $statusinfo .= ", " if $statusinfo;
+	    $statusinfo .= "$avar data is missing";
 	}
     }
 }
@@ -1383,13 +1384,13 @@ for (my $i=0; $i<scalar(@query);$i++) {
       dataresults_addvar($query[$i]{'key_name'}, $result);
       verb("Result of querying ".$query[$i]{'key_query'}." is: $result");
   }
-  else {
-      if (exists($query[$i]{'alert'}) && $query[$i]{'alert'} ne 'OK') {
-	$statuscode=$query[$i]{'alert'} if $statuscode ne 'CRITICAL';
-	$statusinfo.=", " if $statusinfo;
-	$statusinfo.= "Query on ".$query[$i]{'key_query'}." did not succeed";
-      }
-  }
+  # else {
+  #    if (exists($query[$i]{'alert'}) && $query[$i]{'alert'} ne 'OK') {
+  #	$statuscode=$query[$i]{'alert'} if $statuscode ne 'CRITICAL';
+  #	$statusinfo.=", " if $statusinfo;
+  #	$statusinfo.= "Query on ".$query[$i]{'key_query'}." did not succeed";
+  #    }
+  # }
 }
 
 # end redis session

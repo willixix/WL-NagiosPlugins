@@ -292,7 +292,7 @@ if ($@) {
  %ERRORS = ('OK'=>0,'WARNING'=>1,'CRITICAL'=>2,'UNKNOWN'=>3,'DEPENDENT'=>4);
 }
 
-my $Version='0.53';
+my $Version='0.6';
 
 # This is a list of known stat and info variables including variables added by plugin,
 # used in order to designate COUNTER variables with 'c' in perfout for graphing programs
@@ -757,7 +757,7 @@ sub parse_thresholds_optionsline {
    my $thres = {};
    my @tin = split (',', uc $in);
    # old format with =warn,crit thresolds without specifying which one
-   if ($tin[0] != /^WARN/ && $tin[0] != /^CRIT/ && $tin[0] != /^ABSENT/ && $tin[0] != /^ZERO/ && $tin[0] != /^DISPLAY/ && $tin[0] != /^PERF/) {
+   if (exists($tin[0]) && $tin[0] != /^WARN/ && $tin[0] != /^CRIT/ && $tin[0] != /^ABSENT/ && $tin[0] != /^ZERO/ && $tin[0] != /^DISPLAY/ && $tin[0] != /^PERF/) {
 	if (scalar(@tin)==2) {
 	     $thres->{'WARN'} = parse_threshold($tin[0]); 
 	     $thres->{'CRIT'} = parse_threshold($tin[1]);
@@ -1177,6 +1177,17 @@ sub options_setaccess {
 sub check_options {
     Getopt::Long::Configure("bundling");
     my %Options = ();
+    my @VarOptions = ();
+    foreach(keys %KNOWN_STATUS_VARS) {
+        my $v = $_;
+        my $v2 = $o_rprefix.$v.$o_rsuffix;
+        if (exists($KNOWN_STATUS_VARS{$v}[2]) && $KNOWN_STATUS_VARS{$v}[2] ne '') {
+              push @VarOptions,$v;
+              if ($KNOWN_STATUS_VARS{$v}[0] eq 'COUNTER') {
+              	push @VarOptions, $v2;
+	      }
+        }
+    }
     GetOptions(\%Options, 
    	'v:s'	=> \$o_verb,		'verbose:s' => \$o_verb, "debug:s" => \$o_verb,
         'h'     => \$o_help,            'help'          => \$o_help,
@@ -1200,6 +1211,7 @@ sub check_options {
 	'M:s'	=> \$o_totalmemory,	'total_memory:s' => \$o_totalmemory,
 	'q=s'	=> \@o_querykey,	'query=s'	 => \@o_querykey,
 	'rate_label:s'	=> \$o_ratelabel,
+	map { ("$_:s") } @VarOptions
     );
 
     # below code is common for number of my plugins, including check_snmp_?, netstat, etc

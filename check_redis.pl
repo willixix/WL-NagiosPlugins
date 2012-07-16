@@ -28,10 +28,10 @@
 #
 # This is Redis Server Check plugin. It gets stats variables and allows to set
 # thresholds on their value or their rate of change. It can measure response time,
-# hitrate, memory utilization, check replication sync and more. The plugin is based
-# on and shares common code with check_mysqld.pl and check_memcached.pl
+# hitrate, memory utilization, check replication sync and more. It can also test
+# data in a specified key (if necessary doing average or sum on range).
 #
-# Plugin returns status variables as perfomance data for further nagios 2.0
+# Plugin returns stats variables as perfomance data for further nagios 2.0
 # post-processing, you can find graph templates for PNP4Nagios at:
 #   http://william.leibzon.org/nagios/
 #
@@ -40,24 +40,31 @@
 #
 # ============================= SETUP NOTES ====================================
 #
-# Make sure to install Redis perl  library from CPAN first.
+# Make sure to install Redis perl library from CPAN first.
 #
-# This plugin checks Redis NoSQL database and measures response which can be used
-# for threshold checks. It also retrieves various status data variables and
-# allows to set thresholds either on their direct values or on rate of change
-# of those variables. Plugin also calculates statistics such as Hitrate (calculated
-# as rate of change of hits/misses) and memory use and can check replication delay.
-# All variables can be returned as performance data for graphing and pnp4nagios
-# template should be available with this plugin on the site you downloaded it from.
-#
-# For help on what parameters this plugin accepts you can just do
+# Next for help and to see what parameters this plugin accepts do:
 #  ./check_redis.pl --help
 #
+# This plugin checks Redis NoSQL database status varialbes, measures its response
+# time and if specified allows to set thresholds on one or more key data. You can
+# set thresholds for data in stats varialbles and some of them are also conviently
+# available as long options with special threshold syntax. Plugin also calculates
+# statistics such as Hitrate (calculated as rate of change of hits/misses) and
+# memory use and can check replication delay.
+#
+# All variables can be returned as performance data for graphing and pnp4nagios
+# template should be available with this plugin on the site you downloaded it from.
+
 # 1. Connection Parameters
 #
-#   The only connection parameters are "-H hostname" and "-p port". The default port
-#   is 6379 and you must specify hostname (if localhost specify it as -H 127.0.0.1)
-# 
+#   The connection parameters are "-H hostname", "-p port", "-D database" and
+#   "-C password_file" or "-x password". Specifying hostname is required, if you
+#   run locally specify it as -H 127.0.0.1. Everything else is optional and rarely
+#   needed. Default port is 6337. Database name (usually a numeric id) is probably
+#   only needed if you use --query option. Password can be passed on a command
+#   line with -x but its safer to read read it from a file or change in the code
+#   itself if you do use authentication.
+#
 # 2. Response Time, HitRate, Memory Utilization, Replication Delay
 #
 #   To get response time you use "-T" or "--response_time=" option. By itself
@@ -66,11 +73,11 @@
 #
 #   To get hitrate the option is "-R" or "--hitrate=". If previous performance
 #   data is not feed to plugin (-P option, see below) the plugin calculates
-#   it as total hitrate over life of redis process. If -P is specified
-#   and previous performance data is feed back, the data is based on real
-#   hitrate with lifelong info also given in paramphesis. The data is based
-#   on keyspace_hits and keyspace_misses stats variables. As with -T you
-#   can specify -R by itself or with thresholds as -R warn,crit
+#   it as total hitrate over life of redis process. If -P is specified and
+#   previous performance data is feed back, the data is based on real hitrate
+#   (which can show spikes and downs) with lifelong info also given in paramphesis
+#   The data is based on keyspace_hits and keyspace_misses stats variables.
+#   As with -T you can specify -R by itself or with thresholds as -R warn,crit
 # 
 #   Memory utilization is percent of real memory used by Redis out of total
 #   memory on the system. To be able to calculate it plugin needs to known
@@ -84,31 +91,53 @@
 #   with more complex funcationality, so it was chosen to do this as separate
 #   option rather than drecting people to check that variable.
 #
-# 3. Redis Status Variables and calculating their Rate of Change
+# 3. Checks on Redis Status Variables
 #
-#   All status variables from redis can be checked with the plugin. To see data
-#   from variables in plugin status output line and or specify thresholds
-#   based on their values you use -a or --variables argument. For example:
+#   All status variables from redis can be checked with the plugin. For some
+#   status variables separate long option is provided to specify threshold.
+#       i.e. --connected_clients=<thresholds>
+#
+#   This is a new alternative to specifying all variables together with -a
+#   (--variables) option. For example:
 #       -a connected_clients,blocked_clients
-#   You must specify same number of warning and critical thresholds with 
-#   -w or --warn and -c or --crit argument as a number of variables specified
+#   When you do above results are included in status output line and you
+#   are required to specify thresholds with -w or --warn and -c or --crit
+#   with exactly number of thresholds as a number of variables specified
 #   in -a. If you simply want variable values on status line without specifying
 #   any threshold, use ~ in place of threshold value or skip value but specify
 #   all apropriate commas. For example:
 #           -a connected_clients,blocked_clients -w ~,~ -c ~,~
 #      OR   -a connected_clients,blocked_clients -w , -c ,
 #
+#   If you use new syntax with a long option for specific stats variables, you
+#   can specify list of one or more trhreshold specifiers which can be any of:
+#      WARN:threshold
+#      CRIT:threshold
+#      ABSENT:OK|WARNING|CRITICAL|UNKNOWN  - what to do if data is not available
+#      ZERO:OK|WARNING|CRIICAL|UNKNOWN	   - what do do if data is 0 (rarely needed)
+#      DISPLAY:YES|NO			   - display on status line or not (default YES)
+#      PERF:YES|NO	 		   - output in perf data or not
+#					     (default YES if -f option is used, otherwise NO)
+#   These can be specified in any order separated by ",". For example:
+#      --connected_clients=CRIT:>100,WARN:>50,ABSENT:CRITICAL,ZERO:OK,DISPLAY:YES,PERF:YES
+#
+# 4. Calculating and using Rate of Change for Variables
+#
 #   If you want to check rate of change rather than actual value you can do this
 #   by specifying it as '&variable' such as "&total_connections_received" or
 #   as "variable_rate" which is "total_connections_received_rate" and is similar
 #   to 'connected_clients' variable. By default it would be reported in the output
 #   as 'variable_rate' though '&variable' is a format used internally by plugin.
+#
 #   As an alternative you can specify how to label these with --rate_label
 #   option where you can specify prefix and/or suffix. For example '--rate_label=dt_'
 #   would have the output being "dt_total_connections_received' where as
 #   '--rate_label=,_rate' is plugin default giving 'total_connections_received_rate'. 
 #   You can use these names with -a and -A such as:
 #       --rate_label=,_rate -a total_connections_received_rate -w 1000 -c ~
+#   Note that --rate_label will not work with new variable-named options, the
+#   only way to change default if you use that is to modify code and change
+#   $o_rprefix and $o_rsuffix variables default values.
 #
 #   Now in order to be able to calculate rate of change, the plugin needs to
 #   know values of the variables from when it was run the last time. This
@@ -117,7 +146,7 @@
 #     -P "$SERVICEPERFDATA$"
 #   And don't forget the quotes, in this case they are not just for documentation.
 # 
-# 4. Threshold Specification
+# 5. Threshold Specification
 #
 #   The plugin fully supports Nagios plug-in specification for specifying thresholds:
 #     http://nagiosplug.sourceforge.net/developer-guidelines.html#THRESHOLDFORMAT
@@ -127,28 +156,28 @@
 #     <value : issue alert if data is below this value (must be followed by number)
 #     =value : issue alert if data is equal to this value (default for non-numeric)
 #     !value : issue alert if data is NOT equal to this value
-#
-#   There are two two specifications of range formats as with other nagios plugins:
+#   (because > and < are interpreted by shell you may need to specify this in quotes)
+#   There are also two specifications of range formats as with other nagios plugins:
 #     number1:number2   issue alert if data is OUTSIDE of range [number1..number2]
 #	                i.e. alert if data<$number1 or data>$number2
 #     @number1:number2  issue alert if data is WITHIN range [number1..number2] 
 #		        i.e. alert if data>=$number and $data<=$number2
 #
-#   The plugin will attempt to check that WARNING values is less than CRITICAL
+#   The plugin will attempt to check that WARNING value is less than CRITICAL
 #   (or greater for <). A special prefix modifier '^' can be used to disable these
 #   checks. A quick example of such special use is '--warn=^<100 --crit=>200' which
 #   means warning alert if value is < 100 and critical alert if its greater than 200.
 #
-# 5. Performance Data
+# 6. Performance Data
 #
 #   Using '-f' option causes values of all variables you specified in -a as
-#   well as response time from -T (response time), from -R (hitrate), from -m and other
-#   checks to go out as performance data for Nagios graphing programs.
+#   well as response time from -T (response time), from -R (hitrate), from -m
+#   and other checks to go out as performance data for Nagios graphing programs.
 #
 #   You may also directly specify which variables are to be return as performance data
 #   with '-A' option. If you use '-A' by itself and not specify any variables or use
 #   special special value of '*' (as in '-A *') the plugin will output all variables
-#   which is really useful for finding what data you can chck with this plugin.
+#   which is very useful for finding what data you can chck with this plugin.
 #
 #   The plugin will output threshold values as part of performance data as specified at
 #     http://nagiosplug.sourceforge.net/developer-guidelines.html#AEN201
@@ -167,7 +196,45 @@
 #   in performance output. Additionally last time plugin was run is also in
 #   performance data as special _ptime variable.
 #
-# 6. Example of Nagios Config Definitions
+# 7. Query Option and setting thresholds for data in Redis Database
+#
+#   With -q (--query) option the plugin can retrieve data from Redis database
+#   which become new variables you can then check thresholds on. Currently it
+#   supports getting single key values with GET and getting range or values (or
+#   everything in list) with LRANGE and finding their Average or Min or Max or Sum.
+#   The option maybe repeated more than once. The format for this option is:
+#
+#      -q, --query=query_type,key[:varname]<,list of threshold specifiers>
+#
+#  query_type is one of:
+#	GET - get one value
+#	LRANGE:AVG:start:end - retrieve list and average results
+#	LRANGE:SUM:start:end - retrieve list and sum results
+#	LRANGE:MIN:start:end - retrieve list and return minimum
+#	LRANGE:MAX:start:end - retrieve list and return maximum
+#   For LRANGE if you do not specify start and end, then start will be  0 and end
+#   is last value in the list pointed to by this key (found by using llen).
+#
+#   Key is the Redis key name to be retrieved and optionally you can add ":varname"
+#   after it which spcecifies what to name plugin variable based on this data -
+#   based on what you specify here is how it will be displayed in the status
+#   line and perormance data, default is same as Redis key name.
+#
+#   After these key name you specify list of thresholds in the same format as
+#   variable-based long options described in section 3. Again the list of the
+#   possible specifiers are:
+#      WARN:threshold
+#      CRIT:threshold
+#      ABSENT:OK|WARNING|CRITICAL|UNKNOWN  - what to do if data is not available
+#      ZERO:OK|WARNING|CRIICAL|UNKNOWN	   - what do do if data is 0 (rarely needed)
+#      DISPLAY:YES|NO			   - display on status line or not (default YES)
+#      PERF:YES|NO	 		   - output in perf data or not
+#
+#   You can also optionally use -a, -w and -c to theck data from the query instead
+#   of specifying thresholds as part of query option itself And remember that you if
+#   you need to check multiple keys you just repeat --query option more than once.
+#
+# 8. Example of Nagios Config Definitions
 #
 # Sample command and service definitions are below:
 #
@@ -203,9 +270,13 @@
 # Example of command-line use:
 #   /usr/lib/nagios/plugins/check_redis.pl -H localhost -a 'connected_clients,blocked_clients' -w ~,~ -c ~,~ -m -M 4G -A -R -T -f -v
 #
-# In above the -v option means "verbose" and with it plugin will output some debugging
-# information about what it is doing. The option is not intended to be used when plugin
-# is called from nagios itself. 
+# In above the -v option means "verbose" and with it plugin will output some debugging information
+# about what it is doing. The option is not intended to be used when plugin is called from nagios itself. 
+#
+# Example of using query and varialbe-based long options with debug enabled as well (-v):
+#
+# ./check_redis.pl -H localhost -p 6379 -D 1 --query LRANGE:AVG:0:,MyColumn1:Q1,ABSENT:WARNING,WARN:300,CRIT:500,DISPLAY:YES,PERF:NO
+#   --query GET,MyKey:K1,ABSENT:CRITICAL "--connected_clients=WARN:<2,CRIT:>100,ZERO:OK,ABSENT:WARNING,DISPLAY:YES,PERF:YES"
 #
 # ======================= VERSION HISTORY and TODO ================================
 #
@@ -241,13 +312,15 @@
 #			   option=WARN:threshold,CRIT:threshold,ABSENT:OK|WARNING|CRITICAL,ZERO:..
 #			 which are to be used for stats-variable based long options such as
 #			   --connected_clients=WARN:threshold,CRIT:threshold
+#			 and added DISPLAY:YES|NO and PERF specifiers for above too.
+#			 Added -D option to specify database needed for --query
 #
 # TODO or consider for future:
 #
 #  0. Add '--extra-opts' to allow to read options from a file as specified
 #     at http://nagiosplugins.org/extra-opts. This is TODO for all my plugins
 #
-#  1. In plans are to allow long options to specify thresholds for known variables.
+#  1. [DONE] In plans are to allow long options to specify thresholds for known variables.
 #     These would mean you specify '--connected_clients' in similar way to '--hitrate'
 #     Internally these would be convered into -A, -w, -c as appropriate an used
 #     together with these options. So in practice it will now allow to get any data
@@ -423,7 +496,7 @@ sub help {
    print "Redis Check for Nagios version ",$Version,"\n";
    print " by William Leibzon - william(at)leibzon.org\n\n";
    print "This is redis monitoring plugin to check its stats variables, replication, response time\n";
-   print "hitrate, memory utilization andother info. The plugin can also query and test key data\n";
+   print "hitrate, memory utilization and other info. The plugin can also query and test key data\n";
    print "against specified thresholds. All data is available as performance output for graphing.\n\n";
    print_usage_line();
    print "\n";

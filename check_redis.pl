@@ -410,7 +410,7 @@ my %KNOWN_STATUS_VARS = (
 	 'used_memory_human' => [ 'GAUGE', '' ],
 	 'keyspace_misses' => [ 'COUNTER', 'c', 'Keyspace Misses' ],
 	 'used_cpu_user' => [ 'GAUGE', '', 'Main Process Used User CPU' ],
-	 'total_commands_processed' => [ 'COUNTER', '', 'Total Number of Commands Processed from Start' ],
+	 'total_commands_processed' => [ 'COUNTER', 'c', 'Total Number of Commands Processed from Start' ],
 	 'mem_fragmentation_ratio' => [ 'GAUGE', '', 'Memory Fragmentation Ratio' ],
 	 'client_longest_output_list' => [ 'GAUGE', '' ],
 	 'blocked_clients' => [ 'GAUGE', '', 'Number of Currently Blocked Clients' ],
@@ -422,6 +422,8 @@ my %KNOWN_STATUS_VARS = (
 	 'connected_slaves' => [ 'GAUGE', '', 'Number of Connected Slaves' ],
 	 'used_cpu_sys_children' => [ 'GAUGE', '', 'Child Processed Used System CPU' ],
 	 'master_host' => [ 'TEXTINFO', '' ],
+	 'master_port' => [ 'TEXTINFO', '' ],
+	 'master_link_status' => [ 'TEXTINFO', '' ],
 	 'slave0' => [ 'TEXTINFO', '' ],
 	 'slave1' => [ 'TEXTINFO', '' ],
 	 'slave2' => [ 'TEXTINFO', '' ],
@@ -655,10 +657,10 @@ sub uptime_info {
   ($mins,$secs) = div_mod($uptime_seconds,60);
   ($hrs,$mins) = div_mod($mins,60);
   ($days,$hrs) = div_mod($hrs,24);
-  $upinfo .= "$days days " if $days>0;
-  $upinfo .= "$hrs hours " if $hrs>0;
-  $upinfo .= "$mins minutes" if $mins>0 && ($days==0 || $hrs==0);
-  $upinfo .= "$secs seconds" if $secs>0 && $days==0 && $hrs==0; 
+  $upinfo .= "$days days" if $days>0;
+  $upinfo .= (($upinfo ne '')?' ':'').$hrs." hours" if $hrs>0;
+  $upinfo .= (($upinfo ne '')?' ':'').$mins." minutes" if $mins>0 && ($days==0 || $hrs==0);
+  $upinfo .= (($upinfo ne '')?' ':'').$secs." seconds" if $secs>0 && $days==0 && $hrs==0; 
   return $upinfo;
 }
 
@@ -690,6 +692,13 @@ sub isnum {
   return 0;
 }
 
+sub trim {
+  my $string = shift;
+  $string =~ s/^\s+//;
+  $string =~ s/\s+$//;
+  return $string;
+}
+
 # load previous performance data 
 sub process_perf {
  my %pdh;
@@ -707,6 +716,58 @@ sub process_perf {
    }
  }
  return %pdh;
+}
+
+sub add_to_statusinfo {
+    my @IN = @_;
+    my $sline="";
+    $sline .= $_ foreach(@IN);
+    $sline = trim($sline);
+    $statusinfo .= ", " if $statusinfo;
+    $statusinfo .= $sline;
+}
+
+sub add_to_statusdata {
+    my ($avar,$adata) = @_;
+    if ((!exists($thresholds{$avar}{'DISPLAY'}) || $thresholds{$avar}{'DISPLAY'} eq 'YES') &&
+        (!exists($dataresults{$avar}[1]) || $dataresults{$avar}[1]==0)) {
+           if (defined($adata)) {
+              $statusdata .= ", " if $statusdata;
+              $statusdata .= trim($adata);
+           }
+           elsif (exists($dataresults{$avar}[0])) {
+              $statusdata .= ", " if $statusdata;
+              $statusdata .= $avar ." is ".$dataresults{$avar}[0];
+           }
+           $dataresults{$avar}[1]++;
+    }
+}
+
+sub add_to_perfdata {
+    my ($avar,$adata) = @_;
+    if ((!exists($thresholds{$avar}{'PERF'}) || $thresholds{$avar}{'PERF'} eq 'YES') &&
+        (!exists($dataresults{$avar}[2]) || $dataresults{$avar}[2]<1)) {
+           if (defined($adata)) {
+              $perfdata .= " " if $perfdata;
+              $perfdata .= trim($adata);
+           }
+           elsif (exists($dataresults{$avar}[0])) {
+              $perfdata .= " " if $perfdata;
+              $perfdata .= $avar."=".$dataresults{$avar}[0];
+              if (defined($KNOWN_STATUS_VARS{$avar})) {
+                 $perfdata .= $KNOWN_STATUS_VARS{$avar}[1];
+              }
+           }
+	   $dataresults{$avar}[2]=0 if $dataresults{$avar}[2]<0;
+           $dataresults{$avar}[2]++;
+    }
+}
+
+sub preset_perfdata {
+    my ($avar,$adata) = @_;
+    $dataresults{$avar}=[undef,0,0,''] if !defined($dataresults{$avar});
+    $dataresults{$avar}[2]=-1;
+    $dataresults{$avar}[3]=$adata;
 }
 
 # this function is used when checking data against critical and warn values
@@ -959,7 +1020,7 @@ sub options_startprocessing {
 	}
     }
     # this is a special loop to check stats-variables options such as "connected_clients=WARN,CRIT"
-    # which are specifies as long options
+    # which are specified as long options
     my ($vname,$vname2) = (undef,undef);
     foreach (keys(%KNOWN_STATUS_VARS)) {
 	$vname = $_;
@@ -1063,7 +1124,7 @@ sub main_checkvars {
 	    # main check
 	    if ($dataresults{$avar}[0]==0 && exists($thresholds{$avar}{'ZERO'})) {
 		$statuscode=$thresholds{$avar}{'ZERO'} if $statuscode ne 'CRITICAL' && $statuscode ne 'OK';
-		$statusinfo .= " $avar is zero" if $statuscode ne 'OK';
+		add_to_statusinfo("$avar is zero") if $statuscode ne 'OK';
 	    }
 	    else {
 		$chk=undef;
@@ -1072,7 +1133,7 @@ sub main_checkvars {
 		    if ($chk) {
 		    	$dataresults{$avar}[1]++;
 		    	$statuscode = "CRITICAL";
-		    	$statusinfo .= $chk;
+		    	add_to_statusinfo($chk);
 		    }
 		}
 		if (exists($thresholds{$avar}{'WARN'}) && (!defined($chk) || !$chk)) {
@@ -1080,29 +1141,29 @@ sub main_checkvars {
 		    if ($chk) {
 		    	$dataresults{$avar}[1]++;
 		   	 $statuscode="WARNING" if $statuscode eq "OK";
-		    	$statusinfo .= $chk;
+		    	 add_to_statusinfo($chk);
 		    }
 		}
 	    }
 	    # if we did not output to status line yet, do so
-	    if ($dataresults{$avar}[1]==0) {
-		$dataresults{$avar}[1]++;
-		if (!exists($thresholds{$avar}{'DISPLAY'}) || $thresholds{$avar}{'DISPLAY'} eq 'YES') {
-		    $statusdata .= ", " if $statusdata;
-		    $statusdata .= $avar_out . " is " . $dataresults{$avar}[0];
-		}
-	    }
+	    add_to_statusdata($avar,$avar_out." is ".$dataresults{$avar}[0]);
+
 	    # if we were asked to output performance, prepare it but do not output until later loop
-	    if ($dataresults{$avar}[2]==0 && exists($dataresults{$avar}[3]) && $dataresults{$avar}[3] eq '' && 
+	    if (($dataresults{$avar}[2]<0 || 
+		 ($dataresults{$avar}[2]==0 &&
+		   (!exists($dataresults{$avar}[3]) || $dataresults{$avar}[3] eq '')
+		)) &&
 		((defined($o_perf) && !exists($thresholds{$avar}{'PERF'})) || 
 		 (exists($thresholds{$avar}{'PERF'}) && $thresholds{$avar}{'PERF'} eq 'YES'))) {
-		$dataresults{$avar}[3]=$avar_out."=".$dataresults{$avar}[0];
-		if (defined($KNOWN_STATUS_VARS{$avar})) {
-		    $dataresults{$avar}[3] .= $KNOWN_STATUS_VARS{$avar}[1];
+		if (!exists($dataresults{$avar}[3]) || $dataresults{$avar}[3] eq '') {
+		    $dataresults{$avar}[3]=$avar_out."=".$dataresults{$avar}[0];
+		    if (defined($KNOWN_STATUS_VARS{$avar})) {
+		    	$dataresults{$avar}[3] .= $KNOWN_STATUS_VARS{$avar}[1];
+		    }
 		}
+		$dataresults{$avar}[2]=0;
 		if (exists($thresholds{$avar}{'WARN'}[5]) || exists($thresholds{$avar}{'CRIT'}[5])) {
-		    $dataresults{$avar}[3] .= ';' if (exists($thresholds{$avar}{'WARN'}[5]) && $thresholds{$avar}{'WARN'}[5] ne '') ||
-					     (exists($thresholds{$avar}{'CRIT'}[5]) && $thresholds{$avar}{'CRIT'}[5] ne '');
+		    $dataresults{$avar}[3] .= ';' if (exists($thresholds{$avar}{'WARN'}[5]) && $thresholds{$avar}{'WARN'}[5] ne '') || (exists($thresholds{$avar}{'CRIT'}[5]) && $thresholds{$avar}{'CRIT'}[5] ne '');
 		    $dataresults{$avar}[3] .= $thresholds{$avar}{'WARN'}[5] if exists($thresholds{$avar}{'WARN'}[5]) && $thresholds{$avar}{'WARN'}[5] ne '';
 		    $dataresults{$avar}[3] .= ';'.$thresholds{$avar}{'CRIT'}[5] if exists($thresholds{$avar}{'CRIT'}[5]) && $thresholds{$avar}{'CRIT'}[5] ne '';
 		}
@@ -1115,10 +1176,11 @@ sub main_checkvars {
 	    else {
 		$statuscode="CRITICAL";
 	    }
-	    $statusinfo .= ", " if $statusinfo;
-	    $statusinfo .= "$avar data is missing";
+	    add_to_statusinfo("$avar data is missing");
 	}
     }
+    $statusinfo=trim($statusinfo);
+    $statusdata=trim($statusdata);
 }
 
 # adds performance variables data to performance data line
@@ -1126,29 +1188,25 @@ sub main_perfvars {
     my $avar;
     for (my $i=0;$i<scalar(@o_perfvarsL);$i++) {
 	$avar=$o_perfvarsL[$i];
-	if (defined($dataresults{$avar}[0]) && $dataresults{$avar}[2]==0 &&
+	if (defined($dataresults{$avar}[0]) &&
 	    (!defined($KNOWN_STATUS_VARS{$avar}) || $KNOWN_STATUS_VARS{$avar}[0] =~ /$PERF_OK_STATUS_REGEX/ )) {
 		if (defined($dataresults{$avar}[3])) {
-		    $perfdata .= " " . $dataresults{$avar}[3];
+		    add_to_perfdata($avar,$dataresults{$avar}[3]);
 		}
 		else {
-		    $perfdata .= " " . $avar . "=" . $dataresults{$avar}[0];
-		    if (defined($KNOWN_STATUS_VARS{$avar})) {
-			$perfdata .= $KNOWN_STATUS_VARS{$avar}[1];
-		    }
+		    add_to_perfdata($avar);
 		}
-		$dataresults{$avar}[2]++;
 	}
     }
     if (defined($o_prevperf)) {
-	$perfdata .= " _ptime=".time();
+        $perfdata .= " _ptime=".time();
     }
     foreach $avar (keys %dataresults) {
-	if (defined($dataresults{$avar}[3]) && $dataresults{$avar}[2]==0) {
-	    $perfdata .= " " . $dataresults{$avar}[3];
-	    $dataresults{$avar}[2]++;
-	}
+        if (defined($dataresults{$avar}[3])) {
+            add_to_perfdata($avar,$dataresults{$avar}[3]);
+        }
     }
+    $perfdata = trim($perfdata);
 }
 
 # Calculate rate variables
@@ -1161,11 +1219,16 @@ sub calculate_ratevars {
 	for (my $i=0;$i<scalar(@allVars);$i++) {
 	    if ($allVars[$i] =~ /^&(.*)/) {
 		$avar = $1;
-		if (defined($dataresults{$avar}) && $dataresults{$avar}[2]==0) {
-		    $dataresults{$avar}[3]= $avar."=".$dataresults{$avar}[0];
-		    if (defined($KNOWN_STATUS_VARS{$avar})) {
-                	$dataresults{$avar}[3].= $KNOWN_STATUS_VARS{$avar}[1];
-		    }
+		# this forces perfdata output if it was not already
+		if (defined($dataresults{$avar}) && $dataresults{$avar}[2]<1 &&
+		    (!defined($dataresults{$avar}[3]) || $dataresults{$avar}[3] eq '')) {
+		        my $ptemp = $avar."=".$dataresults{$avar}[0];
+		    	if (defined($KNOWN_STATUS_VARS{$avar})) {
+                	    $ptemp .= $KNOWN_STATUS_VARS{$avar}[1];
+		    	}
+			$thresholds{$avar}={} if !defined($thresholds{$avar});
+			$thresholds{$avar}{'PERF'}='YES';
+			preset_perfdata($avar,$ptemp);
 		}
 		if (defined($prev_perf{$avar}) && defined($ptime)) {
 		    $dataresults{$allVars[$i]}=[0,0,0] if !defined($dataresults{$allVars[$i]});
@@ -1317,13 +1380,9 @@ sub check_options {
 	  thresholds_addvar('hitrate',parse_thresholds_optionsline($o_hitrate));
 	  $thresholds{'hitrate'}{'ZERO'}="OK" if !exists($thresholds{'hitrate'}{'ZERO'}); # except case of hitrate=0, don't remember why I added it
     }
-    if (defined($o_repdelay) && $o_repdelay ne '') {
-          verb("Processing replication delay thresholds: $o_repdelay");
-	  thresholds_addvar('replication_delay',parse_thresholds_optionsline($o_repdelay));
-    }
     if (defined($o_memutilization) && $o_memutilization ne '') {
           verb("Processing memory utilization thresholds: $o_memutilization");
-	  thresholds_addvar('memory_utilization',parse_thresholds_optionsline($o_memutilization));
+          thresholds_addvar('memory_utilization',parse_thresholds_optionsline($o_memutilization));
     }
     if (defined($o_totalmemory)) {
 	if ($o_totalmemory =~ /^(\d+)B/) {
@@ -1343,6 +1402,10 @@ sub check_options {
 		print_usage();
 		exit $ERRORS{"UNKNOWN"};
 	} 
+    }
+    if (defined($o_repdelay) && $o_repdelay ne '') {
+          verb("Processing replication delay thresholds: $o_repdelay");
+          thresholds_addvar('replication_delay',parse_thresholds_optionsline($o_repdelay));
     }
 
     # query option processing
@@ -1524,10 +1587,9 @@ dataresults_addvar('total_expires',$total_expires);
 if (defined($o_timecheck)) {
     $dataresults{'response_time'}=[0,0,0] if !defined('response_time');
     $dataresults{'response_time'}[0]=Time::HiRes::tv_interval($start_time);;
-    $statusdata .= sprintf(" response in %.3fs", $dataresults{'response_time'}[0]);
-    $dataresults{'response_time'}[1]++;
-    if ($o_timecheck eq '' && defined($o_perf)) {
-        $perfdata .= ' response_time=' . $dataresults{'response_time'}[0].'s';
+    add_to_statusdata('response_time',sprintf(" response in %.3fs", $dataresults{'response_time'}[0]));
+    if (defined($o_perf)) {
+        preset_perfdata('response_time','response_time='.$dataresults{'response_time'}[0].'s');
     }
 }
 
@@ -1541,7 +1603,7 @@ my $hitrate_all=0;
 if (defined($o_hitrate) && defined($dataresults{'keyspace_hits'}) && defined($dataresults{'keyspace_misses'})) {
     for $avar ('keyspace_hits', 'keyspace_misses') {
         if (defined($o_prevperf) && defined($o_perf) && $dataresults{$avar}[2]==0) {
-                $dataresults{$avar}[3]= $avar."=".$dataresults{$avar}[0].'c';
+                preset_perfdata($avar,$avar."=".$dataresults{$avar}[0].'c');
         }
         $hits_hits = $dataresults{'keyspace_hits'}[0] if $avar eq 'keyspace_hits';
         $hits_total += $dataresults{$avar}[0];
@@ -1562,12 +1624,11 @@ if (defined($o_hitrate) && defined($dataresults{'keyspace_hits'}) && defined($da
         else {
                 $dataresults{'hitrate'}[0]=sprintf("%.4f", $hits_hits/$hits_total*100);
         }
-        $statusdata.=',' if $statusdata;
-        $statusdata .= sprintf(" hitrate is %.2f%%", $dataresults{'hitrate'}[0]);
-        $statusdata .= sprintf(" (%.2f%% from launch)", $hitrate_all) if ($hitrate_all!=0);
-        $dataresults{'hitrate'}[1]++;
-        if ($o_hitrate eq '' && defined($o_perf)) {
-                $perfdata .= sprintf(" hitrate=%.4f%%", $dataresults{'hitrate'}[0]);
+	my $stemp="";
+	$stemp .= sprintf(" (%.2f%% from launch)", $hitrate_all) if $hitrate_all!=0;
+	add_to_statusdata('hitrate',sprintf("hitrate is %.2f%%",$dataresults{'hitrate'}[0]).$stemp);
+        if (defined($o_perf)) {
+		preset_perfdata('hitrate',sprintf("hitrate=%.4f%%", $dataresults{'hitrate'}[0]));
         }
      }
 }
@@ -1583,11 +1644,9 @@ if (defined($o_repdelay) && defined($dataresults{'master_last_io_seconds_ago'}) 
 	$repl_delay = $dataresults{'master_last_io_seconds_ago'}[0];
     	$dataresults{'replication_delay'}=[0,0,0] if !defined($dataresults{'replication_delay'});
 	$dataresults{'replication_delay'}[0]=$repl_delay if $repl_delay!=0;
-	$statusdata.=',' if $statusdata;
-	$statusdata .= sprintf(" replication_delay is %.2f%%", $dataresults{'replication_delay'}[0]);
-	$dataresults{'replication_delay'}[1]++;
-	if ($o_repdelay eq '' && defined($o_perf)) {
-		$perfdata .= sprintf(" replication_delay=%.5f%%", $dataresults{'replication_delay'}[0]);
+	add_to_statusdata('replication_delay',sprintf("replication_delay is %.2f%%", $dataresults{'replication_delay'}[0]));
+	if (defined($o_perf)) {
+		preset_perfdata('replication_delay',sprintf("replication_delay=%.4f%%", $dataresults{'replication_delay'}[0]));
 	}
      }
 }
@@ -1595,7 +1654,7 @@ if (defined($o_repdelay) && defined($dataresults{'master_last_io_seconds_ago'}) 
 # Memory Use Utilization
 if (defined($o_memutilization) && defined($dataresults{'used_memory_rss'})) {
     if (defined($o_totalmemory)) {
-	$dataresults{'memory_utilization'}=[0,1,0];
+	$dataresults{'memory_utilization'}=[0,0,0];
         $dataresults{'memory_utilization'}[0]=$dataresults{'used_memory_rss'}[0]/$o_totalmemory*100;
 	verb('memory utilization % : '.$dataresults{'memory_utilization'}[0].' = '.$dataresults{'used_memory_rss'}[0].' (used_memory_rss) / '.$o_totalmemory.' * 100');
     }
@@ -1604,20 +1663,20 @@ if (defined($o_memutilization) && defined($dataresults{'used_memory_rss'})) {
 	print_usage();
 	exit $ERRORS{"UNKNOWN"};
     }
-    if (defined($dataresults{'memory_utilization'}) && $o_memutilization eq '' && defined($o_perf)) {
-        $perfdata .= sprintf(" memory_utilization=%.5f%%", $dataresults{'memory_utilization'}[0]);
+    if (defined($dataresults{'memory_utilization'}) && defined($o_perf)) {
+	preset_perfdata('memory_utilization',sprintf(" memory_utilization=%.4f%%", $dataresults{'memory_utilization'}[0]));
     }
     if (defined($dataresults{'used_memory_human'}) && defined($dataresults{'used_memory_peak_human'})) {
-	$statusdata.=', ' if $statusdata;
-	$statusdata.="memory use is ".$dataresults{'used_memory_human'}[0]." (";
-	$statusdata.='peak '.$dataresults{'used_memory_peak_human'}[0];
+	my $sdata="memory use is ".$dataresults{'used_memory_human'}[0]." (";
+	$sdata.='peak '.$dataresults{'used_memory_peak_human'}[0];
 	if (defined($dataresults{'memory_utilization'})) {
-		$statusdata.= sprintf(", %.2f%% of max", $dataresults{'memory_utilization'}[0]);
+		$sdata.= sprintf(", %.2f%% of max", $dataresults{'memory_utilization'}[0]);
 	}
 	if (defined($dataresults{'mem_fragmentation_ratio'})) {
-		$statusdata.=", fragmentation ".$dataresults{'mem_fragmentation_ratio'}[0].'%';
+		$sdata.=", fragmentation ".$dataresults{'mem_fragmentation_ratio'}[0].'%';
 	}
-	$statusdata.=")";
+	$sdata.=")";
+	add_to_statusdata('memory_utilization',$sdata);
     }
 }
 
@@ -1632,8 +1691,8 @@ print "REDIS " . $dbversion . ' on ' . $HOSTNAME. ':'. $PORT;
 print ' has '.scalar(keys %dbs).' databases ('.join(',',keys(%dbs)).')';
 print " with ".$dataresults{'total_keys'}[0]." keys" if $dataresults{'total_keys'}[0] > 0;
 print ', up '.uptime_info($dataresults{'uptime_in_seconds'}[0]) if defined($dataresults{'uptime_in_seconds'}); 
-print "- " . $statusdata if $statusdata;
-print " |" . $perfdata if $perfdata;
+print " - " . $statusdata if $statusdata;
+print " | " . $perfdata if $perfdata;
 print "\n";
 
 # exit

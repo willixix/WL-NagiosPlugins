@@ -4,7 +4,7 @@
 #
 # Program : check_redis.pl
 # Version : 0.6
-# Date    : July 16, 2012
+# Date    : July 17, 2012
 # Author  : William Leibzon - william@leibzon.org
 # Licence : GPL - summary below, full text at http://www.fsf.org/licenses/gpl.txt
 #
@@ -305,7 +305,7 @@
 #  [0.53 - Jul 15, 2012] Adding special option to do query on one redis key and
 #                        and do threshold checking of results if its numeric
 #
-#  [0.6  - Jul 16, 2012] Rewrote parts of thresholds checking code and moved code
+#  [0.6  - Jul 17, 2012] Rewrote parts of thresholds checking code and moved code
 #			 that checks and parses thresholds from main into separate
 #			 functions that are to become part of plugin library.
 #			 Added support for variable thresholds specified as:
@@ -1370,6 +1370,7 @@ $SIG{'ALRM'} = sub {
 ########## MAIN #######
 
 check_options();
+verb("check_redis.pl plugin version ".$Version);
 
 # Check global timeout if plugin screws up
 if (defined($TIMEOUT)) {

@@ -370,20 +370,7 @@ my $o_rsuffix='_rate';		# default rate variable name suffix
 my $o_rprefix="";
 
 ## Additional global variables
-my @allVars = ();		# all variables after options processing
-my @ar_warnLv = ();		# used in options processing
-my @ar_critLv = ();		# used in options processing
-my @query=();			# array of queries with each entry being keyed hash of processedoption data on howto query
-my %thresholds=();		# this replaces @o_warnL and @o_critL with a hash array of all threshold data
 my $memd= undef;                # DB connection object
-my %prev_perf=  ();		# array that is populated with previous performance data
-my @prev_time=  ();     	# timestamps if more then one set of previois performance data
-my $perfcheck_time=undef;	# time when data was last checked 
-my %dataresults= ();		# this is where data is loaded into
-my $statuscode = "OK";		# final status code
-my $statusinfo = "";		# if there is an error, this has human info about what it is
-my $statusdata = "";		# if there is no error but we want some data in status line, this var gets it
-my $perfdata = "";		# this variable collects performance data line
 
 sub p_version { print "check_memcached.pl version : $Version\n"; }
 
@@ -526,6 +513,21 @@ EOT
 }
 
 ############################ START OF THE LIBRARY FUNCTIONS #################################
+
+# these variables will become internal to the library but right now they are still being used by code outside
+# until such time as all accessor/modifier methodds have been written
+my @allVars = ();		# all variables after options processing
+my %thresholds=();		# thresholds for above variables, this replaced @o_warnL and @o_critL with a hash array
+my %dataresults= ();		# this is where data is loaded
+my @perfVars = ();		# performance variables list (replaces @o_perfVarsL)
+my @ar_warnLv = ();		# used in options processing
+my @ar_critLv = ();		# used in options processing
+my @prev_time=  ();     	# timestamps if more then one set of previois performance data
+my $perfcheck_time=undef;	# time when data was last checked 
+my $statuscode = "OK";		# final status code
+my $statusinfo = "";		# if there is an error, this has human info about what it is
+my $statusdata = "";		# if there is no error but we want some data in status line, this var gets it
+my $perfdata = "";		# this variable collects performance data line
 
 sub div_mod { return int( $_[0]/$_[1]) , ($_[0] % $_[1]); }
 
@@ -756,7 +758,9 @@ sub dataresults_addvar {
 	$dataresults{$dnam} = [$dval, 0, 0];
     }
     if (defined($o_perfvars) && $o_perfvars eq '*') {
-        push @o_perfvarsL, $dnam;
+        push @perVars, $dnam;
+        $thresholds{$dnam}={} if !exists($thresholds{$dnam});
+	$thresholds{$dnam}{'PERF'} = 'YES';
     }
 }
 

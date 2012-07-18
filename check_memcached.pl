@@ -376,7 +376,6 @@ sub p_version { print "check_memcached.pl version : $Version\n"; }
 
 sub print_usage_line {
    print "Usage: $0 [-v [debugfilename]] -H <host> [-p <port>] [-s <memcache stat arrays>] [-a <memcache statistics variables> -w <variables warning thresholds> -c <variables critical thresholds>] [-A <performance output variables>] [-T [conntime_warn,conntime_crit]] [-R [hitrate_warn,hitrate_crit]] [-U [utilization_size_warn,utilization_size_crit]] [-f] [-T <timeout>] [-V] [-P <previous performance data in quoted string>]\n";
-   print "For more details on options do: $0 --help\n";
 }
 
 sub print_usage {
@@ -385,12 +384,13 @@ sub print_usage {
 }
 
 sub help {
-   print "\nMemcache Database Check for Nagios version ",$Version,"\n";
+   print "Memcache Check for Nagios version ",$Version,"\n";
    print " by William Leibzon - william(at)leibzon.org\n\n";
    print "This memcached monitoring plugin lets you do threshold checks on status variables\n";
    print "and returnes performance data for graphing and other processing.\n\n";
    print_usage_line();
    print <<EOT;
+
 General and Server Connection Options:
  -v, --verbose[=FILENAME], --debug[=FILENAME]
    Print extra debugging information.
@@ -1330,7 +1330,7 @@ if (defined($o_utilsize) && defined($dataresults{'bytes'}) && defined($dataresul
     }
     add_to_statusdata('utilization',sprintf(" in use %.2f%% of space", $dataresults{'utilization'}[0]));
     if (defined($o_perf)) {
-	preset_perfdata('utilization',sprintf(" utilization=%.5f%%", $dataresults{'utilization'}[0]);
+	preset_perfdata('utilization',sprintf(" utilization=%.5f%%", $dataresults{'utilization'}[0]));
    }
 }
 

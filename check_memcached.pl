@@ -531,6 +531,7 @@ my $perfdata = "";		# this variable collects performance data line
 
 sub div_mod { return int( $_[0]/$_[1]) , ($_[0] % $_[1]); }
 
+# ----- to be externallly exported when it becomes library ---
 # this converts uptime in seconds to nice & short output format
 sub uptime_info {
   my $uptime_seconds = shift;
@@ -546,6 +547,7 @@ sub uptime_info {
   return $upinfo;
 }
 
+# ----- to be externallly exported when it becomes library ---
 # For verbose output (updated 06/06/12 to write to debug file if specified)
 sub verb {
     my $t=shift;
@@ -598,6 +600,7 @@ sub process_perf {
  return %pdh;
 }
 
+# This function adds info on error conditions that would be pre-pended to OK status data
 sub add_to_statusinfo {
     my @IN = @_;
     my $sline="";
@@ -607,6 +610,7 @@ sub add_to_statusinfo {
     $statusinfo .= $sline;
 }
 
+# This function adds data to status output line (for non-error checks)
 sub add_to_statusdata {
     my ($avar,$adata) = @_;
     if ((!exists($thresholds{$avar}{'DISPLAY'}) || $thresholds{$avar}{'DISPLAY'} eq 'YES') &&
@@ -623,6 +627,7 @@ sub add_to_statusdata {
     }
 }
 
+# This function is used when building performance output
 sub add_to_perfdata {
     my ($avar,$adata) = @_;
     if ((!exists($thresholds{$avar}{'PERF'}) || $thresholds{$avar}{'PERF'} eq 'YES') &&
@@ -643,6 +648,11 @@ sub add_to_perfdata {
     }
 }
 
+# ----- to be externallly exported when it becomes library ---
+# This function sets output for variables for performance output
+# (;warn;crit would be added to it later if thresholds were set)
+#  ARG1 - variable name
+#  ARG2 - text for performance data (including arg=)
 sub preset_perfdata {
     my ($avar,$adata) = @_;
     $dataresults{$avar}=[undef,0,0,''] if !defined($dataresults{$avar});
@@ -650,7 +660,11 @@ sub preset_perfdata {
     $dataresults{$avar}[3]=$adata;
 }
 
+# ----- to be externallly exported when it becomes library ---
 # this function is used when checking data against critical and warn values
+#  ARG1 : data variable name
+#  ARG2 : data to be checked
+#  ARG3 : threshold to be checked, internal structure format returned by parse_threshold()
 sub check_threshold {
     my ($attrib, $data, $th_array) = @_;
     my $mod = $th_array->[0];
@@ -670,7 +684,11 @@ sub check_threshold {
     return "";
 }
 
+
+# ----- to be externallly exported when it becomes library ---
 # this function is called when parsing threshold options data
+# it returns array internally representing this threshold
+#  $ARG1 - thrshold string
 sub parse_threshold {
     my $thin = shift;
 
@@ -749,6 +767,8 @@ sub threshold_specok {
     return 0;  # return with 0 means specs check out and are ok
 }
 
+
+# ----- to be externallly exported when it becomes library ---
 # Add results data value to checked variable
 #  ARG1 : name of data variable
 #  ARG2 : data for this variable
@@ -767,6 +787,15 @@ sub dataresults_addvar {
 	    $thresholds{$dnam}{'PERF'} = 'YES';
 	}
     }
+}
+
+# ----- to be externallly exported when it becomes library ---
+# accessor function for data results
+#  ARG1: name of data variable
+sub get_data {
+  my $dnam = shift;
+  return undef if !exists($dataresults{$dnam});
+  return $dataresults{$dnam}[0];
 }
 
 # Add variable to those whose thresholds would be checked
@@ -868,6 +897,44 @@ sub parse_thresholds_optionsline {
    return $thres;
 }
 
+# ----- to be externallly exported when it becomes library ---
+# Address threshold based on options text line
+# of the type  WARN:threshold,CRIT:threshold,ABSENT:..,,DISPLAY:YES|NO,PERF:YES|NO
+#  ARG1 - variable name
+#  ARG2 - text from the option
+sub thresholds_add_optionsline {
+    my ($var,$optline) = @_;
+    thresholds_addvar($var,parse_thresholds_optionsline($optline));
+}
+
+# ----- to be externallly exported when it becomes library ---
+# Accessor function. Returns threshold or related variable check setting
+# For 'WARN' and 'CRIT' thresholds it returns array i.e. internal structure
+#  ARG1: variable name
+#  ARG2: type of threshold - WARN,CRIT,ABSENT,ZERO,PERF,DISPLAY
+sub get_threshold {
+  my ($var,$thname) = @_;
+  return undef if !exists($thresholds{$var}) || !exists($threshlds{$var}{$thname});
+  return $thresholds{$var}{$thname};
+}
+
+# ----- to be externallly exported when it becomes library ---
+# Sets threshold of specific type for variable
+#  ARG1 : variable name
+#  ARG2 : threshold type, one of: WARN,CRIT,ABSENT,ZERO,DISPLAY,PERF
+#  ARG3 : data to set
+sub set_threshold {
+  my ($var,$thname,$thdata) = @_;
+  if ($thname ne 'WARN' && $thname ne 'CRIT' && $thname ne 'ZERO' &&
+      $thname ne 'ABSENT' && $thname ne 'PERF' && $thname ne 'DISPLAY') {
+     return 0;
+  }
+  $thresholds{$var}={} if !exists($thresholds{$var});
+  $thresholds{$var}{$thname}=$thdata;
+  return 1;
+}
+
+# returns list variables for inclusion as GetOptions(..) parameters
 sub additional_options_list {
     my @VarOptions = ();
     foreach(keys %KNOWN_STATUS_VARS) {
@@ -1181,16 +1248,16 @@ sub check_options {
     # additional variables/options calculated and added by this plugin
     if (defined($o_timecheck) && $o_timecheck ne '') {
           verb("Processing timecheck thresholds: $o_timecheck");
-	  thresholds_addvar('response_time',parse_thresholds_optionsline($o_timecheck));
+	  thresholds_add_optionsline('response_time',$o_timecheck);
     }
     if (defined($o_hitrate) && $o_hitrate ne '') {
           verb("Processing hitrate thresholds: $o_hitrate");
-	  thresholds_addvar('hitrate',parse_thresholds_optionsline($o_hitrate));
-	  $thresholds{'hitrate'}{'ZERO'}="OK" if !exists($thresholds{'hitrate'}{'ZERO'}); # except case of hitrate=0, don't remember why I added it
+	  thresholds_add_optionsline('hitrate',$o_hitrate);
+	  set_threshold('hitrate','ZERO','OK') if !defined(get_threshold('hitrate','ZERO')); # except case of hitrate=0, don't remember why I added it
     }
     if (defined($o_utilsize) && $o_utilsize ne '') {
           verb("Processing memory utilization thresholds: $o_utilsize");
-          thresholds_addvar('utilization',parse_thresholds_optionsline($o_utilsize));
+          thresholds_add_optionsline('utilization',$o_utilsize);
     }
 
     # finish it up
@@ -1319,9 +1386,9 @@ $memd->disconnect_all;
 # Response Time
 if (defined($o_timecheck)) {
     dataresults_addvar('response_time',Time::HiRes::tv_interval($start_time));
-    add_to_statusdata('response_time',sprintf(" response in %.3fs", $dataresults{'response_time'}[0]));
+    add_to_statusdata('response_time',sprintf(" response in %.3fs",get_data('response_time'));
     if (defined($o_perf)) {
-        preset_perfdata('response_time','response_time='.$dataresults{'response_time'}[0].'s');
+        preset_perfdata('response_time','response_time='.get_data('response_time').'s');
     }
 }
 
@@ -1329,39 +1396,40 @@ if (defined($o_timecheck)) {
 calculate_ratevars();
 
 # Memory Use Utilization
-if (defined($o_utilsize) && defined($dataresults{'bytes'}) && defined($dataresults{'limit_maxbytes'})) {
-    if (!defined($dataresults{'limit_maxbytes'}[0]) || $dataresults{'limit_maxbytes'}[0]==0) {
-	dataresults_addvar('utilization',0);
+my $bytes = get_data('bytes');
+my $maxbytes = get_data('limit_maxbytes');
+my $utilization = 0;
+if (defined($o_utilsize) && defined($bytes) && defined($maxbytes)) {
+    if (defined($maxbytes) && $maxbytes!=0) {
+	$utilization = $bytes / $maxbytes;
     }
-    else {
-	dataresults_addvar('utilization',$dataresults{'bytes'}[0]/$dataresults{'limit_maxbytes'}[0]*100);
-    }
-    add_to_statusdata('utilization',sprintf(" in use %.2f%% of space", $dataresults{'utilization'}[0]));
+    dataresults_addvar('utilization',$utilization);
+    add_to_statusdata('utilization',sprintf(" in use %.2f%% of space", $utilization));
     if (defined($o_perf)) {
-	preset_perfdata('utilization',sprintf(" utilization=%.5f%%", $dataresults{'utilization'}[0]));
+	preset_perfdata('utilization',sprintf(" utilization=%.5f%%", $utilization));
    }
 }
 
 # CPU Use - Converts floating seconds to integer ms
-if (defined($dataresults{'rusage_user'})) {
-   dataresults_addvar('rusage_user_ms',int($dataresults{'rusage_user'}[0]*100+0.5));
+if (defined(get_data('rusage_user'))) {
+   dataresults_addvar('rusage_user_ms',int(get_data('rusage_user')*100+0.5));
 }
-if (defined($dataresults{'rusage_system'})) {
-   dataresults_addvar('rusage_system_ms',int($dataresults{'rusage_system'}[0]*100+0.5));
+if (defined(get_data('rusage_system'))) {
+   dataresults_addvar('rusage_system_ms',int(get_data('rusage_system')*100+0.5));
 }
 
 # Hitrate
 my $hits_total=0;
-my $hits_hits=undef;
+my $hitrate=0;
 my $hitrate_all=0;
-if (defined($o_hitrate) && defined($dataresults{'get_misses'}) && defined($dataresults{'get_hits'})) {
-    for $avar ('get_misses', 'get_hits') {
-        if (defined($o_prevperf) && defined($o_perf)) {
-		preset_perfdata($avar,$avar."=".$dataresults{$avar}[0].'c');
-	}
-	$hits_hits = $dataresults{'get_hits'}[0] if $avar eq 'get_hits';
-	$hits_total += $dataresults{$avar}[0];
+my $hits_hits = get_data('get_hits');
+my $get_misses = get_data('get_misses');
+if (defined($o_hitrate) && defined($get_misses) && defined($hits_hits)) {
+    if (defined($o_prevperf) && defined($o_perf)) {
+	preset_perfdata('get_misses','get_misses='.$get_misses.'c');
+	preset_perfdata('get_hits','get_hits='.$hits_hits.'c');
     }
+    $hits_total = $hits_hits + $get_misses;
     verb("Calculating Hitrate : total=".$hits_total." hits=".$hits_hits);
     if (defined($hits_hits) && defined($prev_perf{'get_hits'}) && defined($prev_perf{'get_misses'}) && $hits_hits > $prev_perf{'get_hits'}) {
 	$hitrate_all = $hits_hits/$hits_total*100 if $hits_total!=0;
@@ -1371,18 +1439,15 @@ if (defined($o_hitrate) && defined($dataresults{'get_misses'}) && defined($datar
 	verb("Calculating Hitrate. Adjusted based on previous values. total=".$hits_total." hits=".$hits_hits);
     }
     if (defined($hits_hits)) {
-    	$dataresults{'hitrate'}=[0,0,0] if !defined($dataresults{'hitrate'});
-	if ($hits_total==0) {
-		dataresults_addvar('hitrate',0);
+    	if ($hits_total!=0) {
+	    $hitrate= sprintf("%.4f", $hits_hits/$hits_total*100);
 	}
-	else {
-		dataresults_addvar('hitrate',sprintf("%.4f", $hits_hits/$hits_total*100));
-	}
-	my $sdata .= sprintf(" hitrate is %.2f%%", $dataresults{'hitrate'}[0]);
+	dataresults_addvar('hitrate',$hitrate);
+	my $sdata .= sprintf(" hitrate is %.2f%%", $hitrate);
 	$sdata .= sprintf(" (%.2f%% from launch)", $hitrate_all) if ($hitrate_all!=0);
 	add_to_statusdata('hitrate',$sdata);
 	if (defined($o_perf)) {
-		preset_perfdata('hitrate',sprintf("hitrate=%.4f%%", $dataresults{'hitrate'}[0]));
+		preset_perfdata('hitrate',$hitrate);
 	}
      }
 }
@@ -1396,7 +1461,7 @@ print $statuscode . ': '.$statusinfo;
 print " - " if $statusinfo;
 # print "MEMCACHED " . $memdversion . ' on ' . $HOSTNAME. ':'. $PORT ' is '. $statuscode . $statusinfo;
 print "MEMCACHED " . $memdversion . ' on ' . $HOSTNAME. ':'. $PORT;
-print ', up '.uptime_info($dataresults{'uptime'}[0]) if defined($dataresults{'uptime'}); 
+print ', up '.uptime_info(get_data('uptime')) if defined(get_data('uptime'));
 print " - " . $statusdata if $statusdata;
 print " | " . $perfdata if $perfdata;
 print "\n";

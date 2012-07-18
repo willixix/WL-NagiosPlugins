@@ -317,22 +317,25 @@
 #
 # TODO or consider for future:
 #
-#  0. Add '--extra-opts' to allow to read options from a file as specified
-#     at http://nagiosplugins.org/extra-opts. This is TODO for all my plugins
+#  1. Library Enhancements (will apply to multiple plugins that share common code)
+#     (a) Add '--extra-opts' to allow to read options from a file as specified
+#         at http://nagiosplugins.org/extra-opts. This is TODO for all my plugins
+#     (b) [DONE] 
+#	  In plans are to allow long options to specify thresholds for known variables.
+#         These would mean you specify '--connected_clients' in similar way to '--hitrate'
+#         Internally these would be convered into -A, -w, -c as appropriate an used
+#         together with these options. So in practice it will now allow to get any data
+#         just a different way to specify options for this plugin. 
+#     (c) Allow regex when selecting variable name(s) with -a, this will be enabled with
+#	  a special option and not be default
 #
-#  1. [DONE] In plans are to allow long options to specify thresholds for known variables.
-#     These would mean you specify '--connected_clients' in similar way to '--hitrate'
-#     Internally these would be convered into -A, -w, -c as appropriate an used
-#     together with these options. So in practice it will now allow to get any data
-#     just a different way to specify options for this plugin. 
-# 
-#  2. REDIS Specific:
-#     - Add option to check from master that slave is connected and working.
-#     - Look into replication delay from master and how it can be done. Look
-#       for into on replication_delay from slave as well
-#     - How to better calculate memory utilization and get max memory available
-#       without directly specifying it
-#     - Maybe special options to measure cpu use and set thresholds
+#  2. REDIS Specific
+#     (a) Add option to check from master that slave is connected and working.
+#     (b) Look into replication delay from master and how it can be done. Look
+#         for into on replication_delay from slave as well
+#     (c) How to better calculate memory utilization and get max memory available
+#         without directly specifying it
+#     (d) Maybe special options to measure cpu use and set thresholds
 #
 #  Others are welcome recommand a new feature to be added here. If so please email to 
 #         william@leibzon.org.
@@ -512,7 +515,7 @@ General and Server Connection Options:
  -H, --hostname=ADDRESS
    Hostname or IP Address to check
  -p, --port=INTEGER
-   port number (default: 3306)
+   port number (default: 6379)
  -D, --database=NAME
    optional database name (usually a number), needed for --query but otherwise not needed
  -x, --password=STRING

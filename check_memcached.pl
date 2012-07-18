@@ -385,7 +385,7 @@ sub help {
    print "Memcache Check for Nagios version ",$Version,"\n";
    print " by William Leibzon - william(at)leibzon.org\n\n";
    print "This is memcache monitoring plugin, it lets you do threshold checks on status variables\n";
-   print "and returnes performance data for graphing and further processing. The plugin also measures\n"
+   print "and returns performance data for graphing and further processing. The plugin also measures\n";
    print "access time and calculates hitrate and memory utilization\n\n";
    print_usage_line();
    print <<EOT;
@@ -528,6 +528,7 @@ my $statuscode = "OK";		# final status code
 my $statusinfo = "";		# if there is an error, this has human info about what it is
 my $statusdata = "";		# if there is no error but we want some data in status line, this var gets it
 my $perfdata = "";		# this variable collects performance data line
+my %prev_perf=  ();             # array that is populated with previous performance data
 
 sub div_mod { return int( $_[0]/$_[1]) , ($_[0] % $_[1]); }
 
@@ -782,8 +783,8 @@ sub dataresults_addvar {
     }
     if (defined($o_perfvars) && $o_perfvars eq '*') {
         $thresholds{$dnam}={} if !exists($thresholds{$dnam});
-	if (!$thresholds{$dnam}{'PERF'}) {
-	    push @perVars, $dnam;
+	if (!defined($thresholds{$dnam}{'PERF'})) {
+	    push @perfVars, $dnam;
 	    $thresholds{$dnam}{'PERF'} = 'YES';
 	}
     }
@@ -914,7 +915,7 @@ sub thresholds_add_optionsline {
 #  ARG2: type of threshold - WARN,CRIT,ABSENT,ZERO,PERF,DISPLAY
 sub get_threshold {
   my ($var,$thname) = @_;
-  return undef if !exists($thresholds{$var}) || !exists($threshlds{$var}{$thname});
+  return undef if !exists($thresholds{$var}) || !exists($thresholds{$var}{$thname});
   return $thresholds{$var}{$thname};
 }
 
@@ -1386,7 +1387,7 @@ $memd->disconnect_all;
 # Response Time
 if (defined($o_timecheck)) {
     dataresults_addvar('response_time',Time::HiRes::tv_interval($start_time));
-    add_to_statusdata('response_time',sprintf(" response in %.3fs",get_data('response_time'));
+    add_to_statusdata('response_time',sprintf("response in %.3fs",get_data('response_time')));
     if (defined($o_perf)) {
         preset_perfdata('response_time','response_time='.get_data('response_time').'s');
     }
@@ -1457,10 +1458,11 @@ main_checkvars();
 main_perfvars();
 
 # now output the results
+print "MEMCACHE ";
 print $statuscode . ': '.$statusinfo;
 print " - " if $statusinfo;
 # print "MEMCACHED " . $memdversion . ' on ' . $HOSTNAME. ':'. $PORT ' is '. $statuscode . $statusinfo;
-print "MEMCACHED " . $memdversion . ' on ' . $HOSTNAME. ':'. $PORT;
+print "memcached " . $memdversion . ' on ' . $HOSTNAME. ':'. $PORT;
 print ', up '.uptime_info(get_data('uptime')) if defined(get_data('uptime'));
 print " - " . $statusdata if $statusdata;
 print " | " . $perfdata if $perfdata;

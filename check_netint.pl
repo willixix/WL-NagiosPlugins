@@ -2,7 +2,7 @@
 #
 # =============================== SUMMARY =====================================
 #
-# Program : check_snmp_netint.pl
+# Program : check_netint.pl or check_snmp_netint.pl
 # Version : 2.4 alpha 1
 # Date    : July 7, 2012
 # Maintainer: William Leibzon - william@leibzon.org,
@@ -10,7 +10,7 @@
 # Licence : GPL - summary below, full text at http://www.fsf.org/licenses/gpl.txt
 #
 #  ********************* IMPORTANT NOTE ABOUT THIS VERSION ********************
-#  ***  THIS IS AN ALPHA/DEVELOPMENT RELEASE WHICH HAS NOT BEEN TESTED      ***
+#  *** THIS IS AN ALPHA/DEVELOPMENT RELEASE WHICH HAS NOT BEEN FULLY TESTED ***
 #  *** IF YOU NEED A STABLE VERSION, PLEASE GET 2.36 VERSION OF THIS PLUGIN ***
 #  *** AT HTTP://william.leibzon.org/nagios/ or http://exchange.nagios.org/ ***
 #  ****************************************************************************
@@ -526,11 +526,11 @@
 #		       future FreeBSD, Sun and other systems maybe supported too.
 #		       Checking of local interfaces happens if you do not specify -H and
 #		       snmp (-O, -C, etc) options and if plugin name does not start with
-#		       "check_snmp". For local interfaces options as --stp and --cisco
-#		       are obviously not valid, optimization options -m and -mm also
-#		       do not work same way since plugin will always get all data locally.
+#		       "check_snmp". For local interfaces options like --stp and --cisco
+#		       are not valid, and optimization options -m and -mm also do not
+#		       work same way since plugin will always get all data locally.
 #		    2) The plugin no longer requires -n (interface name) option
-#		       though I still strongly recommend you use it. When interface
+#		       though its still recommended you use it. When interface
 #		       name is not specified, all interfaces will be checked.
 #		    3) If with -F option directory is given instead of a file this
 #		       will became base directory to write temporary file to.

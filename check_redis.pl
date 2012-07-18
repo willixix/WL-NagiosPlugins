@@ -650,6 +650,8 @@ EOT
   printf("\n");
 }
 
+############################ START OF THE LIBRARY FUNCTIONS #################################
+
 sub div_mod { return int( $_[0]/$_[1]) , ($_[0] % $_[1]); }
 
 # this converts uptime in seconds to nice & short output format
@@ -666,8 +668,6 @@ sub uptime_info {
   $upinfo .= (($upinfo ne '')?' ':'').$secs." seconds" if $secs>0 && $days==0 && $hrs==0; 
   return $upinfo;
 }
-
-############################ START OF THE LIBRARY FUNCTIONS #################################
 
 # For verbose output (updated 06/06/12 to write to debug file if specified)
 sub verb {

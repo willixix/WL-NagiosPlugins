@@ -3,8 +3,8 @@
 # ============================== SUMMARY =====================================
 #
 # Program : check_redis.pl
-# Version : 0.6
-# Date    : July 17, 2012
+# Version : 0.61
+# Date    : Aug 03, 2012
 # Author  : William Leibzon - william@leibzon.org
 # Licence : GPL - summary below, full text at http://www.fsf.org/licenses/gpl.txt
 #
@@ -207,7 +207,8 @@
 #      -q, --query=query_type,key[:varname]<,list of threshold specifiers>
 #
 #  query_type is one of:
-#	GET - get one value
+#	GET  - get one value
+#       LLEN - returns number of items in a list/set
 #	LRANGE:AVG:start:end - retrieve list and average results
 #	LRANGE:SUM:start:end - retrieve list and sum results
 #	LRANGE:MIN:start:end - retrieve list and return minimum
@@ -314,6 +315,7 @@
 #			   --connected_clients=WARN:threshold,CRIT:threshold
 #			 and added DISPLAY:YES|NO and PERF specifiers for above too.
 #			 Added -D option to specify database needed for --query
+#  [0.61 - Aug 03, 2012] Addded LLEN as a type for key query
 #
 # TODO or consider for future:
 #
@@ -575,7 +577,8 @@ Performance Data Processing Options:
 Key Data Query Option (maybe repeated more than once):
  -q, --query=query_type,key[:varname][,ABSENT:OK|WARNING|CRITICAL,WARN:threshold,CRIT:threshold]
    query_type is one of:
-	GET - get one value
+	GET  - get one data value
+	LLEN - number of items in a list
 	LRANGE:AVG:start:end - retrieve list and average results
 	LRANGE:SUM:start:end - retrieve list and sum results
 	LRANGE:MIN:start:end - retrieve list and return minimum
@@ -1259,7 +1262,7 @@ sub option_query {
 	  # how to query
 	  my @key_querytype = split(':', uc shift @ar);
 	  verb("- processing query type specification: ".join(':',@key_querytype));
-	  if ($key_querytype[0] eq 'GET') {}
+	  if ($key_querytype[0] eq 'GET' || $key_querytype[0] eq 'LLEN') {}
 	  elsif ($key_querytype[0] eq 'LRANGE') {
 		if (scalar(@key_querytype)<2 || scalar(@key_querytype)>4) {
                 	print "Incorrect specification of LRANGE. Must include type and start and end range.\n";
@@ -1274,7 +1277,7 @@ sub option_query {
 		}
 	  }
 	  else {
-		print "Invalid key query $key_querytype[0]. Currently supported are GET and LRANGE.\n";
+		print "Invalid key query $key_querytype[0]. Currently supported are GET, LLEN and LRANGE.\n";
 		print_usage();
 		exit $ERRORS{"UNKNOWN"};
 	  }
@@ -1504,6 +1507,10 @@ for (my $i=0; $i<scalar(@query);$i++) {
   if ($query[$i]{'query_type'} eq 'GET') {
 	verb("Getting redis key: ".$query[$i]{'key_query'});
   	$result  = $redis->get($query[$i]{'key_query'});
+  }
+  elsif ($query[$i]{'query_type'} eq 'LLEN') {
+	verb("Getting number of items for set pointed by redis key: ".$query[$i]{'key_query'});
+  	$result  = $redis->llen($query[$i]{'key_query'});
   }
   elsif ($query[$i]{'query_type'} eq 'LRANGE') {
 	my $range_start;

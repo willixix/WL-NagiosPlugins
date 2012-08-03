@@ -1528,7 +1528,7 @@ my $dsn = $HOSTNAME.":".$PORT;
 verb("connecting to $dsn"); 
 $start_time = [ Time::HiRes::gettimeofday() ] if defined($o_timecheck);
 
-$redis = Redis-> new ( server => $dsn );
+$redis = Redis-> new ( server => $dsn, 'debug' => (defined($o_verb))?1:0 );
 
 if ($PASSWORD) {
     $redis->auth($PASSWORD);
@@ -1622,10 +1622,13 @@ for (my $i=0; $i<scalar(@query);$i++) {
 		$result = $result / (scalar(@list)+1) if $query[$i]{'query_subtype'} eq 'AVG';
 	}
   }
-  if (defined($result) && $result) {
+  if (defined($result)) {
       $query[$i]{'result'} = $result;
       dataresults_addvar($query[$i]{'key_name'}, $result);
       verb("Result of querying ".$query[$i]{'key_query'}." is: $result");
+  }
+  else {
+      verb("could not get results for ".$query[$i]{'key_query'});
   }
   # else {
   #    if (exists($query[$i]{'alert'}) && $query[$i]{'alert'} ne 'OK') {

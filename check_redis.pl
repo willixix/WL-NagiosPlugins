@@ -207,12 +207,23 @@
 #      -q, --query=query_type,key[:varname]<,list of threshold specifiers>
 #
 #  query_type is one of:
-#	GET  - get one value
-#       LLEN - returns number of items in a list/set
+#	GET   - get one string value
+#       LLEN  - returns number of items in a list
 #	LRANGE:AVG:start:end - retrieve list and average results
 #	LRANGE:SUM:start:end - retrieve list and sum results
 #	LRANGE:MIN:start:end - retrieve list and return minimum
 #	LRANGE:MAX:start:end - retrieve list and return maximum
+#       HLEN  - returns number of items in a hash [TODO]
+#       HGET:name  - get specific hash key 'name' [TODO]
+#       HEXISTS:name - returns 0 or 1 depending on if specified hash key 'name' exists [TODO]
+#       SLEN  - returns number of items in a set [TODO, SCARD redis opp]
+#       SEXISTS:name - returns 0 or 1 depending on if set member 'name' exists [SISMEMBER, TODO]
+#       ZLEN  - returns number of items in a sorted set [TODO, ZCARD redis opp] 
+#       ZCOUNT:min:max - counts number of items in sorted set with scores within the given values
+#       ZRANGE:AVG:min:max - retrieve sorted set members from min to max and average results
+#       ZRANGE:SUM:min:max - retrieve sorted set members from min to max and sum results
+#       ZRANGE:MIN:min:max - retrieve sorted set members from min to max list and return minimum
+#       ZRANGE:MAX:min:max- retrieve sorted set memers from min to max and return maximum
 #   For LRANGE if you do not specify start and end, then start will be  0 and end
 #   is last value in the list pointed to by this key (found by using llen).
 #
@@ -315,7 +326,10 @@
 #			   --connected_clients=WARN:threshold,CRIT:threshold
 #			 and added DISPLAY:YES|NO and PERF specifiers for above too.
 #			 Added -D option to specify database needed for --query
-#  [0.61 - Aug 03, 2012] Addded LLEN as a type for key query
+#  [0.61 - Aug 03, 2012] Added more types of key query for lists, sets, hashes
+#			 and options to find number of elements in a list/set/hash.
+#		         New options added are:
+#			   LLEN,HLEN,SLEN,ZLEN,HGET,HEXISTS,SEXISTS,ZRANGE
 #
 # TODO or consider for future:
 #
@@ -371,7 +385,7 @@ if ($@) {
  %ERRORS = ('OK'=>0,'WARNING'=>1,'CRITICAL'=>2,'UNKNOWN'=>3,'DEPENDENT'=>4);
 }
 
-my $Version='0.6';
+my $Version='0.61';
 
 # This is a list of known stat and info variables including variables added by plugin,
 # used in order to designate COUNTER variables with 'c' in perfout for graphing programs
@@ -491,7 +505,7 @@ my $perfdata = "";		# this variable collects performance data line
 sub p_version { print "check_redis.pl version : $Version\n"; }
 
 sub print_usage_line {
-   print "Usage: $0 [-v [debugfilename]] -H <host> [-p <port>] [-x password | -C credentials_file] [-D <database>] [-a <statistics variables> -w <variables warning thresholds> -c <variables critical thresholds>] [-A <performance output variables>] [-T [conntime_warn,conntime_crit]] [-R [hitrate_warn,hitrate_crit]] [-m [mem_utilization_warn,mem_utilization_crit] [-M <maxmemory>[B|K|M|G]]] [-r replication_delay_time_warn,replication_delay_time_crit]  [-f] [-T <timeout>] [-V] [-P <previous performance data in quoted string>] [-q (GET|LRANGE:(AVG|SUM|MIN|MAX):start:end),query_type,query_key_name[:data_name][,ABSENT:WARNING|CRITICAL][,WARN:threshold,CRIT:threshold]] \n";
+   print "Usage: $0 [-v [debugfilename]] -H <host> [-p <port>] [-x password | -C credentials_file] [-D <database>] [-a <statistics variables> -w <variables warning thresholds> -c <variables critical thresholds>] [-A <performance output variables>] [-T [conntime_warn,conntime_crit]] [-R [hitrate_warn,hitrate_crit]] [-m [mem_utilization_warn,mem_utilization_crit] [-M <maxmemory>[B|K|M|G]]] [-r replication_delay_time_warn,replication_delay_time_crit]  [-f] [-T <timeout>] [-V] [-P <previous performance data in quoted string>] [-q (GET|LLEN|HLEN|SLEN|ZLEN|HGET:name|HEXISTS:name|SEXISTS:name|LRANGE:(AVG|SUM|MIN|MAX):start:end|ZRANGE:(AVG|SUM|MIN|MAX):start:end),query_type,query_key_name[:data_name][,ABSENT:WARNING|CRITICAL][,WARN:threshold,CRIT:threshold]] \n";
 }
 
 sub print_usage {
@@ -577,12 +591,24 @@ Performance Data Processing Options:
 Key Data Query Option (maybe repeated more than once):
  -q, --query=query_type,key[:varname][,ABSENT:OK|WARNING|CRITICAL,WARN:threshold,CRIT:threshold]
    query_type is one of:
-	GET  - get one data value
-	LLEN - number of items in a list
+	GET          - get one data value
+	LLEN         - number of items in a list
 	LRANGE:AVG:start:end - retrieve list and average results
 	LRANGE:SUM:start:end - retrieve list and sum results
 	LRANGE:MIN:start:end - retrieve list and return minimum
 	LRANGE:MAX:start:end - retrieve list and return maximum
+        HLEN  	     - returns number of items in a hash
+        HGET:name    - get specific hash key 'name'
+        HEXISTS:name - returns 0 or 1 depending on if specified hash key 'name' exists
+        SLEN	     - returns number of items in a set 
+        SEXISTS:name - returns 0 or 1 depending on if set member 'name' exists
+        ZLEN	     - returns number of items in a sorted set
+        ZCOUNT:min:max     - counts items in sorted set with scores within the given values
+        ZRANGE:AVG:min:max - retrieve sorted set members from min to max and average results
+        ZRANGE:SUM:min:max - retrieve sorted set members from min to max and sum results
+        ZRANGE:MIN:min:max - retrieve sorted set members from min to max list and return minimum
+        ZRANGE:MAX:min:max - retrieve sorted set memers from min to max and return maximum
+
    Option specifies key to query and optional variable name to assign the results to after :
    (if not specified it would be same as key). If key is not available the plugin can issue
    either warning or critical alert depending on what you specified after ABSENT.
@@ -1262,35 +1288,64 @@ sub option_query {
 	  # how to query
 	  my @key_querytype = split(':', uc shift @ar);
 	  verb("- processing query type specification: ".join(':',@key_querytype));
-	  if ($key_querytype[0] eq 'GET' || $key_querytype[0] eq 'LLEN') {}
-	  elsif ($key_querytype[0] eq 'LRANGE') {
-		if (scalar(@key_querytype)<2 || scalar(@key_querytype)>4) {
-                	print "Incorrect specification of LRANGE. Must include type and start and end range.\n";
+	  $query[$i] = { 'query_type' => $key_querytype[0] }; 
+	  if ($key_querytype[0] eq 'GET' || $key_querytype[0] eq 'LLEN' ||
+	      $key_querytype[0] eq 'SLEN' || $key_querytype[0] eq 'HLEN' ||
+	      $key_querytype[0] eq 'ZLEN') { 
+               if (scalar(@key_querytype)!=1) {
+                        print "Incorrect specification. GET, LLEN, SLEN, HLEN, ZLEN do not have any arguments\n";
+                        print_usage();
+                        exit $ERRORS{"UNKNOWN"};
+                }
+	  }
+	  elsif ($key_querytype[0] eq 'HGET' || $key_querytype[0] eq 'HEXISTS' ||
+		 $key_querytype[0] eq 'SEXISTS') {
+               if (scalar(@key_querytype)!=2) {
+                        print "Incorrect specification of HGET, HEXISTS or SEXIST. Must include hash or set member name as an argument.\n";
+                        print_usage();
+                        exit $ERRORS{"UNKNOWN"};
+                }
+                $query[$i]{'element_name'} = $key_querytype[1];
+	  }
+	  elsif ($key_querytype[0] eq 'LRANGE' || $key_querytype[0] eq 'ZRANGE') {
+		if ($key_querytype[0] eq 'ZRANGE' && scalar(@key_querytype)!=4) {
+			print "Incorrect specification of ZRANGE. Must include type and start and end (min and max scores).\n";
 			print_usage();
 			exit $ERRORS{"UNKNOWN"};
 		}
+                elsif ($key_querytype[0] eq 'LRANGE' && (scalar(@key_querytype)<2 || scalar(@key_querytype)>4)) {
+                        print "Incorrect specification of LRANGE. Must include type and start and end range.\n";
+                        print_usage();
+                        exit $ERRORS{"UNKNOWN"};
+                }
 		elsif ($key_querytype[1] ne 'MAX' && $key_querytype[1] ne 'MIN' &&
 		    $key_querytype[1] ne 'AVG' && $key_querytype[1] ne 'SUM') {
-			print "Invalid LRANGE type $key_querytype[1]. This must be either MAX or MIN or AVG or SUM\n";
+			print "Invalid LRANGE/ZRANGE type $key_querytype[1]. This must be either MAX or MIN or AVG or SUM\n";
 			print_usage();
 			exit $ERRORS{"UNKNOWN"};
 		}
+		$query[$i]{'query_subtype'} = $key_querytype[1];
+		$query[$i]{'query_range_start'} = $key_querytype[2] if defined($key_querytype[2]);
+		$query[$i]{'query_range_end'} = $key_querytype[3] if defined($key_querytype[3]);
 	  }
 	  else {
-		print "Invalid key query $key_querytype[0]. Currently supported are GET, LLEN and LRANGE.\n";
+		print "Invalid key query $key_querytype[0]. Currently supported are GET, LLEN, SLEN, HLEN, ZLEN, HGET, HEXISTS, SEXISTS,  LRANGE and ZRANGE.\n";
 		print_usage();
 		exit $ERRORS{"UNKNOWN"};
 	  }
 	  # key to query and how to name it
+	  if (scalar(@ar)==0) {
+		print "Invalid query specification. Missing query key name\n";
+		print_usage();
+		exit $ERRORS{"UNKNOWN"};
+	  }
           my ($key_query,$key_name) = split(':', shift @ar);
 	  $key_name = $key_query if !defined($key_name) || ! $key_name;
 	  verb("- variable $key_name will receive data from $key_query");
-	  # parse thresholds and finish processing assigning values to arrays
-	  my $th = parse_thresholds_optionsline(join(',',@ar));
-	  $query[$i] = { 'key_query' => $key_query, 'key_name' => $key_name, 'query_type' => $key_querytype[0] };
-	  $query[$i]{'query_subtype'} = $key_querytype[1] if defined($key_querytype[1]);
-          $query[$i]{'query_range_start'} = $key_querytype[2] if defined($key_querytype[2]);
-	  $query[$i]{'query_range_end'} = $key_querytype[3] if defined($key_querytype[3]);
+	  $query[$i]{'key_query'} = $key_query;
+	  $query[$i]{'key_name'} = $key_name;
+          # parse thresholds and finish processing assigning values to arrays
+          my $th = parse_thresholds_optionsline(join(',',@ar));
 	  if (exists($th->{'ABSENT'})) {
 	      verb("- ".$th->{'ABSENT'}." alert will be issued if $key_query is not present");
 	      $query[$i]{'alert'} = $th->{'ABSENT'};
@@ -1417,12 +1472,6 @@ sub check_options {
     # query option processing
     option_query();
 
-    # if (scalar(@o_varsL)==0 && scalar(@o_perfvarsL)==0) {
-    #	print "You must specify list of attributes with either '-a' or '-A'\n";
-    #	print_usage();
-    #	exit $ERRORS{"UNKNOWN"};
-    #    }
-
     # finish it up
     options_processprevperf();
     options_setthresholds();
@@ -1509,10 +1558,34 @@ for (my $i=0; $i<scalar(@query);$i++) {
   	$result  = $redis->get($query[$i]{'key_query'});
   }
   elsif ($query[$i]{'query_type'} eq 'LLEN') {
-	verb("Getting number of items for set pointed by redis key: ".$query[$i]{'key_query'});
+	verb("Getting number of items for list with redis key: ".$query[$i]{'key_query'});
   	$result  = $redis->llen($query[$i]{'key_query'});
   }
-  elsif ($query[$i]{'query_type'} eq 'LRANGE') {
+  elsif ($query[$i]{'query_type'} eq 'HLEN') {
+        verb("Getting number of items for hash with redis key: ".$query[$i]{'key_query'});
+        $result  = $redis->hlen($query[$i]{'key_query'});
+  }
+  elsif ($query[$i]{'query_type'} eq 'SLEN') {
+        verb("Getting number of items for set with redis key: ".$query[$i]{'key_query'});
+        $result  = $redis->scard($query[$i]{'key_query'});
+  }
+  elsif ($query[$i]{'query_type'} eq 'ZLEN') {
+        verb("Getting number of items for sorted set with redis key: ".$query[$i]{'key_query'});
+        $result  = $redis->zcard($query[$i]{'key_query'});
+  }
+  elsif ($query[$i]{'query_type'} eq 'HGET') {
+        verb("Getting hash member ".$query[$i]{'element_name'}." with redis key: ".$query[$i]{'key_query'});
+        $result  = $redis->hget($query[$i]{'key_query'},$query[$i]{'element_name'});
+  }
+  elsif ($query[$i]{'query_type'} eq 'HEXISTS') {
+        verb("Checking if there exists hash member ".$query[$i]{'element_name'}." with redis key: ".$query[$i]{'key_query'});
+        $result  = $redis->hexists($query[$i]{'key_query'},$query[$i]{'element_name'});
+  }
+  elsif ($query[$i]{'query_type'} eq 'SEXISTS') {
+        verb("Checking if there exists set member ".$query[$i]{'element_name'}." with redis key: ".$query[$i]{'key_query'});
+        $result  = $redis->sismember($query[$i]{'key_query'},$query[$i]{'element_name'});
+  }
+  elsif ($query[$i]{'query_type'} eq 'LRANGE' || $query[$i]{'query_type'} eq 'ZRANGE') {
 	my $range_start;
 	my $range_end;
 	if (defined($query[$i]{'query_range_start'}) && $query[$i]{'query_range_start'} ne '') {
@@ -1522,14 +1595,24 @@ for (my $i=0; $i<scalar(@query);$i++) {
 	    $range_start=0;
 	}
 	if (defined($query[$i]{'query_range_end'}) && $query[$i]{'query_range_end'} ne '') {
-	    $range_end= $query[$i]{'query_range_end'} if defined
+	    $range_end= $query[$i]{'query_range_end'}; 
 	}
-	else {
+	elsif ($query[$i]{'query_type'} eq 'LRANGE') {
 	    verb("Getting (lrange) redis key: ".$query[$i]{'key_query'});
 	    $range_end = $redis->llen($query[$i]{'key_query'})-1;
 	}
-	my @list = $redis->lrange($query[$i]{'key_query'}, $range_start, $range_end);
-	   if (scalar(@list)>0) {
+	else {
+	    print "ERROR - can not do ZRANGE if you do not specify mix and max score.";
+	    exit $ERRORS{"UNKNOWN"};
+	}
+	my @list;
+	if ($query[$i]{'query_type'} eq 'LRANGE') {
+	   @list = $redis->lrange($query[$i]{'key_query'}, $range_start, $range_end);
+	}
+	else {
+	   @list = $redis->zrange($query[$i]{'key_query'}, $range_start, $range_end);
+	}
+	if (scalar(@list)>0) {
 		$result=shift @list;
 		foreach(@list) {
 		    $result+=$_ if $query[$i]{'query_subtype'} eq 'SUM' || $query[$i]{'query_subtype'} eq 'AVG';

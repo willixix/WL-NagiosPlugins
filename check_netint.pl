@@ -3,8 +3,8 @@
 # =============================== SUMMARY =====================================
 #
 # Program : check_netint.pl or check_snmp_netint.pl
-# Version : 2.4 alpha 1
-# Date    : July 7, 2012
+# Version : 2.4 alpha 2 
+# Date    : Aug 15, 2012
 # Maintainer: William Leibzon - william@leibzon.org,
 # Authors : See "CONTRIBUTORS" documentation section
 # Licence : GPL - summary below, full text at http://www.fsf.org/licenses/gpl.txt
@@ -535,6 +535,10 @@
 #		    3) If with -F option directory is given instead of a file this
 #		       will became base directory to write temporary file to.
 #		    4) Many doc and code fixes and cleanups all over
+# 2.4a2 - 08/15/12 - Fixed bug with cache of previous data for SNMP queries that came
+#		     around due to change in logic and introduction of non-SNMP.
+#		     Added experimental support for future Nagios 4.0 SAVEDDATA feature
+#		     (plugin output after || after perfdata). Enaled with --nagios4 option
 #
 # ============================ LIST OF CONTRIBUTORS ===============================
 #
@@ -673,8 +677,9 @@ my $o_perfr=            undef;  # output performance data in bits/s or Bytes/s (
 my $o_perfo=            undef;  # output performance data in octets (-Z)
 
 # WL: These are for previous performance data that nagios can send data to the plugin
-# with $SERVICEPERFDATA$ macro. This allows to calculate traffic without temporary
-# file and also used to cache SNMP table info so as not to retreive it every time 
+# with $SERVICEPERFDATA$ macro (and starting with Nagios 4.0 $SERVICESAVEDDATA$ macro).
+# This allows to calculate traffic without temporary file and also used to cache
+# SNMP table info so as not to retreive it every time 
 my $o_prevperf=		undef;	# performance data given with $SERVICEPERFDATA$ macro
 my $o_prevtime=         undef;  # previous time plugin was run $LASTSERVICECHECK$ macro
 my @o_minsnmp=		();     # see below
@@ -682,6 +687,7 @@ my $o_minsnmp=		undef;	# minimize number of snmp queries
 my $o_maxminsnmp=	undef;  # minimize number of snmp queries even futher (slightly less safe in case of switch config changes)
 my $o_filestore=        undef;  # path of the file to store cached data in - overrides $o_base_dir
 my $o_pcount=		2;	# how many sets of previous data should be in performance data
+my $o_nagios4=		undef;	# enaled SAVEDDATA special output after ||
 
 # These are unrelated WL's contribs to override default description OID 1.3.6.1.2.1.2.2.1.2 and for stp and cisco m[a|y]stery
 my $o_descroid=         undef;  # description oid, overrides $descr_table
@@ -796,7 +802,7 @@ sub help {
    prints plugin version number (required of all nagios plugins)
 -t, --timeout=INTEGER
    timeout in seconds (Default: 5). if SNMP this is timeout for SNMP response
--v, --verbose[=FILENAME], -debug=FILENAME
+-v, --verbose[=FILENAME], --debug=FILENAME
    Print extra debugging information (including interface list on the system)
    If filename is specified instead of STDOUT the debug data is written to that file
 
@@ -895,6 +901,10 @@ Options for saving results of previous checks to calcuate Traffic & Utilization:
    file will be saved in this directory, otherwise /tmp is used.
    If parameter is a filename then it is used as a first part in
    how temporary file is named.
+--nagios4
+   Enables experimental support for future Nagios 4.0 SAVEDATA (output after ||)
+   where cached data for next plugin use goes to special buffer and not PERFDATA
+   [THIS IS AN EXPERIMENTAL OPTION THAT MAY BE REMOVED IN THE FUTURE]
 
 SNMP Authentication options and options valid only with SNMP:
 
@@ -1057,7 +1067,8 @@ sub check_options {
 	'pcount:i' => \$o_pcount,
 	'm'	=> \@o_minsnmp,		'minimize_queries' => \$o_minsnmp,  'minimum_queries'    => \$o_maxminsnmp,
 	'F:s'   => \$o_filestore,       'filestore:s' => \$o_filestore,
-	'cisco:s' => \$o_ciscocat,	'stp:s' =>	\$o_stp
+	'cisco:s' => \$o_ciscocat,	'stp:s' =>	\$o_stp,
+	'nagios4' => \$o_nagios4
     );
     if (defined ($o_help) ) { help(); exit $ERRORS{"UNKNOWN"}};
     if (defined($o_version)) { p_version(); exit $ERRORS{"UNKNOWN"}};
@@ -1408,7 +1419,9 @@ if (!$no_snmp && defined($o_minsnmp) && %prev_perf) {
    my @descr = split(',', $prev_perf{cache_descr_names}) if exists($prev_perf{cache_descr_names});
 
    # clear old index if anything seems wrong with cached data
-   @tindex = () if (scalar(@tindex) != scalar(@descr)) ||
+   my %tindex_hash = map { $_ => 1 } @tindex;
+   @tindex = () if (scalar(@tindex) != scalar(keys %tindex_hash)) || # make sure no duplicates
+		   (scalar(@tindex) != scalar(@descr)) ||
 		   (defined($o_ciscocat) && (!exists($prev_perf{cache_descr_cport}) || scalar(@tindex) != scalar(@cport))) ||
 		   (defined($o_stp) && (!exists($prev_perf{cache_descr_stpport}) || scalar(@tindex) != scalar(@stpport))) ||
 		   (exists($prev_perf{cache_int_speed}) && scalar(@tindex) != scalar(@portspeed)) ||
@@ -1570,7 +1583,7 @@ if ($no_snmp) {
    }
    close(SHELL_DATA);
 }
-else {
+elsif (scalar(@tindex)==0) {
    # WL: Get cisco port->ifindex map table
    if (defined($o_ciscocat)) {
 	$resultp = $session->get_table(
@@ -1848,13 +1861,13 @@ my $ok_val= defined ($o_inverse) ? 2 : 1;
 my $final_status = 0;
 my $print_out='';
 my $perf_out='';
+my $saved_out='';
 
 # make all checks and output for all interfaces
 for (my $i=0;$i < $num_int; $i++) { 
   $print_out.=", " if ($print_out);
   $perf_out .= " " if ($perf_out);
   my $usable_data=1; # 0 is OK, 1 means its not OK
-
 
   # Get the status of the current interface
   my $int_status = $ok_val;
@@ -1894,7 +1907,7 @@ for (my $i=0;$i < $num_int; $i++) {
             printf("ERROR: Cached port description ".$interfaces[$i]{'descr'}." is different then retrieved port name ".$dsc);
             exit $ERRORS{"UNKNOWN"};
       }
-      verb("Name : $dsc [confimed cached name for port $i]");
+      verb("Name : $dsc [confirmed cached name for port $i]");
   }
 
   # WL: moved it here so its not repeated and to account for additional name from comments table
@@ -2114,7 +2127,7 @@ for (my $i=0;$i < $num_int; $i++) {
     }
     verb("Previous data array created: $n_rows rows");
 
-    # Load data from SNMP if it that's how we got them
+    # Load data from SNMP if that's how we got them
     if (!$no_snmp && defined($$resultf{$oid_perf_inoct[$i]}) && defined($$resultf{$oid_perf_outoct[$i]})) {
 	$interfaces[$i]{'in_bytes'}=$$resultf{$oid_perf_inoct[$i]};
 	$interfaces[$i]{'out_bytes'}=$$resultf{$oid_perf_outoct[$i]};
@@ -2345,11 +2358,15 @@ for (my $i=0;$i < $num_int; $i++) {
 	}
     }
     # output in octet counter
-    if (defined($o_perfo) || defined($o_prevperf)) {
+    if (defined($o_perfo) || (defined($o_prevperf) && !defined($o_nagios4))) {
         $perf_out .= " ".perf_name($descr,"in_octet")."=". $interfaces[$i]{'in_bytes'}."c";
         $perf_out .= " ".perf_name($descr,"out_octet")."=". $interfaces[$i]{'out_bytes'}."c";
         # $perf_out .= " ".perf_name($descr,"in_octet")."=". $$resultf{$oid_perf_inoct[$i]} ."c" if defined($oid_perf_inoct[$i]) && defined($$resultf{$oid_perf_inoct[$i]});
         # $perf_out .= " ".perf_name($descr,"out_octet")."=". $$resultf{$oid_perf_outoct[$i]} ."c" if defined($oid_perf_outoct[$i]) && defined($$resultf{$oid_perf_outoct[$i]});
+    }
+    if (defined($o_prevperf) && defined($o_nagios4)) {
+        $saved_out .= " ".perf_name($descr,"in_octet")."=". $interfaces[$i]{'in_bytes'};
+        $saved_out .= " ".perf_name($descr,"out_octet")."=". $interfaces[$i]{'out_bytes'};
     }
     if (defined ($o_perfe) && defined($o_ext_checkperf)) {
         $perf_out .= " ".perf_name($descr,"in_error")."=". $interfaces[$i]{'in_errors'};
@@ -2375,23 +2392,23 @@ if (defined($o_minsnmp) && defined($o_prevperf)) {
 	  $descr[$iii]=$interfaces[$iii]{'descr'};
 	  $portspeed[$iii]=$interfaces[$iii]{'portspeed'};
       }
-      $perf_out.= " cache_descr_ids=". join(',',@tindex) if scalar(@tindex)>0;
-      $perf_out.= " cache_descr_names=".join(',',@descr) if scalar(@descr)>0;
-      $perf_out.= " cache_descr_time=".$perfcache_time if defined($perfcache_time);
-      $perf_out.= " cache_int_speed=". join(',',@portspeed) if $check_speed && scalar(@portspeed)>0 && defined($o_maxminsnmp) && $expected_speed==0;
+      $saved_out.= " cache_descr_ids=". join(',',@tindex) if scalar(@tindex)>0;
+      $saved_out.= " cache_descr_names=".join(',',@descr) if scalar(@descr)>0;
+      $saved_out.= " cache_descr_time=".$perfcache_time if defined($perfcache_time);
+      $saved_out.= " cache_int_speed=". join(',',@portspeed) if $check_speed && scalar(@portspeed)>0 && defined($o_maxminsnmp) && $expected_speed==0;
       if (defined($o_ciscocat)) {
 	  $cport[0]=-1 if scalar(@cport)==0;
-      	  $perf_out.= " cache_descr_cport=".join(',',@cport);
+      	  $saved_out.= " cache_descr_cport=".join(',',@cport);
 	  if (scalar(keys %copt)>0) {
-		$perf_out.= " cache_cisco_opt=".join(',',keys %copt);
+		$saved_out.= " cache_cisco_opt=".join(',',keys %copt);
 	  }
 	  elsif (scalar(keys %copt_next)>0) {
-	  	$perf_out.= " cache_cisco_opt=".join(',',keys %copt_next);
+	  	$saved_out.= " cache_cisco_opt=".join(',',keys %copt_next);
 	  }
       }
       if (defined($o_stp)) {
 	  $stpport[0]=-1 if scalar(@stpport)==0;
-          $perf_out.= " cache_descr_stpport=".join(',',@stpport);
+          $saved_out.= " cache_descr_stpport=".join(',',@stpport);
       }
 }
 # Add additional sets of previous performance data
@@ -2407,24 +2424,24 @@ if (defined($o_prevperf) && $o_pcount>0) {
         $pnpref='' if defined($prev_perf{ptime}) && $prev_perf{ptime} eq $loop_time;
         if (defined($prev_perf{perf_name($interfaces[$i]{'descr'},'in_octet'.$pnpref)}) &&
 	    defined($prev_perf{perf_name($interfaces[$i]{'descr'},'in_octet'.$pnpref)})) {
-	  $perf_out .= " ".perf_name($interfaces[$i]{'descr'},'in_octet.'.$loop_time).'='.$prev_perf{perf_name($interfaces[$i]{'descr'},'in_octet'.$pnpref)};
-	  $perf_out .= " ".perf_name($interfaces[$i]{'descr'},'out_octet.'.$loop_time).'='.$prev_perf{perf_name($interfaces[$i]{'descr'},'out_octet'.$pnpref)};
+	  $saved_out .= " ".perf_name($interfaces[$i]{'descr'},'in_octet.'.$loop_time).'='.$prev_perf{perf_name($interfaces[$i]{'descr'},'in_octet'.$pnpref)};
+	  $saved_out .= " ".perf_name($interfaces[$i]{'descr'},'out_octet.'.$loop_time).'='.$prev_perf{perf_name($interfaces[$i]{'descr'},'out_octet'.$pnpref)};
         }
         if (defined ($o_perfe) &&
 	    defined($prev_perf{perf_name($interfaces[$i]{'descr'},'in_error'.$pnpref)}) &&
 	    defined($prev_perf{perf_name($interfaces[$i]{'descr'},'out_error'.$pnpref)}) &&
 	    defined($prev_perf{perf_name($interfaces[$i]{'descr'},'in_discard'.$pnpref)}) &&
 	    defined($prev_perf{perf_name($interfaces[$i]{'descr'},'out_discard'.$pnpref)})) {
-	  $perf_out .= " ".perf_name($interfaces[$i]{'descr'},'in_error.'.$loop_time).'='.$prev_perf{perf_name($interfaces[$i]{'descr'},'in_error'.$pnpref)};
-	  $perf_out .= " ".perf_name($interfaces[$i]{'descr'},'out_error.'.$loop_time).'='.$prev_perf{perf_name($interfaces[$i]{'descr'},'out_error'.$pnpref)};
-	  $perf_out .= " ".perf_name($interfaces[$i]{'descr'},'in_discard.'.$loop_time).'='.$prev_perf{perf_name($interfaces[$i]{'descr'},'in_discard'.$pnpref)};
-	  $perf_out .= " ".perf_name($interfaces[$i]{'descr'},'out_discard.'.$loop_time).'='.$prev_perf{perf_name($interfaces[$i]{'descr'},'out_discard'.$pnpref)};
+	  $saved_out .= " ".perf_name($interfaces[$i]{'descr'},'in_error.'.$loop_time).'='.$prev_perf{perf_name($interfaces[$i]{'descr'},'in_error'.$pnpref)};
+	  $saved_out .= " ".perf_name($interfaces[$i]{'descr'},'out_error.'.$loop_time).'='.$prev_perf{perf_name($interfaces[$i]{'descr'},'out_error'.$pnpref)};
+	  $saved_out .= " ".perf_name($interfaces[$i]{'descr'},'in_discard.'.$loop_time).'='.$prev_perf{perf_name($interfaces[$i]{'descr'},'in_discard'.$pnpref)};
+	  $saved_out .= " ".perf_name($interfaces[$i]{'descr'},'out_discard.'.$loop_time).'='.$prev_perf{perf_name($interfaces[$i]{'descr'},'out_discard'.$pnpref)};
         }
         $pcount++;
       }
     }
   }
-  $perf_out .= " ptime=".$timenow;
+  $saved_out .= " ptime=".$timenow;
 }
 
 # Only a few ms left...
@@ -2445,5 +2462,9 @@ else {
   print $print_out,": ", $num_int-$num_ok, " int NOK : CRITICAL";
 }
 print " | ",$perf_out if defined($perf_out) && $perf_out;
+if (defined($saved_out) && $saved_out) {
+	print " ||" if defined($o_nagios4);
+	print $saved_out;
+}
 print "\n";
 exit $ERRORS{$exit_status};

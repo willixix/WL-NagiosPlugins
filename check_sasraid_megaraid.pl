@@ -253,6 +253,8 @@ $logdrv_status_tableoid,
 $phydrv_status_tableoid,
 $phydrv_mediumerrors_tableoid,
 $phydrv_othererrors_tableoid,
+$phydrv_vendor_tableoid,
+$phydrv_product_tableoid,
 $phydrv_rebuildstats_tableoid,
 $phydrv_count,
 $phydrv_goodcount,
@@ -288,6 +290,7 @@ sub set_oids {
     $phydrv_mediumerrors_tableoid = $baseoid . ".1.1.3.1.12";    # megaraid medium errors
     $phydrv_othererrors_tableoid = $baseoid . ".1.1.3.1.15";     # megaraid other errors
     $phydrv_rebuildstats_tableoid = $baseoid . ".1.1.3.1.11";
+    $phydrv_product_tableoid = $baseoid . ".1.1.3.1.8";  # megaraid drive vendor+model
     $readfail_oid = $baseoid . ".1.1.1.1.13";
     $writefail_oid = $baseoid . ".1.1.1.1.14";
     $adpt_readfail_oid = $baseoid . ".1.1.1.1.15";
@@ -339,12 +342,13 @@ sub set_oids {
     $phydrv_status_tableoid = $baseoid . ".4.1.4.2.1.2.1.10";      # sasraid physical
     $phydrv_mediumerrors_tableoid = $baseoid . ".4.1.4.2.1.2.1.7"; # sasraid medium errors
     $phydrv_othererrors_tableoid = $baseoid . ".4.1.4.2.1.2.1.8";  # sasraid other errors
+    $phydrv_vendor_tableoid = $baseoid . ".4.1.4.2.1.2.1.24";  # sasraid drive vendor
+    $phydrv_product_tableoid = $baseoid . ".4.1.4.2.1.2.1.25";  # sasraid drive model
     $phydrv_status_tableoid = $baseoid . ".4.1.4.2.1.2.1.10";      # sasraid physical
     $phydrv_count = $baseoid . ".4.1.4.1.2.1.21"; #pdPresentCount
     $phydrv_goodcount = $baseoid . ".4.1.4.1.2.1.22"; #pdDiskPresentCount
     $phydrv_badcount = $baseoid . ".4.1.4.1.2.1.23"; #pdDiskPredFailureCount
     $phydrv_bad2count = $baseoid . ".4.1.4.1.2.1.24"; #pdDiskFailureCount
-
     ## Status codes for phyisical drives - these are specifically for SASRAID
     %PHYDRV_CODES = (
         0 => ['unconfigured_good'],
@@ -594,7 +598,7 @@ $SIG{'ALRM'} = sub {
 };
 alarm($timeout);
 
-my ($snmp_result,$logdrv_data_in,$phydrv_data_in,$phydrv_merr_in,$phydrv_oerr_in);
+my ($snmp_result,$logdrv_data_in,$phydrv_data_in,$phydrv_merr_in,$phydrv_oerr_in,$phydrv_vendor_in,$phydrv_product_in);
 
 $session = create_snmp_session();
 
@@ -623,10 +627,22 @@ if ($cardtype ne 'mptfusion') {
 }
 
 # 3rd are physical disk drive status
-$debug_time{snmpgettable_phydrvstatus}=time() if $opt_debugtime;
-$phydrv_data_in = $session->get_table(-baseoid => $phydrv_status_tableoid) if !$error;
-$debug_time{snmpgettable_phydrvstatus}=time()-$debug_time{snmpgettable_phydrvstatus} if $opt_debugtime;
-$error.= "could not retrieve snmp table $phydrv_status_tableoid" if !$phydrv_data_in && !$error;
+	$debug_time{snmpgettable_phydrvstatus}=time() if $opt_debugtime;
+	$phydrv_data_in = $session->get_table(-baseoid => $phydrv_status_tableoid) if !$error;
+	$debug_time{snmpgettable_phydrvstatus}=time()-$debug_time{snmpgettable_phydrvstatus} if $opt_debugtime;
+	$error.= "could not retrieve snmp table $phydrv_status_tableoid" if !$phydrv_data_in && !$error;
+# Drive models
+	$debug_time{snmpgettable_phydrvproduct}=time() if $opt_debugtime;
+	$phydrv_product_in = $session->get_table(-baseoid => $phydrv_product_tableoid) if !$error;
+	$debug_time{snmpgettable_phydrvproduct}=time()-$debug_time{snmpgettable_phydrvproduct} if $opt_debugtime;
+	$error.= "could not retrieve snmp table $phydrv_product_tableoid" if !$phydrv_product_in && !$error;
+# Drive models
+if($phydrv_vendor_tableoid) {
+	$debug_time{snmpgettable_phydrvvendor}=time() if $opt_debugtime;
+	$phydrv_vendor_in = $session->get_table(-baseoid => $phydrv_vendor_tableoid) if !$error;
+	$debug_time{snmpgettable_phydrvvendor}=time()-$debug_time{snmpgettable_phydrvvendor} if $opt_debugtime;
+	$error.= "could not retrieve snmp table $phydrv_vendor_tableoid" if !$phydrv_vendor_in && !$error;
+}
 
 # last are medium and "other" errors reported for physical drives
 if (defined($opt_drverrors) && defined($opt_perfdata) && !defined($opt_optimize)) {
@@ -764,6 +780,21 @@ foreach $line (Net::SNMP::oid_lex_sort(keys(%{$phydrv_data_in}))) {
 }
 my $num_controllers = scalar(keys %h_controllers);
 my $num_channels = scalar(keys %h_channels);
+my $models="";
+# This brings in the drive vendor/product information
+foreach $line (Net::SNMP::oid_lex_sort(keys(%{$phydrv_product_in}))) {
+	$code = $phydrv_product_in->{$line};
+	  print "phydrv_product: $line = $code\n" if $DEBUG;
+	my $index = substr($line,length($phydrv_product_tableoid)+1);
+	my $vendor = $phydrv_vendor_tableoid?$phydrv_vendor_in->{$phydrv_vendor_tableoid.".".$index}:"";
+	  print "phydrv_vendor: $line = $vendor\n" if ($vendor and $DEBUG);
+	$vendor =~ s/^\s+|\s+$//g;
+	$code =~ s/^\s+|\s+$//g;
+	$pdrv_status{$index}->{drivetype} = ($vendor." "||"").$code;
+	$models .= ", " if ($models);
+        $models .= ($vendor." "||"").$code;
+}
+$models = "[" . $models . "]";
 
 # Now we can do additional SNMP query (for now its here as currently all additional queries are related to physical drives)
 if (defined($opt_optimize) && scalar(@extra_oids)>0) {
@@ -935,7 +966,7 @@ $debug_time{plugin_totaltime}=$debug_time{plugin_finish}-$debug_time{plugin_star
 
 # output text results
 $output_data.= " - " if $output_data;
-$output_data.= sprintf("%d logical disks, %d physical drives, %d controllers found", scalar(keys %{$logdrv_data_in}), $phydrv_total, $num_controllers);
+$output_data.= sprintf("%d logical disks, %d physical drives, %d controllers found, %s", scalar(keys %{$logdrv_data_in}), $phydrv_total, $num_controllers, $models);
 $output_data.= " - ". $output_data_end if $output_data_end;
 
 # netsaint doesn't like output strings larger than 256 chars

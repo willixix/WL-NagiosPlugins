@@ -229,6 +229,7 @@ $opt_p,
 $opt_t,
 $opt_a,
 $opt_P,
+$opt_gooddrives,
 $opt_snmpversion,
 $opt_debug,
 $opt_perfdata,
@@ -253,6 +254,10 @@ $phydrv_status_tableoid,
 $phydrv_mediumerrors_tableoid,
 $phydrv_othererrors_tableoid,
 $phydrv_rebuildstats_tableoid,
+$phydrv_count,
+$phydrv_goodcount,
+$phydrv_badcount,
+$phydrv_bad2count,
 $readfail_oid,
 $writefail_oid,
 $adpt_readfail_oid,
@@ -334,6 +339,11 @@ sub set_oids {
     $phydrv_status_tableoid = $baseoid . ".4.1.4.2.1.2.1.10";      # sasraid physical
     $phydrv_mediumerrors_tableoid = $baseoid . ".4.1.4.2.1.2.1.7"; # sasraid medium errors
     $phydrv_othererrors_tableoid = $baseoid . ".4.1.4.2.1.2.1.8";  # sasraid other errors
+    $phydrv_status_tableoid = $baseoid . ".4.1.4.2.1.2.1.10";      # sasraid physical
+    $phydrv_count = $baseoid . ".4.1.4.1.2.1.21"; #pdPresentCount
+    $phydrv_goodcount = $baseoid . ".4.1.4.1.2.1.22"; #pdDiskPresentCount
+    $phydrv_badcount = $baseoid . ".4.1.4.1.2.1.23"; #pdDiskPredFailureCount
+    $phydrv_bad2count = $baseoid . ".4.1.4.1.2.1.24"; #pdDiskFailureCount
 
     ## Status codes for phyisical drives - these are specifically for SASRAID
     %PHYDRV_CODES = (
@@ -389,6 +399,7 @@ sub check_options {
 	'P:s'   => \$opt_perfdata,	'perf:s'	=> \$opt_perfdata,
 	'S:s'	=> \$opt_prevstate,	'state:s'	=> \$opt_prevstate,
 	'e'	=> \$opt_drverrors,	'drive_errors'	=> \$opt_drverrors,
+	'g:i'	=> \$opt_gooddrives,	'good_drives'	=> \$opt_gooddrives,
 	'o'	=> \$opt_optimize,	'snmp_optimize'	=> \$opt_optimize,
 	'i'	=> \$opt_extrainfo,	'extra_info'	=> \$opt_extrainfo,
 	'T:s'	=> \$opt_cardtype,	'controller_type:s' => \$opt_cardtype,
@@ -594,6 +605,12 @@ if ($cardtype eq 'megaraid' && defined($opt_drverrors)) {
 	$debug_time{snmpretrieve_readwritefailoids}=time()-$debug_time{snmpretrieve_readwritefailoids} if $opt_debugtime;
 	$error.="could not retrieve snmp data OIDs" if !$snmp_result;
 }
+if ($cardtype eq 'sasraid') {
+	$debug_time{snmpretrieve_readwritefailoids}=time() if $opt_debugtime;
+	$snmp_result=$session->get_request(-Varbindlist => [ $phydrv_count, $phydrv_goodcount, $phydrv_badcount, $phydrv_bad2count ]);
+	$debug_time{snmpretrieve_readwritefailoids}=time()-$debug_time{snmpretrieve_readwritefailoids} if $opt_debugtime;
+	$error.="could not retrieve snmp data OIDs" if !$snmp_result;
+}
 
 # 2nd are logical disk drive status
 $debug_time{snmpgettable_logdrvstatus}=time() if $opt_debugtime;
@@ -645,25 +662,49 @@ if ($DEBUG && $cardtype eq 'megaraid') {
 	print "readfail_sec: ". $readfail_oid ." = ". $snmp_result->{$readfail_oid} ."\n" if exists($snmp_result->{$readfail_oid});
 	print "writefail_sec: ". $writefail_oid ." = ". $snmp_result->{$writefail_oid} ."\n" if exists($snmp_result->{$writefail_oid});
 }
+if ($DEBUG && $cardtype eq 'sasraid') {
+	print "phydrv_count: ".$phydrv_count." = ". $snmp_result->{$phydrv_count} ."\n" if exists($snmp_result->{$phydrv_count});
+	print "phydrv_goodcount: ".$phydrv_goodcount." = ". $snmp_result->{$phydrv_goodcount} ."\n" if exists($snmp_result->{$phydrv_goodcount});
+	print "phydrv_badcount: ".$phydrv_badcount." = ". $snmp_result->{$phydrv_badcount} ."\n" if exists($snmp_result->{$phydrv_badcount});
+	print "phydrv_bad2count: ".$phydrv_bad2count." = ". $snmp_result->{$phydrv_bad2count} ."\n" if exists($snmp_result->{$phydrv_bad2count});
+}
 if (defined($opt_drverrors) && $cardtype ne 'sasraid' && $cardtype ne 'mptfusion') {
-  if (exists($snmp_result->{adpt_readfail_oid}) && $snmp_result->{$adpt_readfail_oid}>0) {
+  if (exists($snmp_result->{$adpt_readfail_oid}) && $snmp_result->{$adpt_readfail_oid}>0) {
 	$output_data=$snmp_result->{$adpt_readfail_oid}." adapter read failures";
 	$nagios_status=$alert;
   }
-  if (exists($snmp_result->{adpt_writefail_oid}) && $snmp_result->{$adpt_writefail_oid}>0) {
+  if (exists($snmp_result->{$adpt_writefail_oid}) && $snmp_result->{$adpt_writefail_oid}>0) {
 	$output_data.= ", " if $output_data;
         $output_data=$snmp_result->{$adpt_writefail_oid}." adapter write failures";
         $nagios_status=$alert;
   }
-  if (exists($snmp_result->{write_oid}) && $snmp_result->{$writefail_oid}>0) {
+  if (exists($snmp_result->{$writefail_oid}) && $snmp_result->{$writefail_oid}>0) {
         $output_data.= ", " if $output_data;
         $output_data=$snmp_result->{$writefail_oid}." write failures";
         $nagios_status=$alert;
   }
-  if (exists($snmp_result->{readfail_oid}) && $snmp_result->{$readfail_oid}>0) {
+  if (exists($snmp_result->{$readfail_oid}) && $snmp_result->{$readfail_oid}>0) {
         $output_data.= ", " if $output_data;
         $output_data=$snmp_result->{$readfail_oid}." read failures";
         $nagios_status=$alert;
+  }
+}
+if ($cardtype eq 'sasraid') {
+  if (exists($snmp_result->{$phydrv_count}) && $snmp_result->{$phydrv_count}>0) {
+	my $total = $snmp_result->{$phydrv_count};
+	my $good = $snmp_result->{$phydrv_goodcount}||0;
+	my $bad = ($snmp_result->{$phydrv_badcount}||0)+($snmp_result->{$phydrv_bad2count}||0);
+	if ($DEBUG) {print "Good $good $bad $bad Total $total \n";}
+	if (defined($opt_gooddrives) and $opt_gooddrives>0) {
+	  $output_data.= ", " if $output_data;
+          if ($good<$opt_gooddrives) {
+	   $output_data.= ", " if $output_data;
+	   $output_data = "$good good drives (must have $opt_gooddrives)";
+	   $nagios_status = $alert;
+          }  else {
+	   $output_data = "$good good drives";
+	  }
+	}
   }
 }
 

@@ -3,8 +3,8 @@
 # ============================== SUMMARY =====================================
 #
 # Program : check_files.pl 
-# Version : 0.34
-# Date    : June 22, 2012
+# Version : 0.35
+# Date    : Aug 21, 2012
 # Author  : William Leibzon - william@leibzon.org
 # Summary : This is a nagios plugin that checks directory and files
 #           file count and directory and file age
@@ -91,6 +91,7 @@
 #  [0.32] Apr 21, 2012 - Added -I as an alternative to -C 
 #  [0.33] Apr 27, 2012 - Fixed bug with determining file ages
 #  [0.34] Jun 22, 2012 - Added better reporting of file age than just seconds
+#  [0.35] Aug 21, 2012 - Option '-T' was broken. Bug reported by Jeremy Mauro
 #
 # ========================== START OF PROGRAM CODE ============================
 
@@ -108,7 +109,7 @@ if ($@) {
  %ERRORS = ('OK'=>0,'WARNING'=>1,'CRITICAL'=>2,'UNKNOWN'=>3,'DEPENDENT'=>4);
 }
 
-my $Version='0.33';
+my $Version='0.35';
 
 my $o_help=     undef;          # help option
 my $o_timeout=  10;             # Default 10s Timeout
@@ -274,7 +275,7 @@ sub help {
 -F, --files=STR[,STR[,STR[..]]]
 	Which files to check. What is here is similar to what you use for listing
 	file with ls i.e. *.temp would look for all temp files. This is converted
-	to a regex and NOT an actual ls command input, so some error are possible.
+	to a regex and NOT an actual ls command input, so some errors are possible.
 -w, --warn=STR[,STR[,STR[..]]]
 	Warning level(s) for number of files - must be a number
 	Warning values can have the following prefix modifiers:
@@ -308,8 +309,8 @@ sub help {
 	When present ls will do 'ls -r' and recursive check in subdirectories
 -l, --lsfiles
 	When present this adds specified file spec to ls. Now ls will list
-	list only files you specified with -F where as by default 'ls -l'
-	will list all files in directory and choose with regex. This option 
+	only files you specified with -F where as by default 'ls -l' will
+	list all files in directory and choose some with regex. This option 
 	should be used if there are a lot of files in a directory.
 	WARNING: using this option will cause -r not to work on most system
 -C, --cmd=STR
@@ -402,7 +403,7 @@ sub check_options {
 	$o_filetype = 'file' if $o_filetype eq 'files';
 	$o_filetype = 'dir' if $o_filetype eq 'dirs';
 	if ($o_filetype ne 'file' && $o_filetype ne 'dir') {
-		print "Filetype must be specified one word, either 'file' or 'dir'\n";
+		print "Filetype must be one word - either 'file' or 'dir'\n";
 		print_usage();
 		exit $ERRORS{"UNKNOWN"};
 	}
@@ -484,6 +485,7 @@ $SIG{'ALRM'} = sub {
 ########## MAIN ##############
 
 check_options();
+verb("check_files.pl plugin version ".$Version);
 
 # Check global timeout if something goes wrong
 if (defined($TIMEOUT)) {
@@ -511,6 +513,7 @@ my $newest_filename=undef;
 my @nmatches=();
 my $READTHIS=undef;
 my $matched=0;
+my $temp;
 
 if (defined($o_stdin)) {
    $READTHIS=\*STDIN;
@@ -552,16 +555,13 @@ while (<$READTHIS>) {
 
     verb("got line: $_");
     $ls[$nlines]=parse_lsline($_);
-    if ($ls[$nlines]{'type'} ne 'unset' &&
-	(!defined($o_filetype) || $ls[$nlines]{"type"} eq $o_filetype)) {
-        my $temp="";
-        foreach my $k (keys %{$ls[$nlines]}) {
-	    $temp .= ' '.$k .'='. $ls[$nlines]{$k}; 
-        }
-        verb ("    parsed:".$temp);
+    foreach my $k (keys %{$ls[$nlines]}) {
+        $temp .= ' '.$k .'='. $ls[$nlines]{$k};
     }
+    verb ("    parsed:".$temp);
 
-    if (defined($ls[$nlines]{'filename'})) {
+    if (defined($ls[$nlines]{'filename'}) && (!defined($o_filetype) ||
+	(defined($o_filetype) && $ls[$nlines]{'type'} eq $o_filetype))) {
 	$matched=0;
         for (my $i=0; $i<scalar(@o_filesL); $i++) {
 	    if ($ls[$nlines]{'filename'} =~ /$o_filesL[$i]/) {

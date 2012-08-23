@@ -3,8 +3,8 @@
 # ============================== SUMMARY =====================================
 #
 # Program : check_memcached.pl
-# Version : 0.71
-# Date    : July 18, 2012
+# Version : 0.75
+# Date    : Aug 25, 2012
 # Author  : William Leibzon - william@leibzon.org
 # Licence : GPL - summary below, full text at http://www.fsf.org/licenses/gpl.txt
 #
@@ -242,6 +242,10 @@
 #			 which are to be used for stats-variable based long options such as
 #			   --connected_clients=WARN:threshold,CRIT:threshold
 #			 and added DISPLAY:YES|NO and PERF specifiers for above too.
+# [0.71 - Aug 18, 2012] Fixed bug with hitrate perf output reported perf by daryl herzman
+# [0.75 - Aug 20, 2012] A lot of internal rewrites in the library. Its not just a
+#		        a set of functions, but not proper object library with internal
+#			variables hidden from outside.
 #
 # TODO or consider for future:
 #
@@ -294,15 +298,15 @@ if ($@) {
  %ERRORS = ('OK'=>0,'WARNING'=>1,'CRITICAL'=>2,'UNKNOWN'=>3,'DEPENDENT'=>4);
 }
 
-my $Version='0.71';
+my $Version='0.75';
 
 # This is a list of known statistics variables (plus few variables added by plugin),
 # used in order to designate COUNTER variables with 'c' in perfout for graphing programs
 my %KNOWN_STATUS_VARS = (
 	 'version' =>  [ 'misc', 'VERSION', '' ],		# memcached version
-	 'utilization' => [ 'misc', 'GAUGE', '%' ],		# calculated by plugin
-	 'hitrate' => [ 'misc', 'GAUGE', '%' ],		# calculated by plugin
-	 'response_time' => [ 'misc', 'GAUGE', 's' ],		# measured by plugin
+	 'utilization' => [ 'calculated', 'GAUGE', '%' ],	# calculated by plugin
+	 'hitrate' => [ 'calculated', 'GAUGE', '%' ],		# calculated by plugin
+	 'response_time' => [ 'time_measure', 'GAUGE', 's' ],	# measured by plugin
 	 'curr_connections' => [ 'misc', 'GAUGE', '', "Number of Current Connections" ],
 	 'evictions' => [ 'misc', 'COUNTER', 'c', "Total Number of Evictions from Start" ],
 	 'bytes' => [ 'misc', 'GAUGE', 'B', "Amount of Data Stored in Bytes" ],
@@ -324,18 +328,18 @@ my %KNOWN_STATUS_VARS = (
 	 'rusage_system_ms' => [ 'misc', 'COUNTER', 'c' ],	# this is round(rusage_system*1000)
 	 'total_connections' => [ 'misc', 'COUNTER', 'c', "Number of Connections made from Start" ],
 	 'get_misses' => [ 'misc', 'COUNTER', 'c', "Total Misses from Start" ],
-	 'total_free' => [ 'misc', 'GAUGE', 'B', "Amount of Free Memory in bytes" ],
-	 'releasable_space' => [ 'misc', 'GAUGE', 'B' ],
-	 'free_chunks' => [ 'misc', 'GAUGE', '' ],
-	 'fastbin_blocks' => [ 'misc', 'GAUGE', '' ],
+	 'total_free' => [ 'malloc', 'GAUGE', 'B', "Amount of Free Memory in bytes" ],
+	 'releasable_space' => [ 'malloc', 'GAUGE', 'B' ],
+	 'free_chunks' => [ 'malloc', 'GAUGE', '' ],
+	 'fastbin_blocks' => [ 'malloc', 'GAUGE', '' ],
 	 'arena_size' => [ 'misc', 'GAUGE', '' ],
-	 'total_alloc' => [ 'misc', 'GAUGE', 'B' ],
-	 'max_total_alloc' => [ 'misc', 'GAUGE', '' ],
-	 'mmapped_regions' => [ 'misc', 'GAUGE', '' ],
-	 'mmapped_space' => [ 'misc', 'GAUGE', '' ],
-	 'fastbin_space' => [ 'misc', 'GAUGE', '' ],
-	 'auth_cmds' => [ 'misc', 'COUNTER', 'c', "Total Number of Auth Commands from Start" ],
-	 'auth_errors' => [ 'misc', 'COUNTER', 'c', "Total Number of Auth Errors from Start" ],
+	 'total_alloc' => [ 'malloc', 'GAUGE', 'B' ],
+	 'max_total_alloc' => [ 'malloc', 'GAUGE', '' ],
+	 'mmapped_regions' => [ 'malloc', 'GAUGE', '' ],
+	 'mmapped_space' => [ 'malloc', 'GAUGE', '' ],
+	 'fastbin_space' => [ 'malloc', 'GAUGE', '' ],
+	 'auth_cmds' => [ 'calculated', 'COUNTER', 'c', "Total Number of Auth Commands from Start" ],
+	 'auth_errors' => [ 'calculated', 'COUNTER', 'c', "Total Number of Auth Errors from Start" ],
 	);
 
 # Here you can also specify which variables should go into perf data, 

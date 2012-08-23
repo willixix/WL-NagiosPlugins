@@ -336,6 +336,7 @@ my %KNOWN_STATUS_VARS = (
 	 'fastbin_space' => [ 'misc', 'GAUGE', '' ],
 	 'auth_cmds' => [ 'misc', 'COUNTER', 'c', "Total Number of Auth Commands from Start" ],
 	 'auth_errors' => [ 'misc', 'COUNTER', 'c', "Total Number of Auth Errors from Start" ],
+	 'pid' => [ 'misc', 'STATUSINFO', '' ],
 	);
 
 # Here you can also specify which variables should go into perf data, 
@@ -499,12 +500,12 @@ EOT
   foreach (keys(%KNOWN_STATUS_VARS)) {
      $vname = $_;
      $vname2=$o_rprefix.$vname.$o_rsuffix;
-     if (exists($KNOWN_STATUS_VARS{$vname}[2])) {
+     if (exists($KNOWN_STATUS_VARS{$vname}[3])) {
 	print ' --'.$vname."=WARN:threshold,CRIT:threshold,<other specifiers>\n";
-	print "   ".$KNOWN_STATUS_VARS{$vname}[2]."\n";
-	if ($KNOWN_STATUS_VARS{$vname}[0] eq 'COUNTER') {
+	print "   ".$KNOWN_STATUS_VARS{$vname}[3]."\n";
+	if ($KNOWN_STATUS_VARS{$vname}[1] eq 'COUNTER') {
 	    print ' --'.$vname2."=WARN:threshold,CRIT:threshold,<other specifiers>\n";
-	    print "   Rate of Change of ".$KNOWN_STATUS_VARS{$vname}[2]."\n";
+	    print "   Rate of Change of ".$KNOWN_STATUS_VARS{$vname}[3]."\n";
 	}
      }
   }
@@ -583,8 +584,8 @@ sub lib_init {
 		o_perfvars => undef,		# List of variables only for PERFDATA
                 o_prevperf => undef, 		# previously saved performance data coming from $SERVICEPERFDATA$ macro
 	        # library special input variables (similar to options)
-		o_rprefix => undef,		# prefix used to distinguish rate variables
-		o_rsuffix => undef,		# suffix used to distinguish rate variables
+		o_rprefix => '',		# prefix used to distinguish rate variables
+		o_rsuffix => '_rate',		# suffix used to distinguish rate variables
 		knownStatusVars => {},		# Special HASH ARRAY with names and description of known variables
 		perfOKStatusRegex => $DEFAULT_PERF_OK_STATUS_REGEX,
 		verbose => 0,			# verbose, same as debug, same as o_verb
@@ -874,10 +875,10 @@ sub set_perfdata {
 	# preset perfdata in dataresults array
 	$dataresults->{$avar}=[undef,0,0,''] if !defined($dataresults->{$avar});
 	$dataresults->{$avar}[2]=-1;
-	if ($dataresults->{$avar}[2] eq '' || $opt eq "REPLACE") {
+	if ($opt eq "REPLACE" || !exists($dataresults->{$avar}[3]) || $dataresults->{$avar}[3] eq '') {
 	    $dataresults->{$avar}[3]=$bdata;
 	}
-	elsif ($dataresults->{$avar}[2] ne '' && $opt eq "ADD") {
+	elsif (exists($dataresults->{$avar}[3]) && $dataresults->{$avar}[3] ne '' && $opt eq "ADD") {
 	    $dataresults->{$avar}[3].=$adata;
 	}
     }
@@ -905,7 +906,7 @@ sub add_to_perfdata {
     }
     if (defined($avar) &&
         (!exists($thresholds->{$avar}{'PERF'}) || $thresholds->{$avar}{'PERF'} eq 'YES') &&
-        (!exists($dataresults->{$avar}[2]) || $dataresults->{$avar}[2] < 1)) {
+        (!defined($dataresults->{$avar}[2]) || $dataresults->{$avar}[2] < 1)) {
            my $bdata = '';
 	   if (defined($adata)) {
               $bdata .= trim($adata);
@@ -1328,8 +1329,8 @@ sub additional_options_list {
 
     my $known_vars = $self->{'knownStatusVars'};
     my ($o_rprefix, $o_rsuffix) = ("", "");
-    $o_rprefix = $self->{'o_rprefix'} if exists($self->{'o_rprefix'});
-    $o_rsuffix = $self->{'o_rsuffix'} if exists($self->{'o_rsuffix'});
+    $o_rprefix = $self->{'o_rprefix'} if defined($self->{'o_rprefix'});
+    $o_rsuffix = $self->{'o_rsuffix'} if defined($self->{'o_rsuffix'});
     my @VarOptions = ();
 
     if (defined($self) && defined($known_vars)) {
@@ -1338,7 +1339,7 @@ sub additional_options_list {
         my $v2 = $o_rprefix.$v.$o_rsuffix;
         if (exists($known_vars->{$v}[3]) && $known_vars->{$v}[3] ne '') {
               push @VarOptions,$v."=s";
-              push @VarOptions,$v2."=s" if ${$v}[1] eq 'COUNTER' && ($o_rprefix ne '' || $o_rsuffix ne ''); 
+              push @VarOptions,$v2."=s" if $known_vars->{$v}[1] eq 'COUNTER' && ($o_rprefix ne '' || $o_rsuffix ne ''); 
         }
       }
     }
@@ -1364,7 +1365,6 @@ sub options_startprocessing {
     # Copy input parameters to object hash array, set them if not present
     $o_rprefix="" if !defined($o_rprefix);
     $o_rsuffix="" if !defined($o_rsuffix);
-    $o_perfvars="" if !defined($o_perfvars);
     $o_crit="" if !defined($o_crit);
     $o_warn="" if !defined($o_warn);
     $o_variables="" if !defined($o_variables);
@@ -1384,17 +1384,22 @@ sub options_startprocessing {
     my $known_vars = $self->{'knownStatusVars'};
     $o_rprefix = lc $o_rprefix;
     $o_rsuffix = lc $o_rsuffix;
-    @{$perfVars} = split( /,/ , lc $o_perfvars ) if defined($o_perfvars) && $o_perfvars ne '*';
-    if (defined($o_perfvars) && scalar(@{$perfVars})==0) {
-	$o_perfvars='*';
-	$self->{'o_perfvars'}='*';
-    }
-    if ($o_perfvars eq '*') {
-	$self->{'AllVarsToPerf'} = 1;
-    }
-    # below loop converts rate variables to internal representation
-    for (my $i=0; $i<scalar(@{$perfVars}); $i++) {
-        $perfVars->[$i] = '&'.$1 if $perfVars->[$i] =~ /^$o_rprefix(.*)$o_rsuffix$/;
+    # process o_perfvars option
+    if (defined($o_perfvars)) {
+	@{$perfVars} = split( /,/ , lc $o_perfvars );
+ 	if (scalar(@{$perfVars})==0) {
+		$o_perfvars='*';
+		$self->{'o_perfvars'}='*';
+	}
+	if ($o_perfvars eq '*') {
+		$self->{'AllVarsToPerf'} = 1;
+	}
+	else {
+		# below loop converts rate variables to internal representation
+		for (my $i=0; $i<scalar(@{$perfVars}); $i++) {
+			$perfVars->[$i] = '&'.$1 if $perfVars->[$i] =~ /^$o_rprefix(.*)$o_rsuffix$/;
+		}
+	} 
     }
     if (defined($o_warn) || defined($o_crit) || defined($o_variables)) {
 	if (defined($o_variables)) {
@@ -1546,8 +1551,15 @@ sub options_finishprocessing {
 	$self->_options_setthresholds();
         # prepare data results arrays
 	my $dataresults = $self->{'_dataresults'};
+	my $thresholds = $self->{'_thresholds'};
 	$dataresults->{$_} = [undef, 0, 0] foreach(@{$self->{'_allVars'}});
-	$dataresults->{$_} = [undef, 0, 0] foreach(@{$self->{'_perfVars'}});
+	if (defined($self->{'_perfVars'})) {
+	    foreach(@{$self->{'_perfVars'}}) {
+		$dataresults->{$_} = [undef, 0, 0] if !exists($dataresults->{$_});
+		$thresholds->{$_} = {} if !exists($thresholds->{$_});
+		$thresholds->{$_}{'PERF'} = 'YES';
+	    }
+	}
 	# mask as having finished
 	$self->{'_called_options_finishprocessing'}=1;
     }
@@ -1707,28 +1719,35 @@ sub main_checkvars {
 #  @PRIVACY & USE : PUBLIC, To be called after variables have values. Must be used as an object instance function
 sub main_perfvars {
     my $self = shift;
+
     my $dataresults = $self->{'_dataresults'};
     my $PERF_OK_STATUS_REGEX = $self->{'perfOKStatusRegex'};
-
-    $self->main_checkvars() if !exists($self->{'_called_main_checkvars'});
-    if (exists($self->{'_called_main_perfvars'})) { return; }
-
     my $perfVars = $self->{'_perfVars'};
     my $known_vars = $self->{'knownStatusVars'};
     my $avar;
 
+    $self->main_checkvars() if !exists($self->{'_called_main_checkvars'});
+    if (exists($self->{'_called_main_perfvars'})) { return; }
+
     for (my $i=0;$i<scalar(@{$perfVars});$i++) {
 	$avar=$perfVars->[$i];
-	if (defined($dataresults->{$avar}[0]) &&
-	    (!defined($known_vars->{$avar}[1]) || $known_vars->{$avar}[1] =~ /$PERF_OK_STATUS_REGEX/ )) {
-		$self->add_to_perfdata($avar);
+	if (defined($dataresults->{$avar}[0])) {
+		$self->verb("Perfvar: $avar = ".$dataresults->{$avar}[0]);
+	        if (!defined($known_vars->{$avar}[1]) || $known_vars->{$avar}[1] =~ /$PERF_OK_STATUS_REGEX/ ) {
+			$self->add_to_perfdata($avar);
+		}
+		else {
+			$self->verb(" -- not adding to perfdata because of its '".$known_vars->{$avar}[1]."' type variable --");
+		} 
+	}
+	else {
+		$self->verb("Perfvar: $avar selected for PERFOUT but data not available");
 	}
     }
     if (defined($self->{'o_prevperf'})) {
         $self->add_to_perfdata('_ptime', "_ptime=".time(), "REPLACE");
     }
     foreach $avar (keys %{$dataresults}) {
-	$self->add_to_perfdata($avar);
         if (defined($dataresults->{$avar}[3]) && $dataresults->{$avar}[3] ne '') {
             $self->add_to_perfdata($avar);
         }
@@ -1869,6 +1888,7 @@ $SIG{'ALRM'} = sub {
 ########## MAIN #######
 
 my $nlib = Naglio->lib_init('usage_function' => \&print_usage);
+$nlib->set_knownvars(\%KNOWN_STATUS_VARS,$PERF_OK_STATUS_REGEX);
 
 check_options($nlib);
 

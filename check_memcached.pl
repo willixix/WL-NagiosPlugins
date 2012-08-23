@@ -2043,7 +2043,7 @@ if (defined($o_hitrate) && defined($get_misses) && defined($hits_hits)) {
 	$sdata .= sprintf(" (%.2f%% from launch)", $hitrate_all) if ($hitrate_all!=0);
 	$nlib->add_to_statusdata('hitrate',$sdata);
 	if (defined($o_perf)) {
-		$nlib->set_perfdata('hitrate',"hitrate=$hitrate");
+		$nlib->set_perfdata('hitrate',"hitrate=$hitrate",'%');
 	}
      }
 }

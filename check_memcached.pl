@@ -561,7 +561,7 @@ sub lib_init {
                 # library internal data structures
 		_allVars => \@allVars,
 	        _thresholds => \%thresholds,
-		_dateresults => \%dataresults,
+		_dataresults => \%dataresults,
 		_perfVars => \@perfVars,
 		_ar_warnLv => \@ar_warnLv,
 		_ar_critLv => \@ar_critLv,
@@ -903,22 +903,25 @@ sub add_to_perfdata {
     else {
 	$opt = uc $opt;
     }
-    if ((!exists($thresholds->{$avar}{'PERF'}) || $thresholds->{$avar}{'PERF'} eq 'YES') &&
+    if (defined($avar) &&
+        (!exists($thresholds->{$avar}{'PERF'}) || $thresholds->{$avar}{'PERF'} eq 'YES') &&
         (!exists($dataresults->{$avar}[2]) || $dataresults->{$avar}[2] < 1)) {
-           my $bdata = undef;
+           my $bdata = '';
 	   if (defined($adata)) {
               $bdata .= trim($adata);
            }
 	   # this is how most perfdata gets added
-           elsif (exists($dataresults->{$avar}[0])) {
+           elsif (defined($dataresults->{$avar}[0])) {
               $bdata .= $avar."=".$dataresults->{$avar}[0];
            }
 	   # this would use existing preset data now if it was present due to default
 	   # setting UNIT from KNOWN_STATUS_VARS array is now in set_perfdata if 3rd arg is undef
 	   $self->set_perfdata($avar,$bdata,undef,$opt);
+	   # now we actually add to perfdata from [3] of dataresults
 	   if (exists($dataresults->{$avar}[3]) && $dataresults->{$avar}[3] ne '') {
+		$bdata = trim($dataresults->{$avar}[3]);
 		$self->{'_perfdata'} .= " " if $self->{'_perfdata'};
-		$self->{'_perfdata'} .= $dataresults->{$avar}[3];
+		$self->{'_perfdata'} .= $bdata;
 		$dataresults->{$avar}[2]=0 if $dataresults->{$avar}[2] < 0;
 		$dataresults->{$avar}[2]++;
 	   }
@@ -952,10 +955,10 @@ sub set_knownvars {
     }
   }
   if (defined($vartypes_regex_in)) {
-      $self->{perfOKStatusRegex} = $vartypes_regex_in;
+      $self->{'perfOKStatusRegex'} = $vartypes_regex_in;
   }
   else {
-      $self->{perfOKStatusRegex} = $DEFAULT_PERF_OK_STATUS_REGEX;
+      $self->{'perfOKStatusRegex'} = $DEFAULT_PERF_OK_STATUS_REGEX;
   }
 }
 
@@ -1717,7 +1720,7 @@ sub main_perfvars {
     for (my $i=0;$i<scalar(@{$perfVars});$i++) {
 	$avar=$perfVars->[$i];
 	if (defined($dataresults->{$avar}[0]) &&
-	    (!defined($known_vars->{$avar}) || $known_vars->{$avar}[1] =~ /$PERF_OK_STATUS_REGEX/ )) {
+	    (!defined($known_vars->{$avar}[1]) || $known_vars->{$avar}[1] =~ /$PERF_OK_STATUS_REGEX/ )) {
 		$self->add_to_perfdata($avar);
 	}
     }

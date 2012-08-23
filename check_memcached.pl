@@ -3,7 +3,7 @@
 # ============================== SUMMARY =====================================
 #
 # Program : check_memcached.pl
-# Version : 0.7
+# Version : 0.71
 # Date    : July 18, 2012
 # Author  : William Leibzon - william@leibzon.org
 # Licence : GPL - summary below, full text at http://www.fsf.org/licenses/gpl.txt
@@ -294,48 +294,48 @@ if ($@) {
  %ERRORS = ('OK'=>0,'WARNING'=>1,'CRITICAL'=>2,'UNKNOWN'=>3,'DEPENDENT'=>4);
 }
 
-my $Version='0.7';
+my $Version='0.71';
 
 # This is a list of known statistics variables (plus few variables added by plugin),
 # used in order to designate COUNTER variables with 'c' in perfout for graphing programs
 my %KNOWN_STATUS_VARS = (
-	 'version' =>  [ 'VERSION', '' ],		# memcached version
-	 'utilization' => [ 'GAUGE', '%' ],		# calculated by plugin
-	 'hitrate' => [ 'GAUGE', '%' ],			# calculated by plugin
-	 'response_time' => [ 'GAUGE', 's' ],		# measured by plugin
-	 'curr_connections' => [ 'GAUGE', '', "Number of Current Connections" ],
-	 'evictions' => [ 'COUNTER', 'c', "Total Number of Evictions from Start" ],
-	 'bytes' => [ 'GAUGE', 'B', "Amount of Data Stored in Bytes" ],
-	 'connection_structures' => [ 'GAUGE', '', "Number of Connection Structures" ],
-	 'time' => [ 'COUNTER', 's' ],
-	 'total_items' => [ 'COUNTER', 'c', "Total Items Stored from Start" ],
-	 'cmd_set' => [ 'COUNTER', 'c' ],
-	 'bytes_written' => [ 'COUNTER', 'c', "Total Number of Bytes Written to Cache" ],
-	 'curr_items' => [ 'GAUGE', '', "Number of Items Currently Stored" ],
-	 'limit_maxbytes' => [ 'GAUGE', 'B', "Maximum memory available for storage" ],
-	 'uptime' => [ 'COUNTER', 's', "Uptime in Seconds" ],
-	 'rusage_user' => [ 'COUNTER', 's' ],
-	 'cmd_get' => [ 'COUNTER', 'c', "Total Number of Get Commands from Start" ],
-	 'rusage_system' => [ 'COUNTER', 's' ],
-	 'get_hits' => [ 'COUNTER', 'c', "Total Number of Hits from Start" ],
-	 'bytes_read' => [ 'COUNTER', 'c', "Total Number of Bytes Read from Cache" ],
-	 'threads' => [ 'GAUGE', '', "Number of running Threads" ],
-	 'rusage_user_ms' => [ 'COUNTER', 'c' ],    	# this is round(rusage_user*1000)
-	 'rusage_system_ms' => [ 'COUNTER', 'c' ],	# this is round(rusage_system*1000)
-	 'total_connections' => [ 'COUNTER', 'c', "Number of Connections made from Start" ],
-	 'get_misses' => [ 'COUNTER', 'c', "Total Misses from Start" ],
-	 'total_free' => [ 'GAUGE', 'B', "Amount of Free Memory in bytes" ],
-	 'releasable_space' => [ 'GAUGE', 'B' ],
-	 'free_chunks' => [ 'GAUGE', '' ],
-	 'fastbin_blocks' => [ 'GAUGE', '' ],
-	 'arena_size' => [ 'GAUGE', '' ],
-	 'total_alloc' => [ 'GAUGE', 'B' ],
-	 'max_total_alloc' => [ 'GAUGE', '' ],
-	 'mmapped_regions' => [ 'GAUGE', '' ],
-	 'mmapped_space' => [ 'GAUGE', '' ],
-	 'fastbin_space' => [ 'GAUGE', '' ],
-	 'auth_cmds' => [ 'COUNTER', 'c', "Total Number of Auth Commands from Start" ],
-	 'auth_errors' => [ 'COUNTER', 'c', "Total Number of Auth Errors from Start" ],
+	 'version' =>  [ 'misc', 'VERSION', '' ],		# memcached version
+	 'utilization' => [ 'misc', 'GAUGE', '%' ],		# calculated by plugin
+	 'hitrate' => [ 'misc', 'GAUGE', '%' ],		# calculated by plugin
+	 'response_time' => [ 'misc', 'GAUGE', 's' ],		# measured by plugin
+	 'curr_connections' => [ 'misc', 'GAUGE', '', "Number of Current Connections" ],
+	 'evictions' => [ 'misc', 'COUNTER', 'c', "Total Number of Evictions from Start" ],
+	 'bytes' => [ 'misc', 'GAUGE', 'B', "Amount of Data Stored in Bytes" ],
+	 'connection_structures' => [ 'misc', 'GAUGE', '', "Number of Connection Structures" ],
+	 'time' => [ 'misc', 'COUNTER', 's' ],
+	 'total_items' => [ 'misc', 'COUNTER', 'c', "Total Items Stored from Start" ],
+	 'cmd_set' => [ 'misc', 'COUNTER', 'c' ],
+	 'bytes_written' => [ 'misc', 'COUNTER', 'c', "Total Number of Bytes Written to Cache" ],
+	 'curr_items' => [ 'misc', 'GAUGE', '', "Number of Items Currently Stored" ],
+	 'limit_maxbytes' => [ 'misc', 'GAUGE', 'B', "Maximum memory available for storage" ],
+	 'uptime' => [ 'misc', 'COUNTER', 's', "Uptime in Seconds" ],
+	 'rusage_user' => [ 'misc', 'COUNTER', 's' ],
+	 'cmd_get' => [ 'misc', 'COUNTER', 'c', "Total Number of Get Commands from Start" ],
+	 'rusage_system' => [ 'misc', 'COUNTER', 's' ],
+	 'get_hits' => [ 'misc', 'COUNTER', 'c', "Total Number of Hits from Start" ],
+	 'bytes_read' => [ 'misc', 'COUNTER', 'c', "Total Number of Bytes Read from Cache" ],
+	 'threads' => [ 'misc', 'GAUGE', '', "Number of running Threads" ],
+	 'rusage_user_ms' => [ 'misc', 'COUNTER', 'c' ],    	# this is round(rusage_user*1000)
+	 'rusage_system_ms' => [ 'misc', 'COUNTER', 'c' ],	# this is round(rusage_system*1000)
+	 'total_connections' => [ 'misc', 'COUNTER', 'c', "Number of Connections made from Start" ],
+	 'get_misses' => [ 'misc', 'COUNTER', 'c', "Total Misses from Start" ],
+	 'total_free' => [ 'misc', 'GAUGE', 'B', "Amount of Free Memory in bytes" ],
+	 'releasable_space' => [ 'misc', 'GAUGE', 'B' ],
+	 'free_chunks' => [ 'misc', 'GAUGE', '' ],
+	 'fastbin_blocks' => [ 'misc', 'GAUGE', '' ],
+	 'arena_size' => [ 'misc', 'GAUGE', '' ],
+	 'total_alloc' => [ 'misc', 'GAUGE', 'B' ],
+	 'max_total_alloc' => [ 'misc', 'GAUGE', '' ],
+	 'mmapped_regions' => [ 'misc', 'GAUGE', '' ],
+	 'mmapped_space' => [ 'misc', 'GAUGE', '' ],
+	 'fastbin_space' => [ 'misc', 'GAUGE', '' ],
+	 'auth_cmds' => [ 'misc', 'COUNTER', 'c', "Total Number of Auth Commands from Start" ],
+	 'auth_errors' => [ 'misc', 'COUNTER', 'c', "Total Number of Auth Errors from Start" ],
 	);
 
 # Here you can also specify which variables should go into perf data, 
@@ -512,32 +512,179 @@ EOT
 }
 
 ############################ START OF THE LIBRARY FUNCTIONS #################################
+#
+# THIS IS WORK IN PROGRESS, THE LIBRARY HAS NOT BEEN RELEASED YET AND INTERFACES MAY CHANGE
+#
+{
+package Naglio;
+use fields qw();
 
-# these variables will become internal to the library but right now they are still being used by code outside
-# until such time as all accessor/modifier methodds have been written
-my @allVars = ();		# all variables after options processing
-my %thresholds=();		# thresholds for above variables, this replaced @o_warnL and @o_critL with a hash array
-my %dataresults= ();		# this is where data is loaded
-my @perfVars = ();		# performance variables list (renamed @o_perfVarsL)
-my @ar_warnLv = ();		# used in options processing
-my @ar_critLv = ();		# used in options processing
-my @ar_varsL=    ();            # list of requested variables, used in options processing
-my @prev_time=  ();     	# timestamps if more then one set of previois performance data
-my $perfcheck_time=undef;	# time when data was last checked 
-my $statuscode = "OK";		# final status code
-my $statusinfo = "";		# if there is an error, this has human info about what it is
-my $statusdata = "";		# if there is no error but we want some data in status line, this var gets it
-my $perfdata = "";		# this variable collects performance data line
-my %prev_perf=  ();             # array that is populated with previous performance data
+my %ERRORS = ('OK'=>0,'WARNING'=>1,'CRITICAL'=>2,'UNKNOWN'=>3,'DEPENDENT'=>4);
+my $DEFAULT_PERF_OK_STATUS_REGEX = 'GAUGE|COUNTER|^DATA$|BOOLEAN';
 
-sub div_mod { return int( $_[0]/$_[1]) , ($_[0] % $_[1]); }
+#  @DESCRIPTION   : Library object constructor
+#  @LAST CHANGED  : 08-20-12 by WL
+#  @INPUT         : Hash array of named config settings. All parameters are optiona. Currently supported are:
+#		       plugin_name => string - short name of the plugin
+#		       plugin_description => string - plugin longer description
+#		       plugin_authors => string - list of plugin authors
+#                      knownStatsVars => reference to hash - hash array defining known variables, what type they are, their description
+#		       verbose => 1 or "" or "filename" - set to 1 or "" if verbose/debug or to filename to send data to (may not be called "0" or "1")
+#                      output_comparison_symbols => 0 or 1 - 1 means library output in case threshold is met can use "<", ">", "="
+#						             0 means output is something like "less than or equal", "more than", etc.
+#		       usage_function => &ref  - function that would display helpful text in case of error with options for this plugin
+#		       all_variables_perf => 0 or 1 - 1 means data for all variables would go to PERF. This is what '-A *' or just -A do
+#  @RETURNS       : Reference representing object instance of this library
+#  @PRIVACY & USE : PUBLIC, To be used when initializing the library
+sub lib_init {
+    my $invocant = shift;
+    my $class = ref($invocant) || $invocant;
+    my %other_args = @_;
 
-# ----- to be externallly exported when it becomes library ---
-# this converts uptime in seconds to nice & short output format
+    # These used to be global variables, now these are object local variables in self with accessor
+    my @allVars = ();		# all variables after options processing
+    my %thresholds=();		# hash array of thresholds for above variables, [this replaced @o_warnL and @o_critL in earlier code]
+    my %dataresults= ();		# This is where data is loaded. It is a hash with variable names as keys and array array for value:
+				#   $dataresults{$var}[0] - undef of value of this variable
+				#   $dataresults{$var}[1] - 0 if variable not printed out to status line yet, 1 or more otherwise
+			        #   $dataresults{$var}[2] - 0 if variable data not yet put into PERF output, -1 if PERF output is preset, 1 after output
+			        #   $dataresults{$var}[3] - string, '' to start with, holds ready performance data output for this variable
+    my @perfVars = ();		# performance variables list [renamed from @o_perfVarsL in earlier code]
+    my @ar_warnLv = ();		# used during options processing
+    my @ar_critLv = ();		# used during options processing
+    my @ar_varsL=   ();         # used during options processing
+    my @prev_time=  ();     	# timestamps if more then one set of previois performance data
+
+    my $self = {  # library and nagios versions
+		_NaglioLibraryVersion => 0.1,	# this library's version
+		_NagiosVersion => 3, 		# assume nagios core 3.x unless known otherwise
+                # library internal data structures
+		_allVars => \@allVars,
+	        _thresholds => \%thresholds,
+		_dateresults => \%dataresults,
+		_perfVars => \@perfVars,
+		_ar_warnLv => \@ar_warnLv,
+		_ar_critLv => \@ar_critLv,
+		_ar_varsL => \@ar_varsL,
+		_prevTime => \@prev_time,
+		_prevPerf => {},		# array that is populated with previous performance data
+		_checkTime => undef,		# time when data was last checked
+		_statuscode => "OK",		# final status code
+		_statusinfo => "",		# if there is an error, this has human info about what it is
+		_statusdata => "",		# if there is no error but we want some data in status line, this var gets it
+		_perfdata => "",		# this variable collects performance data line
+		_saveddata => "",		# collects saved data (for next plugin re-run, not implimented yet)
+		_init_args => \%other_args,
+                # copy of data from plugin option variables
+		o_variables => undef,		# List of variables for warn and critical checks
+		o_crit => undef,		# Comma-separated list of critical thresholds for each checked variable
+		o_warn => undef,		# Comma-separated list of warning thresholds for each checked variable
+		o_perf => undef,		# defined or undef. perf option means all data from variables also goes as PERFDATA
+		o_perfvars => undef,		# List of variables only for PERFDATA
+                o_prevperf => undef, 		# previously saved performance data coming from $SERVICEPERFDATA$ macro
+	        # library special input variables (similar to options)
+		o_rprefix => undef,		# prefix used to distinguish rate variables
+		o_rsuffix => undef,		# suffix used to distinguish rate variables
+		knownStatusVars => {},		# Special HASH ARRAY with names and description of known variables
+		perfOKStatusRegex => $DEFAULT_PERF_OK_STATUS_REGEX,
+		verbose => 0,			# verbose, same as debug, same as o_verb
+		plugin_name => '',		# next 3 parameters are variables are currently not used
+		plugin_description => '',	# but its still better if these are provided
+		plugin_authors => '',		# in the future these maybe used for help & usage functions
+		# library setting variables
+		debug_file => "",		# instead of setting file name in verbose, can also set it here
+		output_comparison_symbols => 1, # should plugin output >,<.=,! for threshold match
+						# if 0, it will say it in human form, i.e. "less"
+		AllVarsToPerf => 0,		# should we all variables go to PERF (even those not listed in o_variables and o_perfvars)
+	      };				# this is the option set to 1 when --perfvars '*' is used
+
+    # now deal with arguments that maybe passed to library when initalizing
+    if (exists($other_args{'KNOWN_STATUS_VARS'})) {
+        $self->{'knownStatusVars'} = $other_args{'KNOWN_STATUS_VARS'};
+    }
+    if (exists($other_args{'verbose'}) || exists($other_args{'debug'})) {
+        $self->{'verbose'} = 1;
+        if (exists($other_args{'verbose'}) && $other_args{'verbose'}) {
+	    $self->{'debug_file'} = $other_args{'verbose'};
+        }
+        if (exists($other_args{'debug_log_filename'})) {
+	    $self->{'debug_file'} = $other_args{'debug_log_filename'};
+        }
+    }
+    $self->{'AllVarsToPerf'} = 1 if exists($other_args{'all_variables_perf'});
+    $self->{'output_comparison_symbols'} = $other_args{'output_comparison_symbols'} if exists($other_args{'output_comparison_symbols'});
+    $self->{'usage_function'} = $other_args{'usage_gunction'} if exists($other_args{'usage_function'});
+    $self->{'plugin_name'} = $other_args{'plugin_name'} if exists($other_args{'plugin_name'});
+    $self->{'plugin_description'} = $other_args{'plugin_description'} if exists($other_args{'plugin_description'});
+    $self->{'plugin_authors'} = $other_args{'plugin_authors'} if exists($other_args{'plugin_authors'});
+    return bless $self, $class;
+}
+
+# This is just another naame for object constructor function
+sub new {
+    return lib_init(@_);
+}
+
+# from Perl book, defining functions for all variables set in $self
+# sub AUTOLOAD {
+#    my $self = shift;
+#    croak "$self not an object" unless ref($invocant);
+#    my $name = our $AUTOLOAD;
+#    return if $name =~ /::DESTROY$/;
+#    unless (exists $self->($name)) {
+#        croak "Can't access '$name' field in $self";
+#    }
+#    if (@_) { return $self->($name) = shift }
+#    else { return $self->($name) }
+# }
+
+#  @DESCRIPTION   : Allows functions to take be used both directly and as object referenced functions
+#                   In the 2nd case they get $self as 1st argument, in 1st they don't. this just adds
+#		    $self if its if its not there so their argument list is known.
+#		    Functions that allow both should still check if $self is defined
+#  @LAST CHANGED  : 08-20-12 by WL
+#  @INPUT         : arbitrary list of arguments
+#  @RETURNS       : arbitrary list of arguments with 1st being object hash or undef
+#  @PRIVACY & USE : PRIVATE
+sub _self_args {
+    return @_ if ref $_[0] && exists($_[0]->{'_NaglioLibraryVersion'});
+    unshift @_,undef;
+    return @_;
+}
+
+#  @DESCRIPTION   : Sets function to be called to display help text on using plugin in case of error
+#  @LAST CHANGED  : 08-22-12 by WL
+#  @INPUT         : reference to usage function
+#  @RETURNS       : nothing
+#  @PRIVACY & USE : PUBLIC, Must be used as an object instance function :
+sub set_usage_function {
+    my ($self, $usage_function) = @_;
+    $self->{'usage_function'} = $usage_function;
+}
+
+#  @DESCRIPTION   : Usage function. For right now it just calls usage function given as a parameter
+#		    In the future if it is not available, it'll print something standard.
+#  @LAST CHANGED  : 08-22-12 by WL
+#  @INPUT         : none
+#  @RETURNS       : nothing
+#  @PRIVACY & USE : PUBLIC, But primary for internal use. Must be used as an object instance function.
+sub usage {
+  my $self = shift;
+  if (defined($self) && defined($self->{'usage_function'})) { &{$self->{'usage_function'}}(); }
+}
+
+#  @DESCRIPTION   : This function converts uptime in seconds to nice & short output format
+#  @LAST_CHANGED  : 08-20-12 by WL
+#  @INPUT         : ARG1 - uptime in seconds
+#  @RETURNS       : string of uptime for human consumption
+#  @PRIVACY & USE : PUBLIC, Maybe used directly or as object instance function :
 sub uptime_info {
-  my $uptime_seconds = shift;
+  my ($self,$uptime_seconds) = _self_args(@_);
   my $upinfo = "";
   my ($secs,$mins,$hrs,$days) = (undef,undef,undef,undef);
+
+  sub div_mod { return int( $_[0]/$_[1]) , ($_[0] % $_[1]); }
+
   ($mins,$secs) = div_mod($uptime_seconds,60);
   ($hrs,$mins) = div_mod($mins,60);
   ($days,$hrs) = div_mod($hrs,24);
@@ -548,150 +695,329 @@ sub uptime_info {
   return $upinfo;
 }
 
-# ----- to be externallly exported when it becomes library ---
-# For verbose output (updated 06/06/12 to write to debug file if specified)
+#  @DESCRIPTION   : If debug / verbose option is set, function prints its input out or to debug file
+#  @LAST_CHANGED  : 08-20-12 by WL
+#  @INPUT         : ARG1 - string of debug text
+#  @RETURNS       : nothing
+#  @PRIVACY & USE : PUBLIC, Maybe used directly or as object instance function
 sub verb {
-    my $t=shift;
-    if (defined($o_verb)) {
-	if ($o_verb eq "") {
-		print $t, "\n";
-	}
-	else {
-	    if (!open (DEBUGFILE, ">>$o_verb")) {
-		print $t, "\n";
+    my ($self,$in) = _self_args(@_);
+    my $debug_file_name = "";
+
+    if (defined($o_verb) || (defined($self) && defined($self->{'verbose'}) && $self->{'verbose'} ne 0)) {
+        $debug_file_name = $self->{'debug_file'} if defined($self) && $self->{'debug_file'} ne "";
+        $debug_file_name = $self->{'verbose'} if $debug_file_name ne "" && defined($self) && 
+					         ($self->{'verbose'} ne 0 && $self->{'verbose'} ne 1 && $self->{'verbose'} ne '');
+        $debug_file_name = $o_verb if $debug_file_name ne "" && defined($o_verb) && $o_verb ne "";
+        if ($debug_file_name ne "") {
+	    if (!open (DEBUGFILE, ">>$debug_file_name")) {
+		print $in, "\n";
 	    }
 	    else {
-		print DEBUGFILE $t,"\n";
+		print DEBUGFILE $in,"\n";
 		close DEBUGFILE;
 	    }
+        }
+        else {
+	    print $in, "\n";
+        }
+    }
+}
+
+#  @DESCRIPTION   : Check of string is a a number supporting integers, negative, decimal floats
+#  @LAST CHANGED  : 08-20-12 by WL
+#  @INPUT         : ARG1 - string of text to be checked
+#  @RETURNS       : 1 if its a number, 0 if its not a number
+#  @PRIVACY & USE : PUBLIC, To be used statically and and not as an object instance reference
+sub isnum {
+    my $num = shift;
+    if (defined($num) && $num =~ /^[-|+]?((\d+\.?\d*)|(^\.\d+))$/ ) { return 1 ;}
+    return 0;
+}
+
+#  @DESCRIPTION   : Check of string is a a number supporting integers, negative, decimal floats
+#  @LAST CHANGED  : 08-20-12 by WL
+#  @INPUT         : ARG1 - string of text to be checked
+#  @RETURNS       : 1 if its a number, 0 if its not a number
+#  @PRIVACY & USE : PUBLIC, To be used statically and and not as an object instance function
+sub trim {
+    my $string = shift;
+    $string =~ s/^\s+//;
+    $string =~ s/\s+$//;
+    return $string;
+}
+
+#  @DESCRIPTION   : Takes as input string from PERF or SAVED data from previous plugin invocation
+#                   which should contain space-separated list of var=data pairs. The string is
+#                   parsed and it returns back hash array of var=>data pairs.
+#  @LAST CHANGED  : 08-20-12 by WL
+#  @INPUT         : ARG1 - string of text passed from SERVICEPERFDATA OR SERVICESAVEDDATA MACRO
+#  @RETURNS       : hash array (see description)
+#  @PRIVACY & USE : PUBLIC, Maybe used directly or as object instance function
+sub process_perf {
+   my ($self,$in) = _self_args(@_);
+   my %pdh;
+   my ($nm,$dt);
+   foreach (split(' ',$in)) {
+       if (/(.*)=(.*)/) {
+           ($nm,$dt)=($1,$2);
+	   if (defined($self)) { $self->verb("prev_perf: $nm = $dt"); }
+	   else { verb("prev_perf: $nm = $dt"); }
+            # in some of my plugins time_ is to profile execution time for part of plugin
+            # $pdh{$nm}=$dt if $nm !~ /^time_/;
+            $pdh{$nm}=$dt;
+            $pdh{$nm}=$1 if $dt =~ /(\d+)[cs]/; # 'c' or 's' maybe have been added
+	    # support for more than one set of previously cached performance data
+            # push @prev_time,$1 if $nm =~ /.*\.(\d+)/ && (!defined($prev_time[0]) || $prev_time[0] ne $1);
+       }
+   }
+   return %pdh;
+}
+
+#  @DESCRIPTION   : This function adds info on error conditions that would preceed status data
+#  @LAST CHANGED  : 08-20-12 by WL
+#  @INPUT         : ARG1 - variable name
+#		    ARG2 - string argument for status info
+#  @RETURNS       : nothing (future: 1 on success, 0 on error)
+#  @PRIVACY & USE : PUBLIC, but its direct use is discouraged. Must be used as an object instance function
+sub add_to_statusinfo {
+    my ($self, $var, $sline) = @_;
+    $self->{'_statusinfo'} .= ", " if $self->{'_statusinfo'};
+    $self->{'_statusinfo'} .= trim($sline);
+    $self->{'_dataresults'}{$var}[1]++;
+}
+
+#  @DESCRIPTION   : Accessor function for statusinfo
+#  @LAST CHANGED  : 08-22-12 by WL
+#  @INPUT         : none
+#  @RETURNS       : statusinfo (error conditions and messages) string
+#  @PRIVACY & USE : PUBLIC. Must be used as an object instance function
+sub statusinfo {
+    my $self = shift;
+    if (defined($self) && defined($self->{'_statusinfo'})) {
+	return $self->{'_statusinfo'};
+    }
+    return undef;
+}
+
+#  @DESCRIPTION   : This function adds variable data for status line output in non-error condition
+#  @LAST CHANGED  : 08-20-12 by WL
+#  @INPUT         : ARG1 - variable name
+#		    ARG2 - formatted for human consumption text of collected data for this variable
+#  @RETURNS       : nothing (future: 1 on success, 0 on error)
+#  @PRIVACY & USE : PUBLIC, but its direct use is discouraged. Must be used as an object instance function
+sub add_to_statusdata {
+    my ($self,$avar,$adata) = @_;
+    my $thresholds = $self->{'_thresholds'};
+    my $dataresults = $self -> {'_dataresults'};
+    if ((!exists($thresholds->{$avar}{'DISPLAY'}) || $thresholds->{$avar}{'DISPLAY'} eq 'YES') &&
+        (!exists($dataresults->{$avar}[1]) || $dataresults->{$avar}[1] == 0)) {
+           $self->{'_statusdata'} .= ", " if $self->{'_statusdata'};
+           if (defined($adata)) {
+              $self->{'_statusdata'} .= trim($adata);
+           }
+           elsif (exists($dataresults->{$avar}[0])) {
+              $self->{'_statusdata'} .= $avar ." is ".$dataresults->{$avar}[0];
+           }
+           $dataresults->{$avar}[1]++;
+    }
+}
+
+#  @DESCRIPTION   : Accessor function for statusdata
+#  @LAST CHANGED  : 08-22-12 by WL
+#  @INPUT         : none
+#  @RETURNS       : statusdata string (non-error data from some variables)
+#  @PRIVACY & USE : PUBLIC. Must be used as an object instance function
+sub statusdata {
+    my $self = shift;
+    if (defined($self) && defined($self->{'_statusdata'})) {
+	return $self->{'_statusdata'};
+    }
+    return undef;
+}
+
+#  @DESCRIPTION   : This function sets text or data for variable-specific PERFORMANCE output
+#		    (;warn;crit would be added to it later if thresholds were set for this variable)
+#  @LAST CHANGED  : 08-21-12 by WL
+#  @INPUT         : ARG1 - variable name
+#		    ARG2 - either "var=data" text or just "data" (in which case var= is prepended to it)
+#		    ARG3 - string for UNIT type ('c' for continous, '%' for percent, 's' for seconds) to added after data
+#			   if undef then it is looked up in known variables and if one is present there, its used
+#		    ARG4 - one of: "REPLACE" - if existing preset perfdata is present, it would be replaced with ARG2
+#		                   "ADD"     - if existing preset perfdata is there, ARG2 string would be added to it (DEFAULT)
+#				   "IFNOTSET - only set perfdata to ARG2 if it is empty, otherwise keep existing
+#  @RETURNS       : nothing (future: 0 on success, -1 on error)
+#  @PRIVACY & USE : PUBLIC, but its use should be limited to custom variables added by plugins to data
+#                   Must be used as an object instance function
+sub set_perfdata {
+    my ($self,$avar,$adata,$unit,$opt) = @_;
+    my $dataresults = $self->{'_dataresults'};
+    my $known_vars = $self->{'knownStatusVars'};
+    my $bdata = $adata;
+
+    # default operation is ADD
+    if (!defined($opt)) {
+	$opt = "ADD";
+    }
+    else {
+	$opt = uc $opt;
+    }
+    if (defined($adata)) {
+	# if only data wthout "var=" create proper perf line
+	$bdata = ($avar.'='.$adata) if $adata !~ /=/;
+	if (defined($unit)) {
+	    $bdata .= $unit;
+	}
+	elsif (exists($known_vars->{$avar}[2])) {
+	    $bdata .= $known_vars->{$avar}[2];
+	}
+	# preset perfdata in dataresults array
+	$dataresults->{$avar}=[undef,0,0,''] if !defined($dataresults->{$avar});
+	$dataresults->{$avar}[2]=-1;
+	if ($dataresults->{$avar}[2] eq '' || $opt eq "REPLACE") {
+	    $dataresults->{$avar}[3]=$bdata;
+	}
+	elsif ($dataresults->{$avar}[2] ne '' && $opt eq "ADD") {
+	    $dataresults->{$avar}[3].=$adata;
 	}
     }
 }
 
-# Return true if arg is a number
-sub isnum {
-  my $num = shift;
-  if (defined($num) && $num =~ /^[-|+]?((\d+\.?\d*)|(^\.\d+))$/ ) { return 1 ;}
-  return 0;
-}
-
-sub trim {
-  my $string = shift;
-  $string =~ s/^\s+//;
-  $string =~ s/\s+$//;
-  return $string;
-}
-
-# load previous performance data 
-sub process_perf {
- my %pdh;
- my ($nm,$dt);
- foreach (split(' ',$_[0])) {
-   if (/(.*)=(.*)/) {
-       ($nm,$dt)=($1,$2);
-        verb("prev_perf: $nm = $dt");
-        # in some of my plugins time_ is to profile execution time for part of plugin
-        # $pdh{$nm}=$dt if $nm !~ /^time_/;
-        $pdh{$nm}=$dt;
-        $pdh{$nm}=$1 if $dt =~ /(\d+)[cs]/; # 'c' or 's' maybe added
-	# support for more than one set of previously cached performance data
-        # push @prev_time,$1 if $nm =~ /.*\.(\d+)/ && (!defined($prev_time[0]) || $prev_time[0] ne $1);
-   }
- }
- return %pdh;
-}
-
-# This function adds info on error conditions that would be pre-pended to OK status data
-sub add_to_statusinfo {
-    my @IN = @_;
-    my $sline="";
-    $sline .= $_ foreach(@IN);
-    $sline = trim($sline);
-    $statusinfo .= ", " if $statusinfo;
-    $statusinfo .= $sline;
-}
-
-# This function adds data to status output line (for non-error checks)
-sub add_to_statusdata {
-    my ($avar,$adata) = @_;
-    if ((!exists($thresholds{$avar}{'DISPLAY'}) || $thresholds{$avar}{'DISPLAY'} eq 'YES') &&
-        (!exists($dataresults{$avar}[1]) || $dataresults{$avar}[1]==0)) {
-           if (defined($adata)) {
-              $statusdata .= ", " if $statusdata;
-              $statusdata .= trim($adata);
-           }
-           elsif (exists($dataresults{$avar}[0])) {
-              $statusdata .= ", " if $statusdata;
-              $statusdata .= $avar ." is ".$dataresults{$avar}[0];
-           }
-           $dataresults{$avar}[1]++;
-    }
-}
-
-# This function is used when building performance output
+#  @DESCRIPTION   : This function is used when building performance output
+#  @LAST CHANGED  : 08-21-12 by WL
+#  @INPUT         : ARG1 - variable name
+#		    ARG2 - optional data argument, if not present variable's dataresults are used
+#		    ARG3 - one of: "REPLACE" - if existing preset perfdata is present, it would be replaced with ARG2
+#		                   "ADD"    - if existing preset perfdata is there, ARG2 string would be added to it
+#				   "IFNOTSET - only set perfdata to ARG2 if it is empty, otherwise keep existing (DEFAULT)
+#  @RETURNS       : nothing (future: 1 on success, 0 on error)
+#  @PRIVACY & USE : PUBLIC, but its direct use is discouraged. Must be used as an object instance function
 sub add_to_perfdata {
-    my ($avar,$adata) = @_;
-    if ((!exists($thresholds{$avar}{'PERF'}) || $thresholds{$avar}{'PERF'} eq 'YES') &&
-        (!exists($dataresults{$avar}[2]) || $dataresults{$avar}[2]<1)) {
-           if (defined($adata)) {
-              $perfdata .= " " if $perfdata;
-              $perfdata .= trim($adata);
+    my ($self,$avar,$adata, $opt) = @_;
+    my $thresholds = $self->{'_thresholds'};
+    my $dataresults = $self-> {'_dataresults'};
+
+    if (!defined($opt)) {
+	$opt = "IFNOTSET";
+    }
+    else {
+	$opt = uc $opt;
+    }
+    if ((!exists($thresholds->{$avar}{'PERF'}) || $thresholds->{$avar}{'PERF'} eq 'YES') &&
+        (!exists($dataresults->{$avar}[2]) || $dataresults->{$avar}[2] < 1)) {
+           my $bdata = undef;
+	   if (defined($adata)) {
+              $bdata .= trim($adata);
            }
-           elsif (exists($dataresults{$avar}[0])) {
-              $perfdata .= " " if $perfdata;
-              $perfdata .= $avar."=".$dataresults{$avar}[0];
-              if (defined($KNOWN_STATUS_VARS{$avar})) {
-                 $perfdata .= $KNOWN_STATUS_VARS{$avar}[1];
-              }
+	   # this is how most perfdata gets added
+           elsif (exists($dataresults->{$avar}[0])) {
+              $bdata .= $avar."=".$dataresults->{$avar}[0];
            }
-	   $dataresults{$avar}[2]=0 if $dataresults{$avar}[2]<0;
-           $dataresults{$avar}[2]++;
+	   # this would use existing preset data now if it was present due to default
+	   # setting UNIT from KNOWN_STATUS_VARS array is now in set_perfdata if 3rd arg is undef
+	   $self->set_perfdata($avar,$bdata,undef,$opt);
+	   if (exists($dataresults->{$avar}[3]) && $dataresults->{$avar}[3] ne '') {
+		$self->{'_perfdata'} .= " " if $self->{'_perfdata'};
+		$self->{'_perfdata'} .= $dataresults->{$avar}[3];
+		$dataresults->{$avar}[2]=0 if $dataresults->{$avar}[2] < 0;
+		$dataresults->{$avar}[2]++;
+	   }
     }
 }
 
-# ----- to be externallly exported when it becomes library ---
-# This function sets output for variables for performance output
-# (;warn;crit would be added to it later if thresholds were set)
-#  ARG1 - variable name
-#  ARG2 - text for performance data (including arg=)
-sub preset_perfdata {
-    my ($avar,$adata) = @_;
-    $dataresults{$avar}=[undef,0,0,''] if !defined($dataresults{$avar});
-    $dataresults{$avar}[2]=-1;
-    $dataresults{$avar}[3]=$adata;
+#  @DESCRIPTION   : Sets list and info on known variables and regex for acceptable data types.
+#		    This function maybe called more than once. If called again, new vars in subsequent
+#		    calls are added to existing ones and existing vars are replaced if they are there again.
+#  @LAST CHANGED  : 08-22-12 by WL
+#  @INPUT         : ARG1 - ref to hash array of known vars. Keys are variable names. Data is an array. Example is:
+#  	 			'version' =>  [ 'misc', 'VERSION', '' ],
+#			        'utilization' => [ 'misc', 'GAUGE', '%' ],
+#	 			'cmd_get' => [ 'misc', 'COUNTER', 'c', "Total Number of Get Commands from Start" ],
+#			   The array elements are:
+#			    1st - string of source for this variable. not used by the library at all, but maybe used by code getting the data
+#			    2nd - type of data in a variable. May be "GAUGE", "VERSION", "COUNTER", "BOOLEAN", "TEXTINFO", "TEXTDATA", "SETTING"
+#			    3rd - either empty or one-character UNIT letter to be added to perforance data - 'c' for continous, '%' percent, 's' seconds
+#			    4th - either empty or a description of this variable. If not empty, the variable becomes long-option and this is help text
+#		    ARG2 - regex of acceptable types of data for performance output. Anything else is ignored (i.e. no no output to perf), but
+#			   is still available for threshold checks. if this is undef, then default of 'GAUGE|COUNTER|^DATA$|BOOLEAN' is used
+#  @RETURNS       : nothing (future: 1 on success, 0 on error)
+#  @PRIVACY & USE : PUBLIC, Must be used as object instance function
+sub set_knownvars {
+  my ($self, $known_vars_in, $vartypes_regex_in) = @_;
+  my $known_vars = $self->{'knownStatusVars'};
+
+  if (defined($known_vars_in)) {
+    foreach (keys %{$known_vars_in}) {
+      $known_vars->{$_} = $known_vars_in->{$_};
+    }
+  }
+  if (defined($vartypes_regex_in)) {
+      $self->{perfOKStatusRegex} = $vartypes_regex_in;
+  }
+  else {
+      $self->{perfOKStatusRegex} = $DEFAULT_PERF_OK_STATUS_REGEX;
+  }
 }
 
-# ----- to be externallly exported when it becomes library ---
-# this function is used when checking data against critical and warn values
-#  ARG1 : data variable name
-#  ARG2 : data to be checked
-#  ARG3 : threshold to be checked, internal structure format returned by parse_threshold()
+#  @DESCRIPTION   : Adds known variables definition one at a time
+#  @LAST CHANGED  : 08-22-12 by WL
+#  @INPUT         : ARG1 - variable name
+#	            ARG2 - string of source for this variable. not used by the library at all, but maybe used by code getting the data
+#	            ARG3 - type of data in a variable. May be "GAUGE", "VERSION", "COUNTER", "BOOLEAN", "TEXTINFO", "TEXTDATA", "SETTING"
+#	            ARG4 - either empty or one-character UNIT letter to be added to perforance data - 'c' for continous, '%' percent, 's' seconds
+#		    ARG5 - either empty or a description of this variable. If not empty, the variable becomes long-option and this is help text
+#  @RETURNS       : nothing (future: 1 on success, 0 on error)
+#  @PRIVACY & USE : PUBLIC, Must be used as object instance function
+sub add_knownvar {
+  my ($self, $varname, $source, $type, $unit, $description) = @_;
+  my $temp = { $varname => [ $source, $type, $unit, $description] };
+  $self->set_knownvars($temp,undef);
+}
+
+#  @DESCRIPTION   : This function is used for checking data values against critical and warning thresholds
+#  @LAST CHANGED  : 08-20-12 by WL
+#  @INPUT         : ARG1 - variable name
+#		    ARG2 - data to be checked
+#                   ARG3 - threshold to be checked, internal structure returned by parse_threshold()
+#  @RETURNS       : Returns "" (empty string) if data is not within threshold range
+#                   and text message for status line out about how data is within range otherwise
+#  @PRIVACY & USE : PUBLIC. Maybe used directly or as an object instance function
 sub check_threshold {
-    my ($attrib, $data, $th_array) = @_;
+    my ($self,$attrib,$data,$th_array) = _self_args(@_);
     my $mod = $th_array->[0];
     my $lv1 = $th_array->[1];
     my $lv2 = $th_array->[2];
+    my $issymb = 1;
+    $issymb = 0 if defined($self) && $self->{'output_comparison_symbols'}==0;
 
     # verb("debug check_threshold: $mod : ".(defined($lv1)?$lv1:'')." : ".(defined($lv2)?$lv2:''));
     return "" if !defined($lv1) || ($mod eq '' && $lv1 eq ''); 
-    return " " . $attrib . " is " . $data . " = " . $lv1 if $mod eq '=' && $data eq $lv1;
-    return " " . $attrib . " is " . $data . " != " . $lv1 if $mod eq '!' && $data ne $lv1;
-    return " " . $attrib . " is " . $data . " > " . $lv1 if $mod eq '>' && $data>$lv1;
-    return " " . $attrib . " is " . $data . " > " . $lv2 if $mod eq ':' && $data>$lv2;
-    return " " . $attrib . " is " . $data . " >= " . $lv1 if $mod eq '>=' && $data>=$lv1;
-    return " " . $attrib . " is " . $data . " < " . $lv1 if ($mod eq '<' || $mod eq ':') && $data<$lv1;
-    return " " . $attrib . " is " . $data . " <= " . $lv1 if $mod eq '<=' && $data<=$lv1;
+    return " " . $attrib . " is " . $data . ( ($issymb==1)?' = ':' equal to ' ). $lv1 if $mod eq '=' && $data eq $lv1;
+    return " " . $attrib . " is " . $data . ( ($issymb==1)?' != ':' not equal to ' ). $lv1 if $mod eq '!' && $data ne $lv1;
+    return " " . $attrib . " is " . $data . ( ($issymb==1)?' > ':' more than ' ) . $lv1 if $mod eq '>' && $data>$lv1;
+    return " " . $attrib . " is " . $data . ( ($issymb==1)?' > ':' more than ' ) . $lv2 if $mod eq ':' && $data>$lv2;
+    return " " . $attrib . " is " . $data . ( ($issymb==1)?' >= ':' more than or equal to ' ) . $lv1 if $mod eq '>=' && $data>=$lv1;
+    return " " . $attrib . " is " . $data . ( ($issymb==1)?' < ':' less than ' ). $lv1 if ($mod eq '<' || $mod eq ':') && $data<$lv1;
+    return " " . $attrib . " is " . $data . ( ($issymb==1)?' <= ':' less than or equal to ' ) . $lv1 if $mod eq '<=' && $data<=$lv1;
     return " " . $attrib . " is " . $data . " in range $lv1..$lv2" if $mod eq '@' && $data>=$lv1 && $data<=$lv2;
     return "";
 }
 
-
-# ----- to be externallly exported when it becomes library ---
-# this function is called when parsing threshold options data
-# it returns array internally representing this threshold
-#  $ARG1 - thrshold string
+#  @DESCRIPTION   : This function is called to parse threshold string
+#  @LAST CHANGED  : 08-20-12 by WL
+#  @INPUT         : ARG1 - String for one variable WARN or CRIT threshold which can be as follows:
+#			 data  - warn if data is above this value if numeric data, or equal for non-numeric
+#        		 >data - warn if data is above this value (default for numeric values)
+#        		 <data - warn if data is below this value (must be followed by number)
+#        		 =data - warn if data is equal to this value (default for non-numeric values)
+#                        !data - warn if data is not equal to this value
+#      		    Threshold can also be specified as range in two forms:
+#        		 num1:num2  - warn if data is outside range i.e. if data<num1 or data>num2
+#                       \@num1:num2 - warn if data is in range i.e. data>=num1 && data<=num2
+#  @RETURNS       : Returns reference to a hash array, this library's structure for holding processed threshold spec
+#  @PRIVACY & USE : PUBLIC. Maybe used directly or as an object instance function
 sub parse_threshold {
-    my $thin = shift;
+    my ($self,$thin) = _self_args(@_);
 
     # link to an array that holds processed threshold data
     # array: 1st is type of check, 2nd is threshold value or value1 in range, 3rd is value2 in range,
@@ -719,7 +1045,7 @@ sub parse_threshold {
 	$th_array->[2]=$2;
 	if ($th_array->[1] > $th_array->[2]) {
                 print "Incorrect format in '$thin' - in range specification first number must be smaller then 2nd\n";
-                print_usage();
+                if (defined($self)) { $self->usage(); }
                 exit $ERRORS{"UNKNOWN"};
 	}
 	$th_array->[0]=($at !~ /@/)?':':'@';
@@ -736,7 +1062,7 @@ sub parse_threshold {
     }
     if ($th_array->[0] =~ /[>|<]/ && !isnum($th_array->[1])) {
 	print "Numeric value required when '>' or '<' are used !\n";
-        print_usage();
+        if (defined($self)) { $self->usage(); }
         exit $ERRORS{"UNKNOWN"};
     }
     # verb("debug parse_threshold: $th_array->[0] and $th_array->[1]");
@@ -750,10 +1076,15 @@ sub parse_threshold {
     return $th_array;
 }
 
-# this function checks that for numeric data warn threshold is within range of critical
-# where within range depends on actual threshold spec and normally just means less
+#  @DESCRIPTION   : this function checks that for numeric data warn threshold is within range of critical
+#  @LAST CHANGED  : 08-20-12 by WL
+#  @INPUT         : ARG1 - warhing threshold structure (reference to hash array)
+#                   ARG2 - critical threshold structure (reference to hash array)
+#  @RETURNS       : Returns 1 if warning does not fall within critical (there is an error)
+#                   Returns 0 if everything is ok and warning is within critical
+#  @PRIVACY & USE : PUBLIC, but its use is discouraged. Maybe used directly or as an object instance function.
 sub threshold_specok {
-    my ($warn_thar,$crit_thar) = @_;
+    my ($self, $warn_thar,$crit_thar) = _self_args(@_);
 
     return 1 if defined($warn_thar) && defined($warn_thar->[1]) &&
 		defined($crit_thar) && defined($crit_thar->[1]) &&
@@ -768,65 +1099,87 @@ sub threshold_specok {
     return 0;  # return with 0 means specs check out and are ok
 }
 
+#  @DESCRIPTION   : This function sets data results data for checked variable
+#  @LAST CHANGED  : 08-20-12 by WL
+#  @INPUT         : ARG1 - name of data variable
+#                   ARG2 - data for this variable
+#  @RETURNS       : nothing (future: 1 on success, 0 on error)
+#  @PRIVACY & USE : PUBLIC, Must be used as an object instance function
+sub add_var {
+    my ($self,$dnam, $dval) = @_;
+    my $thresholds = $self->{'_thresholds'};
+    my $dataresults = $self-> {'_dataresults'};
+    my $perfVars = $self->{'_perfVars'};
 
-# ----- to be externallly exported when it becomes library ---
-# Add results data value to checked variable
-#  ARG1 : name of data variable
-#  ARG2 : data for this variable
-sub dataresults_addvar {
-    my ($dnam, $dval) = @_;
-    if (exists($dataresults{$dnam})) {
-   	$dataresults{$dnam}[0] = $dval;
+    if (exists($dataresults->{$dnam})) {
+   	$dataresults->{$dnam}[0] = $dval;
     }
     else { 
-	$dataresults{$dnam} = [$dval, 0, 0];
+	$dataresults->{$dnam} = [$dval, 0, 0, ''];
     }
-    if (defined($o_perfvars) && $o_perfvars eq '*') {
-        $thresholds{$dnam}={} if !exists($thresholds{$dnam});
-	if (!defined($thresholds{$dnam}{'PERF'})) {
-	    push @perfVars, $dnam;
-	    $thresholds{$dnam}{'PERF'} = 'YES';
+    if ($self->{'AllVarsToPerf'} == 1) {
+        $thresholds->{$dnam}={} if !exists($thresholds->{$dnam});
+	if (!defined($thresholds->{$dnam}{'PERF'})) {
+	    push @{$perfVars}, $dnam;
+	    $thresholds->{$dnam}{'PERF'} = 'YES';
 	}
     }
 }
 
-# ----- to be externallly exported when it becomes library ---
-# accessor function for data results
-#  ARG1: name of data variable
-sub get_data {
-  my $dnam = shift;
-  return undef if !exists($dataresults{$dnam});
-  return $dataresults{$dnam}[0];
+#  @DESCRIPTION   : Accessor function that gets variable data
+#  @LAST CHANGED  : 08-20-12 by WL
+#  @INPUT         : ARG1 - name of data variable
+#  @RETURNS       : undef if variable does not exist and data otherwise
+#  @PRIVACY & USE : PUBLIC, Must be used as an object instance function
+sub vardata {
+    my ($self,$dnam) = @_;
+    my $dataresults = $self->{'_dataresults'};
+    return undef if !exists($dataresults->{$dnam});
+    return $dataresults->{$dnam}[0];
 }
 
-# Add variable to those whose thresholds would be checked
-#  ARG1 : name of the data variable
-#  ARG2 : ref to combined thresholds hash array i.e. { 'WARN' => threshold array, 'CRIT' => threshold array, ABSENT => ... }
-#         such hash array is returned by by parse_thresholds_optionsline function
+#  @DESCRIPTION   : Adds variable to those whose thresholds would be checked
+#  @LAST CHANGED  : 08-20-12 by WL
+#  @INPUT         :  ARG1 - name of the data variable
+#  		     ARG2 - ref to combined thresholds hash array i.e. { 'WARN' => threshold array, 'CRIT' => threshold array, ABSENT => ... }
+#                           such hash array is returned by by parse_thresholds_optionsline function
+#  @RETURNS       : nothing (future: 1 on success, 0 on error)
+#  @PRIVACY & USE : PUBLIC, but its use should be limited. Must be used as an object instance function
 sub thresholds_addvar {
-    my ($var,$th) = @_;
-    push @allVars, $var if !exists($thresholds{$var});
-    $thresholds{$var}=$th;
+    my ($self,$var,$th) = @_;
+    push @{$self->{'_allVars'}}, $var if !exists($self->{'_thresholds'}{$var});
+    $self->{'_thresholds'}{$var}=$th;
 }
 
-# this function parses "WARN:threshold,CRIT:threshold,ABSENT:OK|WARNING|CRITICAL|UNKNOWN" text
-# parsing of actual threshold after WARN, CRIT is done by parse_threshold function
+#  @DESCRIPTION   : This function parses "WARN:threshold,CRIT:threshold,ABSENT:OK|WARNING|CRITICAL|UNKNOWN" combined threshold string
+#		    Parsing of actual threshold i.e. what is after WARN, CRIT is done by parse_threshold() function
+#  @LAST CHANGED  : 08-20-12 by WL
+#  @INPUT         :  ARG1 - String containing threshold option alike "WARN:threshold,CRIT:threshold,ABSENT:OK|WARNING|CRITICAL|UNKNOWN"
+#  @RETURNS       : Returns reference to a hash array, a library's structure for holding processed MULTI-THRESHOLD spec
+#		    Note that this is MULTI-THRESHOLD hash structure, it itself contains threshold hashes returned by parse_threshold()
+#  @PRIVACY & USE : PUBLIC, but its use is discouraged. Maybe used directly or as an object instance function.
 sub parse_thresholds_optionsline {
-   my $in = shift;
+   my ($self,$in) = _self_args(@_);
    my $thres = {};
    my @tin = split (',', uc $in);
    # old format with =warn,crit thresolds without specifying which one
    if (exists($tin[0]) && $tin[0] !~ /^WARN/ && $tin[0] !~ /^CRIT/ && $tin[0] !~ /^ABSENT/ && $tin[0] !~ /^ZERO/ && $tin[0] !~ /^DISPLAY/ && $tin[0] !~ /^PERF/) {
 	if (scalar(@tin)==2) {
-	     $thres->{'WARN'} = parse_threshold($tin[0]); 
-	     $thres->{'CRIT'} = parse_threshold($tin[1]);
+	     if (defined($self)) {
+		  $thres->{'WARN'} = $self->parse_threshold($tin[0]); 
+		  $thres->{'CRIT'} = $self->parse_threshold($tin[1]);
+	     }
+	     else {
+		  $thres->{'WARN'} = parse_threshold($tin[0]); 
+		  $thres->{'CRIT'} = parse_threshold($tin[1]);
+	     }
 	}
 	else {
 	     print "Can not parse. Unknown threshold specification: $in\n";
 	     print "Threshold line should be either both warning and critical thresholds separated by ',' or \n";
 	     print "new format of: WARN:threshold,CRIT:threshold,ABSENT:OK|WARNING|CRITICAL|UNKNOWN\n";
 	     print "which allows to specify all 3 (CRIT,WARN,ABSENT) checks or any one of them in any order\n";
-             print_usage();
+             if (defined($self)) { $self->usage(); }
              exit $ERRORS{"UNKNOWN"};
 	}
    }
@@ -834,10 +1187,20 @@ sub parse_thresholds_optionsline {
    else {
 	foreach(@tin) {
 	     if (/^WARN\:(.*)/) {
-		    $thres->{'WARN'} = parse_threshold($1);
+		    if (defined($self)) {
+			$thres->{'WARN'} = $self->parse_threshold($1);
+		    }
+		    else {
+			$thres->{'WARN'} = parse_threshold($1);
+		    }
 	     }
 	     elsif (/^CRIT\:(.*)/) {
-		    $thres->{'CRIT'} = parse_threshold($1);
+		    if (defined($self)) {
+			$thres->{'CRIT'} = $self->parse_threshold($1);
+		    }
+		    else {
+			$thres->{'CRIT'} = parse_threshold($1);
+		    }
 	     }
 	     elsif (/^ABSENT\:(.*)/) {
 		    if (exists($ERRORS{$1})) {
@@ -845,7 +1208,7 @@ sub parse_thresholds_optionsline {
 		    }
 		    else {
 			print "Invalid value $1 after ABSENT. Acceptable values are: OK, WARNING, CRITICAL, UNKNOWN\n";
-			print_usage();
+			if (defined($self)) { $self->usage(); }
 			exit $ERRORS{"UNKNOWN"};
 		    }
 	     }
@@ -855,7 +1218,7 @@ sub parse_thresholds_optionsline {
 		    }
 		    else {
 			print "Invalid value $1 after ZERO. Acceptable values are: OK, WARNING, CRITICAL, UNKNOWN\n";
-			print_usage();
+			if (defined($self)) { $self->usage(); }
 			exit $ERRORS{"UNKNOWN"};
 		    }
 	     }
@@ -865,7 +1228,7 @@ sub parse_thresholds_optionsline {
 		   }
 		   else {
 			print "Invalid value $1 after DISPLAY. Specify this as YES or NO.\n";
-			print_usage();
+			if (defined($self)) { $self->usage(); }
 			exit $ERRORS{"UNKNOWN"};
 		   }
 	     }
@@ -875,343 +1238,565 @@ sub parse_thresholds_optionsline {
                    }
                    else {
                         print "Invalid value $1 after PERF. Specify this as YES or NO.\n";
-                        print_usage();
+                        if (defined($self)) { $self->usage(); }
                         exit $ERRORS{"UNKNOWN"};
                    }
              }
 	     else {
 		    print "Can not parse. Unknown threshold specification: $_\n";
 		    print "Threshold line should be WARN:threshold,CRIT:threshold,ABSENT:OK|WARNING|CRITICAL|UNKNOWN,ZERO:OK|WARNING|CRITICAL|UNKNOWN\n";
-		    print_usage();
+		    if (defined($self)) { $self->usage(); }
 		    exit $ERRORS{"UNKNOWN"};
 	     }
 	}
    }
    if (exists($thres->{'WARN'}) && exists($thres->{'CRIT'})) {
-	  if (threshold_specok($thres->{'WARN'},$thres->{'CRIT'})) {
+	  my $check_warncrit = 0;
+	  if (defined($self)) {
+	      $check_warncrit = $self->threshold_specok($thres->{'WARN'},$thres->{'CRIT'});
+	  }
+	  else {
+	      $check_warncrit = threshold_specok($thres->{'WARN'},$thres->{'CRIT'});
+	  }
+	  if ($check_warncrit) {
                  print "All numeric warning values must be less then critical (or greater then when '<' is used)\n";
                  print "Note: to override this check prefix warning value with ^\n";
-                 print_usage();
+                 if (defined($self)) { $self->usage(); }
                  exit $ERRORS{"UNKNOWN"};
           }
    }
    return $thres;
 }
 
-# ----- to be externallly exported when it becomes library ---
-# Address threshold based on options text line
-# of the type  WARN:threshold,CRIT:threshold,ABSENT:..,,DISPLAY:YES|NO,PERF:YES|NO
-#  ARG1 - variable name
-#  ARG2 - text from the option
+#  @DESCRIPTION   : Adds threshold for variable based on its options text line
+#  @LAST CHANGED  : 08-20-12 by WL
+#  @INPUT         :  ARG1 - name of the data variable
+#  		     ARG2 - combined threshold spec line of the type "WARN:threshold,CRIT:threshold,ABSENT:OK|WARNING|CRITICAL|UNKNOWN"
+#  @RETURNS       : nothing (future: 1 on success, 0 on error)
+#  @PRIVACY & USE : PUBLIC, Recommend function for adding thresholds. Must be used as an object instance function
 sub thresholds_add_optionsline {
-    my ($var,$optline) = @_;
-    thresholds_addvar($var,parse_thresholds_optionsline($optline));
+    my ($self,$var,$optline) = @_;
+    $self->thresholds_addvar($var,$self->parse_thresholds_optionsline($optline));
 }
 
-# ----- to be externallly exported when it becomes library ---
-# Accessor function. Returns threshold or related variable check setting
-# For 'WARN' and 'CRIT' thresholds it returns array i.e. internal structure
-#  ARG1: variable name
-#  ARG2: type of threshold - WARN,CRIT,ABSENT,ZERO,PERF,DISPLAY
+#  @DESCRIPTION   : Accessor function for thresholds and related variable settings on what and how to check
+#  @LAST CHANGED  : 08-20-12 by WL
+#  @INPUT         : ARG1 - name of data variable
+#                   ARG2 - name of the threshold or related data setting to return
+#		           This can be: "WARN", "CRIT", "ABSENT", "ZERO", "DISPLAY", "PERF"
+#  @RETURNS       : undef if variable does not exist
+#  		    if variable exists and "WARN" or "CRIT" thresholds are requested, it returns asociated
+#  		    threshold hash array structure for named threshold of the type returned by parse_threshold()
+#                   for ABSENT, ZERO, DISPLAY, PERF and other, it returns a string for this check setting
+#  @PRIVACY & USE : PUBLIC, Must be used as an object instance function
 sub get_threshold {
-  my ($var,$thname) = @_;
-  return undef if !exists($thresholds{$var}) || !exists($thresholds{$var}{$thname});
-  return $thresholds{$var}{$thname};
+    my ($self,$var,$thname) = @_;
+    return undef if !exists($self->{'_thresholds'}{$var}) || !exists($self->{'_thresholds'}{$var}{$thname});
+    return $self->{'_thresholds'}{$var}{$thname};
 }
 
-# ----- to be externallly exported when it becomes library ---
-# Sets threshold of specific type for variable
-#  ARG1 : variable name
-#  ARG2 : threshold type, one of: WARN,CRIT,ABSENT,ZERO,DISPLAY,PERF
-#  ARG3 : data to set
+#  @DESCRIPTION   : Modifier function for thresholds and related variable settings on how to check and display results
+#  @LAST CHANGED  : 08-20-12 by WL
+#  @INPUT         : ARG1 - name of data variable
+#                   ARG2 - type of the threshold or related data setting
+#		           This can be: "WARN", "CRIT", "ABSENT", "ZERO", "DISPLAY", "PERF"
+#                   ARG3 - what to set this to, for "WARN" and "CRIT" this must be hash array returned by parse_threshold()
+#  @RETURNS       : 0 if type you want to set is not one of "WARN", "CRIT", "ZERO" or other acceptable settings
+#  		    1 on success
+#  @PRIVACY & USE : PUBLIC, Must be used as an object instance function
 sub set_threshold {
-  my ($var,$thname,$thdata) = @_;
-  if ($thname ne 'WARN' && $thname ne 'CRIT' && $thname ne 'ZERO' &&
-      $thname ne 'ABSENT' && $thname ne 'PERF' && $thname ne 'DISPLAY') {
-     return 0;
-  }
-  $thresholds{$var}={} if !exists($thresholds{$var});
-  $thresholds{$var}{$thname}=$thdata;
-  return 1;
+    my ($self,$var,$thname,$thdata) = @_;
+    if ($thname ne 'WARN' && $thname ne 'CRIT' && $thname ne 'ZERO' &&
+        $thname ne 'ABSENT' && $thname ne 'PERF' && $thname ne 'DISPLAY' && $thname ne 'SAVED') {
+       return 0;
+    }
+    $self->{'_thresholds'}{$var}={} if !exists($self->{'_thresholds'}{$var});
+    $self->{'_thresholds'}{$var}{$thname}=$thdata;
+    return 1;
 }
 
-# returns list variables for inclusion as GetOptions(..) parameters
+#  @DESCRIPTION   : Returns list variables for inclusion as GetOptions(..) parameters
+#  @LAST CHANGED  : 08-20-12 by WL
+#  @INPUT         : none
+#  @RETURNS       : Array of additional options based on KNOWN_STATS_VARS
+#  @PRIVACY & USE : PUBLIC, Special use case with GetOpt::Long. Must be used as an object instance function
 sub additional_options_list {
+    my $self = shift;
+
+    my $known_vars = $self->{'knownStatusVars'};
+    my ($o_rprefix, $o_rsuffix) = ("", "");
+    $o_rprefix = $self->{'o_rprefix'} if exists($self->{'o_rprefix'});
+    $o_rsuffix = $self->{'o_rsuffix'} if exists($self->{'o_rsuffix'});
     my @VarOptions = ();
-    foreach(keys %KNOWN_STATUS_VARS) {
+
+    if (defined($self) && defined($known_vars)) {
+      foreach(keys %{$known_vars}) {
         my $v = $_;
         my $v2 = $o_rprefix.$v.$o_rsuffix;
-        if (exists($KNOWN_STATUS_VARS{$v}[2]) && $KNOWN_STATUS_VARS{$v}[2] ne '') {
+        if (exists($known_vars->{$v}[3]) && $known_vars->{$v}[3] ne '') {
               push @VarOptions,$v."=s";
-              push @VarOptions,$v2."=s" if $KNOWN_STATUS_VARS{$v}[0] eq 'COUNTER'; 
+              push @VarOptions,$v2."=s" if ${$v}[1] eq 'COUNTER' && ($o_rprefix ne '' || $o_rsuffix ne ''); 
         }
+      }
     }
     return @VarOptions;
 }
 
+#  @DESCRIPTION   : Processes standard options parsing out of them variables to be checked
+#  @LAST CHANGED  : 08-20-12 by WL
+#  @INPUT         : ARG1 - Options data hash from GetOpt::Long
+#		    ARG2 - option --verbose or -v or --debug : undef normally and "" or filename if debug enabled
+#		    ARG3 - option --variables or -a in WL's plugins : comma-separated list of variables to check
+#		    ARG4 - option --warn or -w : comma-separated warning thresholds for variables in ARG3
+#		    ARG5 - option --crit or -c : comma-separated critical thresholds for variables in ARG3
+#		    ARG6 - option --perf or -f in WL's plugin: all regular variables should also go to perf data
+#		    ARG7 - option --perfvars or -A in WL's plugins: command-separated list of variables whose data goes to PERF output
+#		    ARG8 - prefix to distinguish rate variables, maybe "" but usually this is "rate_"
+#		    ARG9 - suffix to distinguish rate variables, only if ARG7 is "", otherwise optional and absent
+#  @RETURNS       : nothing (future: 1 on success, 0 on error)
+#  @PRIVACY & USE : PUBLIC, To be used shortly after GetOptions. Must be used as an object instance function
 sub options_startprocessing {
-    my $Options = shift;
-    # Processing of variables-list -a, -A and thresholds -w, -c options
-    @ar_warnLv = ();
-    @ar_critLv = ();
-    ($o_rprefix,$o_rsuffix)=split(/,/,lc $o_ratelabel) if defined($o_ratelabel) && $o_ratelabel ne '';
-    @perfVars=split( /,/ , lc $o_perfvars ) if defined($o_perfvars) && $o_perfvars ne '*';
-    $o_perfvars='*' if defined($o_perfvars) && scalar(@perfVars)==0;
+    my ($self, $Options, $o_verb, $o_variables, $o_warn, $o_crit, $o_perf, $o_perfvars, $o_rprefix, $o_rsuffix) = @_;
+
+    # Copy input parameters to object hash array, set them if not present
+    $o_rprefix="" if !defined($o_rprefix);
+    $o_rsuffix="" if !defined($o_rsuffix);
+    $o_perfvars="" if !defined($o_perfvars);
+    $o_crit="" if !defined($o_crit);
+    $o_warn="" if !defined($o_warn);
+    $o_variables="" if !defined($o_variables);
+    $self->{'o_variables'} = $o_variables;
+    $self->{'o_perfvars'} = $o_perfvars;
+    $self->{'o_crit'} = $o_crit;
+    $self->{'o_warn'} = $o_warn;
+    $self->{'o_perf'} = $o_perf;
+    $self->{'o_rprefix'} = $o_rprefix;
+    $self->{'o_rsuffix'} = $o_rsuffix;
+    $self->{'verbose'} = $o_verb if defined($o_verb);
+    # start processing
+    my $perfVars = $self->{'_perfVars'};
+    my $ar_varsL = $self->{'_ar_varsL'};
+    my $ar_critLv = $self->{'_ar_critLv'};
+    my $ar_warnLv = $self->{'_ar_warnLv'};
+    my $known_vars = $self->{'knownStatusVars'};
+    $o_rprefix = lc $o_rprefix;
+    $o_rsuffix = lc $o_rsuffix;
+    @{$perfVars} = split( /,/ , lc $o_perfvars ) if defined($o_perfvars) && $o_perfvars ne '*';
+    if (defined($o_perfvars) && scalar(@{$perfVars})==0) {
+	$o_perfvars='*';
+	$self->{'o_perfvars'}='*';
+    }
+    if ($o_perfvars eq '*') {
+	$self->{'AllVarsToPerf'} = 1;
+    }
     # below loop converts rate variables to internal representation
-    for (my $i=0; $i<scalar(@perfVars); $i++) {
-        $perfVars[$i] = '&'.$1 if $perfVars[$i] =~ /^$o_rprefix(.*)$o_rsuffix$/;
+    for (my $i=0; $i<scalar(@{$perfVars}); $i++) {
+        $perfVars->[$i] = '&'.$1 if $perfVars->[$i] =~ /^$o_rprefix(.*)$o_rsuffix$/;
     }
     if (defined($o_warn) || defined($o_crit) || defined($o_variables)) {
 	if (defined($o_variables)) {
-	  @ar_varsL=split( /,/ , lc $o_variables );
+	  @{$ar_varsL}=split( /,/ , lc $o_variables );
 	  if (defined($o_warn)) {
 	     $o_warn.="~" if $o_warn =~ /,$/;
-	     @ar_warnLv=split( /,/ , lc $o_warn );
+	     @{$ar_warnLv}=split( /,/ , lc $o_warn );
 	  }
 	  if (defined($o_crit)) {
 	     $o_crit.="~" if $o_crit =~ /,$/;
-    	     @ar_critLv=split( /,/ , lc $o_crit );
+    	     @{$ar_critLv}=split( /,/ , lc $o_crit );
 	  }
 	}
 	else {
 	  print "Specifying warning and critical thresholds with -w and -c requires '-a' parameter with list of variables to be checked\n";
-	  print_usage();
+	  if (defined($self)) { $self->usage(); }
 	  exit $ERRORS{"UNKNOWN"};
 	}
     }
-    # this is a special loop to check stats-variables options such as "connected_clients=WARN,CRIT"
-    # which are specified as long options
+    # this is a special loop to check stats-variables options such as "connected_clients=WARN:warning,CRIT:critical"
+    # which are specified as long options (new extended threshold line spec introduced in check_redis and check_memcached)
     my ($vname,$vname2) = (undef,undef);
-    foreach (keys(%KNOWN_STATUS_VARS)) {
+    foreach (keys(%{$known_vars})) {
 	$vname = $_;
 	$vname2=$o_rprefix.$vname.$o_rsuffix;
-	if (exists($KNOWN_STATUS_VARS{$vname}[2])) {
+	if (exists($known_vars->{$vname}[3])) {
 	    if (exists($Options->{$vname})) {
-		 verb("Option $vname found with spec parameter: ".$Options->{$vname});
-		 thresholds_addvar($vname,parse_thresholds_optionsline($Options->{$vname}));
+		 $self->verb("Option $vname found with spec parameter: ".$Options->{$vname});
+		 $self->thresholds_addvar($vname,$self->parse_thresholds_optionsline($Options->{$vname}));
 	    }
 	    if (exists($Options->{$vname2})) {
-		 verb("Rate option $vname2 found with spec parameter: ".$Options->{$vname2});
-		 thresholds_addvar('&'.$vname,parse_thresholds_optionsline($Options->{$vname2}));
+		 $self->verb("Rate option $vname2 found with spec parameter: ".$Options->{$vname2});
+		 $self->thresholds_addvar('&'.$vname,$self->parse_thresholds_optionsline($Options->{$vname2}));
 	    }
 	}
     }
+    $self->{'_called_options_startprocessing'}=1;
 }
 
-# sets thresholds for given list of variables after options have been processed
-sub options_setthresholds {
-    if (scalar(@ar_warnLv)!=scalar(@ar_varsL) || scalar(@ar_critLv)!=scalar(@ar_varsL)) {
-	  printf "Number of specified warning levels (%d) and critical levels (%d) must be equal to the number of attributes specified at '-a' (%d). If you need to ignore some attribute do it as ',,'\n", scalar(@ar_warnLv), scalar(@ar_critLv), scalar(@ar_varsL); 
-	  verb("Warning Levels: ".join(",",@ar_warnLv));
-	  verb("Critical Levels: ".join(",",@ar_critLv));
-	  print_usage();
+#  @DESCRIPTION   : Internal function. Parses and sets thresholds for given list of variables after all options have been processed
+#  @LAST CHANGED  : 08-20-12 by WL
+#  @INPUT         : none
+#  @RETURNS       : nothing (future: 1 on success, 0 on error)
+#  @PRIVACY & USE : PRIVATE, Must be used as an object instance function
+sub _options_setthresholds {
+    my $self = shift;
+
+    my $perfVars = $self->{'_perfVars'};
+    my $ar_varsL = $self->{'_ar_varsL'};
+    my $ar_critLv = $self->{'_ar_critLv'};
+    my $ar_warnLv = $self->{'_ar_warnLv'};
+    my $known_vars = $self->{'knownStatusVars'};
+    my $thresholds = $self->{'_thresholds'};
+    my ($o_rprefix, $o_rsuffix) = ("", "");
+    $o_rprefix = $self->{'o_rprefix'} if exists($self->{'o_rprefix'});
+    $o_rsuffix = $self->{'o_rsuffix'} if exists($self->{'o_rsuffix'});
+
+    if (scalar(@{$ar_warnLv})!=scalar(@{$ar_varsL}) || scalar(@{$ar_critLv})!=scalar(@{$ar_varsL})) {
+	  printf "Number of specified warning levels (%d) and critical levels (%d) must be equal to the number of attributes specified at '-a' (%d). If you need to ignore some attribute do it as ',,'\n", scalar(@{$ar_warnLv}), scalar(@{$ar_critLv}), scalar(@{$ar_varsL}); 
+	  $self->verb("Warning Levels: ".join(",",@{$ar_warnLv}));
+	  $self->verb("Critical Levels: ".join(",",@{$ar_critLv}));
+	  if (defined($self)) { $self->usage(); }
 	  exit $ERRORS{"UNKNOWN"};
     }
-    for (my $i=0; $i<scalar(@ar_varsL); $i++) {
-	  $ar_varsL[$i] = '&'.$1 if $ar_varsL[$i] =~ /^$o_rprefix(.*)$o_rsuffix$/; # always lowercase here
-	  if ($ar_varsL[$i] =~ /^&(.*)/) {
-		if (!defined($o_prevperf)) {
-			print "Calculating rate variable such as ".$ar_varsL[$i]." requires previous performance data. Please add '-P \$SERVICEPERFDATA\$' to your nagios command line.\n";
-			print_usge();
+    for (my $i=0; $i<scalar(@{$ar_varsL}); $i++) {
+	  $ar_varsL->[$i] = '&'.$1 if $ar_varsL->[$i] =~ /^$o_rprefix(.*)$o_rsuffix$/; # always lowercase here
+	  if ($ar_varsL->[$i] =~ /^&(.*)/) {
+		if (!defined($self->{'o_prevperf'})) {
+			print "Calculating rate variable such as ".$ar_varsL->[$i]." requires previous performance data. Please add '-P \$SERVICEPERFDATA\$' to your nagios command line.\n";
+			if (defined($self)) { $self->usage(); }
 			exit $ERRORS{"UNKNOWN"};
 		}
-		if (defined($KNOWN_STATUS_VARS{$1}) && $KNOWN_STATUS_VARS{$1}[0] ne 'COUNTER') {
+		if (defined($known_vars->{$1}) && $known_vars->{$1}[0] ne 'COUNTER') {
                 	print "$1 is not a COUNTER variable for which rate of change should be calculated\n";
-			print_usage();
+			if (defined($self)) { $self->usage(); }
                 	exit $ERRORS{"UNKNOWN"};
 		}
 	  }
-	  if (!exists($thresholds{$ar_varsL[$i]})) {
-	      my $warn = parse_threshold($ar_warnLv[$i]);
-	      my $crit = parse_threshold($ar_critLv[$i]);
-	      if (threshold_specok($warn,$crit)) {
+	  if (!exists($thresholds->{$ar_varsL->[$i]})) {
+	      my $warn = $self->parse_threshold($ar_warnLv->[$i]);
+	      my $crit = $self->parse_threshold($ar_critLv->[$i]);
+	      if ($self->threshold_specok($warn,$crit)) {
                  print "All numeric warning values must be less then critical (or greater then when '<' is used)\n";
                  print "Note: to override this check prefix warning value with ^\n";
-                 print_usage();
+                 if (defined($self)) { $self->usage(); }
                  exit $ERRORS{"UNKNOWN"};
 	      }
-	      thresholds_addvar($ar_varsL[$i], {'WARN'=>$warn,'CRIT'=>$crit} );
+	      $self->thresholds_addvar($ar_varsL->[$i], {'WARN'=>$warn,'CRIT'=>$crit} );
 	  }
     }
 }
 
-# processes previous perf data if present
-sub options_processprevperf {
-    if (defined($o_prevperf)) {
-        if (defined($o_perf)) {
-                %prev_perf=process_perf($o_prevperf);
-                # put last time nagios was checked in timestamp array
-                if (defined($prev_perf{_ptime})) {
-                        # push @prev_time, $prev_perf{ptime};
-			$perfcheck_time=$prev_perf{_ptime};
-                }
-                elsif (defined($o_prevtime)) {
-                        # push @prev_time, $o_prevtime;
-                        # $prev_perf{ptime}=$o_prevtime;
-			$perfcheck_time=$o_prevtime;
-                }
-                else {
-                        # @prev_time=();
-			$perfcheck_time=undef;
-                }
-                # numeric sort for timestamp array (this is from lowest time to highiest, i.e. to latest)
-                # my %ptimes=();
-                # $ptimes{$_}=$_ foreach @prev_time;
-                # @prev_time = sort { $a <=> $b } keys(%ptimes);
-        }
-        else {
-                print "need -f option first \n"; print_usage(); exit $ERRORS{"UNKNOWN"};
-        }
+#  @DESCRIPTION   : Internal helper function. Determines time when previous performance data was calculated and saved at
+#  @DEVNOTE	  : Right now this library and function only supports one previous performance data set,
+#		    but check_snmp_netint plugin supports multiple sets and there the code is more complex,
+#		    As this function originated there, that code is commented out right now.
+#  @LAST CHANGED  : 08-21-12 by WL
+#  @INPUT         :  ARG1 - reference to previous performance data hash array. It looks for _ptime variable there.
+#		     ARG2 - string with previous performance time in unix seconds. This may come from separate plugin option.
+#  @RETURNS       : Time in unix seconds frm 1970 or undef if it was not located
+#  @PRIVACY & USE : PRIVATE, Maybe used directly or as an object instance function.
+sub _set_prevtime {
+    my ($self,$prevperf,$o_prevtime) = _self_args(@_);
+    my $perfcheck_time;
+
+    if (defined($o_prevtime)) {
+         # push @prev_time, $o_prevtime;
+         # $prev_perf{ptime}=$o_prevtime;
+	 $perfcheck_time=$o_prevtime;
+    }
+    elsif (defined($prevperf) && defined($prevperf->{'_ptime'})) {
+	 # push @prev_time, $prev_perf{ptime};
+	 $perfcheck_time=$prevperf->{'_ptime'};
+    }
+    else {
+         # @prev_time=();
+	 $perfcheck_time=undef;
+    }
+    # numeric sort for timestamp array (this is from lowest time to highiest, i.e. to latest)
+    # my %ptimes=();
+    # $ptimes{$_}=$_ foreach @prev_time;
+    # @prev_time = sort { $a <=> $b } keys(%ptimes);
+    return $perfcheck_time;
+}
+
+#  @DESCRIPTION   : Processes standard options, setting up thresholds based on options that are to be checked
+#  @LAST CHANGED  : 08-22-12 by WL
+#  @INPUT         : none
+#  @RETURNS       : nothing (future: 1 on success, 0 on error)
+#  @PRIVACY & USE : PUBLIC, To be called after plugin finished processing its own custom options. Must be used as an object instance function
+sub options_finishprocessing {
+    my $self = shift;
+
+    if (!exists($self->{'_called_options_finishprocessing'})) {
+	# process previous performance data
+	my $prevperf = $self->{'_prevPerf'};
+	if (defined($self->{'o_prevperf'})) {
+	      if (defined($self->{'o_perf'}) || defined($self->{'o_perfvars'})) {
+		    %{$prevperf}=$self->process_perf($self->{'o_prevperf'});
+		    $self->{'_perfcheck_time'} = $self->_set_prevtime($prevperf,$self->{'o_prevtime'});
+	      }
+	      else {
+		    print "--preverf can only be used with --perf or --perfvars options\n";
+		    if (defined($self)) { $self->usage(); }
+		    exit $ERRORS{"UNKNOWN"};
+	      }
+	}
+	# set thresholds
+	$self->_options_setthresholds();
+        # prepare data results arrays
+	my $dataresults = $self->{'_dataresults'};
+	$dataresults->{$_} = [undef, 0, 0] foreach(@{$self->{'_allVars'}});
+	$dataresults->{$_} = [undef, 0, 0] foreach(@{$self->{'_perfVars'}});
+	# mask as having finished
+	$self->{'_called_options_finishprocessing'}=1;
     }
 }
 
-# this is the main function called closer to end of the code that checks all variables
-# (after we assigned values to them) against thresholds that had been processed before
-sub main_checkvars {
-    # We split into prefix/suffix again but without lowercasing $o_ratelabel first
-    ($o_rprefix,$o_rsuffix)=split(/,/,$o_ratelabel) if defined($o_ratelabel) && $o_ratelabel ne '';
+#  @DESCRIPTION   : Accessor function for previously saved perfdata
+#  @LAST CHANGED  : 08-22-12 by WL
+#  @INPUT         : ARG1 - varname
+#  @RETURNS       : value of that variable on previous plugin run, undef if not known
+#  @PRIVACY & USE : PUBLIC, Must be used as an object instance function
+sub prev_perf {
+  my ($self,$var) = @_;
+  if (defined($self) && defined($self->{'_prevPerf'}{$var})) {
+      return $self->{'_prevPerf'}{$var};
+  }
+  return undef;
+}
 
-    my ($avar,$avar_out,$chk)=(undef,undef,undef);
+#  @DESCRIPTION   : Accessor function for exit status code
+#  @LAST CHANGED  : 08-21-12 by WL
+#  @INPUT         : none
+#  @RETURNS       : current expected exit status code
+#  @PRIVACY & USE : PUBLIC, Must be used as an object instance function
+sub statuscode {
+   my $self = shift;
+   return $self->{'_statuscode'};
+}
+
+#  @DESCRIPTION   : Sets plugin exist status
+#  @LAST CHANGED  : 08-21-12 by WL
+#  @INPUT         : status code string - one of "WARNING", "CRITICAL", "UNKNOWN".
+#  @RETURNS       : 0 on success, 1 if this status code is below level that plugin would exit with and as such it was not set
+#  @PRIVACY & USE : PUBLIC, Must be used as an object instance function
+sub set_statuscode {
+   my ($self,$newcode) = @_;
+
+   if ($newcode eq 'UNKNOWN') {
+      $self->{'_statuscode'} = 'UNKNOWN';
+      return 0;
+   }
+   if ($self->{'_statuscode'} eq 'UNKNOWN') { return 1; }
+   elsif ($self->{'_statuscode'} eq 'CRITICAL') {
+      if ($newcode eq 'CRITICAL') { return 0;}
+      else { return 1; }
+   }
+   elsif ($self->{'_statuscode'} eq 'WARNING') {
+      if ($newcode eq 'CRITICAL') {
+	 $self->{'_statuscode'} ='CRITICAL';
+	 return 0;
+      }
+      elsif ($newcode eq 'WARNING') { return 0; }
+      else { return 1; }
+   }
+   elsif ($self->{'_statuscode'} eq 'OK') {
+      if ($newcode eq 'CRITICAL' || $newcode eq 'WARNING') {
+	 $self->{'_statuscode'} = $newcode;
+	 return 0;
+      }
+      else { return 1; }
+   }
+   else {
+      printf "SYSTEM ERROR: status code $newcode not supported";
+      exit $ERRORS{'UNKNOWN'};
+   }
+   return 1; # should never get here
+}
+
+#  @DESCRIPTION   : This function is called closer to end of the code after plugin retrieved data and
+#		    assigned values to variables. This function checks variables against all thresholds.
+#		    It prepares statusdata and statusinfo and exitcode. 
+#  @LAST CHANGED  : 08-22-12 by WL
+#  @INPUT         : none
+#  @RETURNS       : nothing (future: 1 on success, 0 on error)
+#  @PRIVACY & USE : PUBLIC, To be called after variables have values. Must be used as an object instance function
+sub main_checkvars {
+    my $self = shift;
+
+    $self->options_finishprocessing() if !exists($self->{'_called_options_finshprocessing'});
+    if ($self->{'_called_main_checkvars'}==1) { return; }
+
+    my $thresholds = $self->{'_thresholds'};
+    my $dataresults = $self->{'_dataresults'};
+    my $allVars = $self->{'_allVars'};
+    my $o_rprefix = $self->{'o_rprefix'};
+    my $o_rsuffix = $self->{'o_rsuffix'};
+    my ($avar,$avar_out,$avar_perf,$chk)=(undef,undef,undef,undef);
+
     # main loop to check for warning & critical thresholds
-    for (my $i=0;$i<scalar(@allVars);$i++) {
-	$avar=$allVars[$i];
+    for (my $i=0;$i<scalar(@{$allVars});$i++) {
+	$avar=$allVars->[$i];
 	$avar_out = $avar;
 	# this is for output of rate variables which name internally start with &
 	if ($avar =~ /^&(.*)/) {
 	    $avar_out = $o_rprefix.$1.$o_rsuffix;
 	}
-	if (defined($dataresults{$avar}[0])) {
+	if (defined($dataresults->{$avar}[0])) {
 	    # main check
-	    if ($dataresults{$avar}[0]==0 && exists($thresholds{$avar}{'ZERO'})) {
-		$statuscode=$thresholds{$avar}{'ZERO'} if $statuscode ne 'CRITICAL' && $statuscode ne 'OK';
-		add_to_statusinfo("$avar is zero") if $statuscode ne 'OK';
+	    if ($dataresults->{$avar}[0]==0 && exists($thresholds->{$avar}{'ZERO'})) {
+		$self->set_statuscode($thresholds->{$avar}{'ZERO'});
+		$self->add_to_statusinfo($avar, "$avar is zero") if $self->statuscode() ne 'OK';
 	    }
 	    else {
 		$chk=undef;
-		if (exists($thresholds{$avar}{'CRIT'})) {
-		    $chk = check_threshold($avar,lc $dataresults{$avar}[0], $thresholds{$avar}{'CRIT'});
+		if (exists($thresholds->{$avar}{'CRIT'})) {
+		    $chk = $self->check_threshold($avar,lc $dataresults->{$avar}[0], $thresholds->{$avar}{'CRIT'});
 		    if ($chk) {
-		    	$dataresults{$avar}[1]++;
-		    	$statuscode = "CRITICAL";
-		    	add_to_statusinfo($chk);
+		    	$self->set_statuscode("CRITICAL");
+		    	$self->add_to_statusinfo($avar,$chk);
 		    }
 		}
-		if (exists($thresholds{$avar}{'WARN'}) && (!defined($chk) || !$chk)) {
-		    $chk = check_threshold($avar,lc $dataresults{$avar}[0], $thresholds{$avar}{'WARN'});
+		if (exists($thresholds->{$avar}{'WARN'}) && (!defined($chk) || !$chk)) {
+		    $chk = $self->check_threshold($avar,lc $dataresults->{$avar}[0], $thresholds->{$avar}{'WARN'});
 		    if ($chk) {
-		    	$dataresults{$avar}[1]++;
-		   	 $statuscode="WARNING" if $statuscode eq "OK";
-		    	 add_to_statusinfo($chk);
+		   	$self->set_statuscode("WARNING");
+		    	$self->add_to_statusinfo($avar,$chk);
 		    }
 		}
 	    }
 	    # if we did not output to status line yet, do so
-	    add_to_statusdata($avar,$avar_out." is ".$dataresults{$avar}[0]);
+	    $self->add_to_statusdata($avar,$avar_out." is ".$dataresults->{$avar}[0]);
 
-	    # if we were asked to output performance, prepare it but do not output until later loop
-	    if (($dataresults{$avar}[2]<0 || 
-		 ($dataresults{$avar}[2]==0 &&
-		   (!exists($dataresults{$avar}[3]) || $dataresults{$avar}[3] eq '')
-		)) &&
-		((defined($o_perf) && !exists($thresholds{$avar}{'PERF'})) || 
-		 (exists($thresholds{$avar}{'PERF'}) && $thresholds{$avar}{'PERF'} eq 'YES'))) {
-		if (!exists($dataresults{$avar}[3]) || $dataresults{$avar}[3] eq '') {
-		    $dataresults{$avar}[3]=$avar_out."=".$dataresults{$avar}[0];
-		    if (defined($KNOWN_STATUS_VARS{$avar})) {
-		    	$dataresults{$avar}[3] .= $KNOWN_STATUS_VARS{$avar}[1];
+	    # if we were asked to output performance, prepare it but do not output until later
+	    if ((defined($self->{'o_perf'}) && !exists($thresholds->{$avar}{'PERF'})) || 
+		 (exists($thresholds->{$avar}{'PERF'}) && $thresholds->{$avar}{'PERF'} eq 'YES')) {
+		    $avar_perf = $avar_out.'='.$dataresults->{$avar}[0];
+		    $self->set_perfdata($avar, $avar_perf, undef, "IFNOTSET");
+		    $dataresults->{$avar}[2]=0; # this would clear -1 from preset perf data, making it ready for output
+		    # below is where threshold info gets added to perfdata
+		    if ((exists($thresholds->{$avar}{'WARN'}[5]) && $thresholds->{$avar}{'WARN'}[5] ne '') ||
+			(exists($thresholds->{$avar}{'CRIT'}[5]) && $thresholds->{$avar}{'CRIT'}[5] ne '')) {
+			    $avar_perf = ';';
+			    $avar_perf .= $thresholds->{$avar}{'WARN'}[5] if exists($thresholds->{$avar}{'WARN'}[5]) && $thresholds->{$avar}{'WARN'}[5] ne '';
+			    $avar_perf .= ';'.$thresholds->{$avar}{'CRIT'}[5] if exists($thresholds->{$avar}{'CRIT'}[5]) && $thresholds->{$avar}{'CRIT'}[5] ne '';
+			    $self->set_perfdata($avar, $avar_perf, '', "ADD");
 		    }
-		}
-		$dataresults{$avar}[2]=0;
-		if (exists($thresholds{$avar}{'WARN'}[5]) || exists($thresholds{$avar}{'CRIT'}[5])) {
-		    $dataresults{$avar}[3] .= ';' if (exists($thresholds{$avar}{'WARN'}[5]) && $thresholds{$avar}{'WARN'}[5] ne '') || (exists($thresholds{$avar}{'CRIT'}[5]) && $thresholds{$avar}{'CRIT'}[5] ne '');
-		    $dataresults{$avar}[3] .= $thresholds{$avar}{'WARN'}[5] if exists($thresholds{$avar}{'WARN'}[5]) && $thresholds{$avar}{'WARN'}[5] ne '';
-		    $dataresults{$avar}[3] .= ';'.$thresholds{$avar}{'CRIT'}[5] if exists($thresholds{$avar}{'CRIT'}[5]) && $thresholds{$avar}{'CRIT'}[5] ne '';
-		}
 	    }
 	}
 	else {
-	    if (exists($thresholds{$avar}{'ABSENT'})) {
-		$statuscode=$thresholds{$avar}{'ABSENT'} if $statuscode ne "CRITICAL" && $thresholds{$avar}{'ABSENT'} ne "OK";
+	    if (exists($thresholds->{$avar}{'ABSENT'})) {
+		$self->set_statuscode($thresholds->{$avar}{'ABSENT'});
 	    }
 	    else {
-		$statuscode="CRITICAL";
+		$self->set_statuscode("CRITICAL");
 	    }
-	    add_to_statusinfo("$avar data is missing");
+	    $self->add_to_statusinfo($avar, "$avar data is missing");
 	}
     }
-    $statusinfo=trim($statusinfo);
-    $statusdata=trim($statusdata);
+    $self->{'_called_main_checkvars'}=1;
+    # $statusinfo=trim($statusinfo);
+    # $statusdata=trim($statusdata);
 }
 
-# adds performance variables data to performance data line
+#  @DESCRIPTION   : This function is at the end. It prepares PERFOUT for output collecting all perf variables data
+#  @LAST CHANGED  : 08-22-12 by WL
+#  @INPUT         : none
+#  @RETURNS       : nothing (future: 1 on success, 0 on error)
+#  @PRIVACY & USE : PUBLIC, To be called after variables have values. Must be used as an object instance function
 sub main_perfvars {
+    my $self = shift;
+    my $dataresults = $self->{'_dataresults'};
+    my $PERF_OK_STATUS_REGEX = $self->{'perfOKStatusRegex'};
+
+    $self->main_checkvars() if !exists($self->{'_called_main_checkvars'});
+    if ($self->{'_called_main_perfvars'}==1) { return; }
+
+    my $perfVars = $self->{'_perfVars'};
+    my $known_vars = $self->{'knownStatusVars'};
     my $avar;
-    for (my $i=0;$i<scalar(@perfVars);$i++) {
-	$avar=$perfVars[$i];
-	if (defined($dataresults{$avar}[0]) &&
-	    (!defined($KNOWN_STATUS_VARS{$avar}) || $KNOWN_STATUS_VARS{$avar}[0] =~ /$PERF_OK_STATUS_REGEX/ )) {
-		if (defined($dataresults{$avar}[3])) {
-		    add_to_perfdata($avar,$dataresults{$avar}[3]);
-		}
-		else {
-		    add_to_perfdata($avar);
-		}
+
+    for (my $i=0;$i<scalar(@{$perfVars});$i++) {
+	$avar=$perfVars->[$i];
+	if (defined($dataresults->{$avar}[0]) &&
+	    (!defined($known_vars->{$avar}) || $known_vars->{$avar}[1] =~ /$PERF_OK_STATUS_REGEX/ )) {
+		$self->add_to_perfdata($avar);
 	}
     }
-    if (defined($o_prevperf)) {
-        $perfdata .= " _ptime=".time();
+    if (defined($self->{'o_prevperf'})) {
+        $self->add_to_perfdata('_ptime', "_ptime=".time(), "REPLACE");
     }
-    foreach $avar (keys %dataresults) {
-        if (defined($dataresults{$avar}[3])) {
-            add_to_perfdata($avar,$dataresults{$avar}[3]);
+    foreach $avar (keys %{$dataresults}) {
+	$self->add_to_perfdata($avar);
+        if (defined($dataresults->{$avar}[3]) && $dataresults->{$avar}[3] ne '') {
+            $self->add_to_perfdata($avar);
         }
     }
-    $perfdata = trim($perfdata);
+
+    $self->{'_called_main_perfvars'}=1;
+    # $perfdata = trim($perfdata);
 }
 
-# Calculate rate variables
+#  @DESCRIPTION   : This function should be called at the very very end, it returns perf data output
+#  @LAST CHANGED  : 08-22-12 by WL
+#  @INPUT         : none
+#  @RETURNS       : string of perfdata starting with "|"
+#  @PRIVACY & USE : PUBLIC, To be called during plugin output. Must be used as an object instance function
+sub perfdata {
+    my $self=shift;
+
+    $self->main_perfvars() if !exists($self->{'_called_main_perfvars'});
+    my $perfdata = trim($self->{'_perfdata'});
+    if ($perfdata ne '') {
+	return " | " . $perfdata;
+    }
+    return "";
+}
+
+#  @DESCRIPTION   : This function is called after data is available and calculates rate variables
+#		    based on current and previous (saved in perfdata) values.
+#  @LAST CHANGED  : 08-22-12 by WL
+#  @INPUT         : none
+#  @RETURNS       : nothing (future: 1 on success, 0 on error)
+#  @PRIVACY & USE : PUBLIC, To be called after variables have values. Must be used as an object instance function
 sub calculate_ratevars {
+    my $self = shift;
+
+    my $prev_perf = $self->{'_prevPerf'};
+    my $ptime = $self->{'_perfcheck_time'};
+    my $thresholds = $self->{'_thresholds'};
+    my $dataresults = $self->{'_dataresults'};
+    my $allVars = $self->{'_allVars'};
+
     my $avar;
     my $timenow=time();
-    my $ptime=undef;
-    $ptime=$prev_perf{'_ptime'} if defined($prev_perf{'_ptime'});
-    if (defined($o_prevperf) && defined($o_perf)) {
-	for (my $i=0;$i<scalar(@allVars);$i++) {
-	    if ($allVars[$i] =~ /^&(.*)/) {
+    if (defined($self->{'o_prevperf'}) && (defined($self->{'o_perf'}) || defined($self->{'o_perfvars'}))) {
+	for (my $i=0;$i<scalar(@{$allVars});$i++) {
+	    if ($allVars->[$i] =~ /^&(.*)/) {
 		$avar = $1;
 		# this forces perfdata output if it was not already
-		if (defined($dataresults{$avar}) && $dataresults{$avar}[2]<1 &&
-		    (!defined($dataresults{$avar}[3]) || $dataresults{$avar}[3] eq '')) {
-		        my $ptemp = $avar."=".$dataresults{$avar}[0];
-		    	if (defined($KNOWN_STATUS_VARS{$avar})) {
-                	    $ptemp .= $KNOWN_STATUS_VARS{$avar}[1];
-		    	}
-			$thresholds{$avar}={} if !defined($thresholds{$avar});
-			$thresholds{$avar}{'PERF'}='YES';
-			preset_perfdata($avar,$ptemp);
+		if (defined($dataresults->{$avar}) && $dataresults->{$avar}[2]<1 &&
+		    (!defined($dataresults->{$avar}[3]) || $dataresults->{$avar}[3] eq '')) {
+			$self->set_perfdata($avar, $avar.'='.$dataresults->{$avar}[0], undef, "IFNOTSET");
+			$self->set_threshold($avar,'PERF','YES');
+			$self->set_threshold($avar,'SAVED','YES');  # will replace PERF in the future
 		}
-		if (defined($prev_perf{$avar}) && defined($ptime)) {
-		    $dataresults{$allVars[$i]}=[0,0,0] if !defined($dataresults{$allVars[$i]});
-		    $dataresults{$allVars[$i]}[0]= sprintf("%.2f",
-		      ($dataresults{$avar}[0]-$prev_perf{$avar})/($timenow-$ptime));
-		    verb("Calculating Rate of Change for $avar : ".$allVars[$i]."=".$dataresults{$allVars[$i]}[0]);
+		if (defined($prev_perf->{$avar}) && defined($ptime)) {
+		    $self->add_var($allVars->[$i],
+		      sprintf("%.2f",($dataresults->{$avar}[0]-$prev_perf->{$avar})/($timenow-$ptime)));
+		    $self->verb("Calculating Rate of Change for $avar : ".$allVars->[$i]."=".$dataresults->{$allVars->[$i]}[0]);
 		}
 	    }
 	}
     }
 }
 
-sub prepare_dataresults {
-    $dataresults{$_} = [undef, 0, 0] foreach(@allVars);
-    $dataresults{$_} = [undef, 0, 0] foreach(@perfVars);
 }
-
 ############################# END OF THE LIBRARY FUNCTIONS ##################################
 
 # parse command line options
 sub check_options {
-    Getopt::Long::Configure("bundling");
+    my $nlib = shift;
     my %Options = ();
+    Getopt::Long::Configure("bundling");
     GetOptions(\%Options, 
    	'v:s'	=> \$o_verb,		'verbose:s' => \$o_verb, "debug:s" => \$o_verb,
         'h'     => \$o_help,            'help'          => \$o_help,
@@ -1231,11 +1816,11 @@ sub check_options {
         'P:s'   => \$o_prevperf,        'prev_perfdata:s' => \$o_prevperf,
         'E:s'   => \$o_prevtime,        'prev_checktime:s'=> \$o_prevtime,
 	'rate_label:s'	=> \$o_ratelabel,
-	map { ($_) } additional_options_list()
+	map { ($_) } $nlib->additional_options_list()
     );
 
     # This gets list of variables into our structures
-    options_startprocessing(\%Options);
+    ($o_rprefix,$o_rsuffix)=split(/,/,$o_ratelabel) if defined($o_ratelabel) && $o_ratelabel ne '';
 
     # Standard nagios plugin required options
     if (defined($o_help)) { help(); exit $ERRORS{"UNKNOWN"} };
@@ -1244,26 +1829,27 @@ sub check_options {
     # access/connection options
     if (!defined($o_host)) { print "Please specify hostname (-H)\n"; print_usage(); exit $ERRORS{"UNKNOWN"}; } 
     @o_mdslist=split(/,/, lc $o_mdsopt) if defined($o_mdsopt) && $o_mdsopt ne '';
-    ($o_rprefix,$o_rsuffix)=split(/,/, lc $o_ratelabel) if defined($o_ratelabel) && $o_ratelabel ne '';
+
+    # now start options processing in the library
+    $nlib->options_startprocessing(\%Options, $o_verb, $o_variables, $o_warn, $o_crit, $o_perf, $o_perfvars, $o_rprefix, $o_rsuffix);
 
     # additional variables/options calculated and added by this plugin
     if (defined($o_timecheck) && $o_timecheck ne '') {
-          verb("Processing timecheck thresholds: $o_timecheck");
-	  thresholds_add_optionsline('response_time',$o_timecheck);
+          $nlib->verb("Processing timecheck thresholds: $o_timecheck");
+	  $nlib->thresholds_add_optionsline('response_time',$o_timecheck);
     }
     if (defined($o_hitrate) && $o_hitrate ne '') {
-          verb("Processing hitrate thresholds: $o_hitrate");
-	  thresholds_add_optionsline('hitrate',$o_hitrate);
-	  set_threshold('hitrate','ZERO','OK') if !defined(get_threshold('hitrate','ZERO')); # except case of hitrate=0, don't remember why I added it
+          $nlib->verb("Processing hitrate thresholds: $o_hitrate");
+	  $nlib->thresholds_add_optionsline('hitrate',$o_hitrate);
+	  $nlib->set_threshold('hitrate','ZERO','OK') if !defined($nlib->get_threshold('hitrate','ZERO')); # except case of hitrate=0, don't remember why I added it
     }
     if (defined($o_utilsize) && $o_utilsize ne '') {
-          verb("Processing memory utilization thresholds: $o_utilsize");
-          thresholds_add_optionsline('utilization',$o_utilsize);
+          $nlib->verb("Processing memory utilization thresholds: $o_utilsize");
+          $nlib->thresholds_add_optionsline('utilization',$o_utilsize);
     }
 
     # finish it up
-    options_processprevperf();
-    options_setthresholds();
+    $nlib->options_finishprocessing();
 
     $HOSTNAME = $o_host if defined($o_host);
     $PORT     = $o_port if defined($o_port);
@@ -1279,17 +1865,19 @@ $SIG{'ALRM'} = sub {
 
 ########## MAIN #######
 
-check_options();
-verb("check_memcached.pl plugin version ".$Version);
-prepare_dataresults();
+my $nlib = Naglio->lib_init('usage_function' => \&print_usage);
+
+check_options($nlib);
+
+$nlib->verb("check_memcached.pl plugin version ".$Version);
 
 # Check global timeout if plugin screws up
 if (defined($TIMEOUT)) {
-  verb("Alarm at $TIMEOUT");
+  $nlib->verb("Alarm at $TIMEOUT");
   alarm($TIMEOUT);
 }
 else {
-  verb("no timeout defined : $o_timeout + 10");
+  $nlib->verb("no timeout defined : $o_timeout + 10");
   alarm ($o_timeout+10);
 }
 
@@ -1306,7 +1894,7 @@ close($sock);
 
 my $start_time;
 my $dsn = $HOSTNAME.":".$PORT;
-verb("connecting to $dsn"); 
+$nlib->verb("connecting to $dsn"); 
 $start_time = [ Time::HiRes::gettimeofday() ] if defined($o_timecheck);
 $memd = new Cache::Memcached { 'servers' => [ $dsn ] };
 
@@ -1317,7 +1905,7 @@ if (!$memd) {
 
 # This returns hashref of various statistics data on memcached
 # Basically results of 'stats', 'stats malloc', 'stats sizes', etc. 
-verb("Requesting statistics on: ".join(',',@o_mdslist));
+$nlib->verb("Requesting statistics on: ".join(',',@o_mdslist));
 my $stats = $memd->stats(\@o_mdslist);
 
 # some more variables for processing of the results
@@ -1347,16 +1935,16 @@ foreach $vstat (keys %{$stats->{'hosts'}{$dsn}}) {
 		else {
 			$dnam = $vstat.'_'.$vnam;
 		}
-		dataresults_addvar($dnam, $vval);
+		$nlib->add_var($dnam, $vval);
           }
         }
         else {
-          verb("Stats Data: $vstat($vnam) = NULL");
+          $nlib->verb("Stats Data: $vstat($vnam) = NULL");
         }
       }
     }
     elsif ($stats->{'hosts'}{$dsn}{$vstat} =~ /ERROR/) {
-       verb("Memcached Perl Library ERROR getting stats for $vstat");
+       $nlib->verb("Memcached Perl Library ERROR getting stats for $vstat");
     }
     else {
        $vval = $stats->{'hosts'}{$dsn}{$vstat};
@@ -1376,8 +1964,8 @@ foreach $vstat (keys %{$stats->{'hosts'}{$dsn}}) {
 		$vval = $ln;
 		$vval =~ s/\s/_/g;
 	  } 
-          verb("Stats Data: $vstat($dnam) = $vval");
-	  dataresults_addvar($dnam, $vval);
+          $nlib->verb("Stats Data: $vstat($dnam) = $vval");
+	  $nlib->add_var($dnam, $vval);
        } 
     }
   }
@@ -1386,87 +1974,87 @@ $memd->disconnect_all;
 
 # Response Time
 if (defined($o_timecheck)) {
-    dataresults_addvar('response_time',Time::HiRes::tv_interval($start_time));
-    add_to_statusdata('response_time',sprintf("response in %.3fs",get_data('response_time')));
+    $nlib->add_var('response_time',Time::HiRes::tv_interval($start_time));
+    $nlib->add_to_statusdata('response_time',sprintf("response in %.3fs",$nlib->vardata('response_time')));
     if (defined($o_perf)) {
-        preset_perfdata('response_time','response_time='.get_data('response_time').'s');
+        $nlib->set_perfdata('response_time','response_time='.$nlib->vardata('response_time'),'s');
     }
 }
 
 # calculate rate variables
-calculate_ratevars();
+$nlib->calculate_ratevars();
 
 # Memory Use Utilization
-my $bytes = get_data('bytes');
-my $maxbytes = get_data('limit_maxbytes');
+my $bytes = vardata('bytes');
+my $maxbytes = vardata('limit_maxbytes');
 my $utilization = 0;
 if (defined($o_utilsize) && defined($bytes) && defined($maxbytes)) {
     if (defined($maxbytes) && $maxbytes!=0) {
 	$utilization = $bytes / $maxbytes;
     }
-    dataresults_addvar('utilization',$utilization);
-    add_to_statusdata('utilization',sprintf(" in use %.2f%% of space", $utilization));
+    $nlib->add_var('utilization',$utilization);
+    $nlib->add_to_statusdata('utilization',sprintf(" in use %.2f%% of space", $utilization));
     if (defined($o_perf)) {
-	preset_perfdata('utilization',sprintf(" utilization=%.5f%%", $utilization));
+	$nlib->set_perfdata('utilization',sprintf(" utilization=%.5f%%", $utilization));
    }
 }
 
 # CPU Use - Converts floating seconds to integer ms
-if (defined(get_data('rusage_user'))) {
-   dataresults_addvar('rusage_user_ms',int(get_data('rusage_user')*100+0.5));
+if (defined($nlib->vardata('rusage_user'))) {
+   $nlib->add_var('rusage_user_ms',int($nlib->vardata('rusage_user')*100+0.5));
 }
-if (defined(get_data('rusage_system'))) {
-   dataresults_addvar('rusage_system_ms',int(get_data('rusage_system')*100+0.5));
+if (defined(vardata('rusage_system'))) {
+   $nlib->add_var('rusage_system_ms',int($nlib->vardata('rusage_system')*100+0.5));
 }
 
 # Hitrate
 my $hits_total=0;
 my $hitrate=0;
 my $hitrate_all=0;
-my $hits_hits = get_data('get_hits');
-my $get_misses = get_data('get_misses');
+my $hits_hits = vardata('get_hits');
+my $get_misses = vardata('get_misses');
 if (defined($o_hitrate) && defined($get_misses) && defined($hits_hits)) {
     if (defined($o_prevperf) && defined($o_perf)) {
-	preset_perfdata('get_misses','get_misses='.$get_misses.'c');
-	preset_perfdata('get_hits','get_hits='.$hits_hits.'c');
+	$nlib->set_perfdata('get_misses','get_misses='.$get_misses,'c');
+	$nlib->set_perfdata('get_hits','get_hits='.$hits_hits,'c');
     }
     $hits_total = $hits_hits + $get_misses;
-    verb("Calculating Hitrate : total=".$hits_total." hits=".$hits_hits);
-    if (defined($hits_hits) && defined($prev_perf{'get_hits'}) && defined($prev_perf{'get_misses'}) && $hits_hits > $prev_perf{'get_hits'}) {
+    $nlib->verb("Calculating Hitrate : total=".$hits_total." hits=".$hits_hits);
+    if (defined($hits_hits) && defined($nlib->prev_perf('get_hits')) && defined($nlib->prev_perf('get_misses')) && $hits_hits > $nlib->prev_perf('get_hits')) {
 	$hitrate_all = $hits_hits/$hits_total*100 if $hits_total!=0;
-	$hits_hits -= $prev_perf{'get_hits'};
-	$hits_total -= $prev_perf{'get_misses'};
-	$hits_total -= $prev_perf{'get_hits'};
-	verb("Calculating Hitrate. Adjusted based on previous values. total=".$hits_total." hits=".$hits_hits);
+	$hits_hits -= $nlib->prev_perf('get_hits');
+	$hits_total -= $nlib->prev_perf('get_misses');
+	$hits_total -= $nlib->prev_perf('get_hits');
+	$nlib->verb("Calculating Hitrate. Adjusted based on previous values. total=".$hits_total." hits=".$hits_hits);
     }
     if (defined($hits_hits)) {
     	if ($hits_total!=0) {
 	    $hitrate= sprintf("%.4f", $hits_hits/$hits_total*100);
 	}
-	dataresults_addvar('hitrate',$hitrate);
+	$nlib->add_var('hitrate',$hitrate);
 	my $sdata .= sprintf(" hitrate is %.2f%%", $hitrate);
 	$sdata .= sprintf(" (%.2f%% from launch)", $hitrate_all) if ($hitrate_all!=0);
-	add_to_statusdata('hitrate',$sdata);
+	$nlib->add_to_statusdata('hitrate',$sdata);
 	if (defined($o_perf)) {
-		preset_perfdata('hitrate',"hitrate=".$hitrate);
+		$nlib->set_perfdata('hitrate',"hitrate=$hitrate");
 	}
      }
 }
 
 # Check thresholds in all variables and prepare status and performance data for output
-main_checkvars();
-main_perfvars();
+$nlib->main_checkvars();
+$nlib->main_perfvars();
 
 # now output the results
 print "MEMCACHE ";
-print $statuscode . ': '.$statusinfo;
-print " - " if $statusinfo;
+print $nlib->statuscode() .': '. $nlib->statusinfo();
+print " - " if $nlib->statusinfo();
 # print "MEMCACHED " . $memdversion . ' on ' . $HOSTNAME. ':'. $PORT ' is '. $statuscode . $statusinfo;
 print "memcached " . $memdversion . ' on ' . $HOSTNAME. ':'. $PORT;
-print ', up '.uptime_info(get_data('uptime')) if defined(get_data('uptime'));
-print " - " . $statusdata if $statusdata;
-print " | " . $perfdata if $perfdata;
+print ', up '.$nlib->uptime_info($nlib->vardata('uptime')) if defined($nlib->vardata('uptime'));
+print " - " . $nlib->statusdata() if $nlib->statusdata();
+print $nlib->perfdata();
 print "\n";
 
 # end exit
-exit $ERRORS{$statuscode};
+exit $ERRORS{$nlib->statuscode()};

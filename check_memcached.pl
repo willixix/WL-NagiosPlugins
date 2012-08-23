@@ -1623,7 +1623,7 @@ sub main_checkvars {
     my $self = shift;
 
     $self->options_finishprocessing() if !exists($self->{'_called_options_finshprocessing'});
-    if ($self->{'_called_main_checkvars'}==1) { return; }
+    if (exists($self->{'_called_main_checkvars'})) { return; }
 
     my $thresholds = $self->{'_thresholds'};
     my $dataresults = $self->{'_dataresults'};
@@ -1708,7 +1708,7 @@ sub main_perfvars {
     my $PERF_OK_STATUS_REGEX = $self->{'perfOKStatusRegex'};
 
     $self->main_checkvars() if !exists($self->{'_called_main_checkvars'});
-    if ($self->{'_called_main_perfvars'}==1) { return; }
+    if (exists($self->{'_called_main_perfvars'})) { return; }
 
     my $perfVars = $self->{'_perfVars'};
     my $known_vars = $self->{'knownStatusVars'};
@@ -1918,13 +1918,13 @@ my $avar;
 
 # load all data into internal hash array
 foreach $vstat (keys %{$stats->{'hosts'}{$dsn}}) {
-  verb("Stats Data: vstat=$vstat reftype=".ref($stats->{'hosts'}{$dsn}{$vstat}));
+  $nlib->verb("Stats Data: vstat=$vstat reftype=".ref($stats->{'hosts'}{$dsn}{$vstat}));
   if (defined($stats->{'hosts'}{$dsn}{$vstat})) {
     if (ref($stats->{'hosts'}{$dsn}{$vstat}) eq 'HASH') {
       foreach $vnam (keys %{$stats->{'hosts'}{$dsn}{$vstat}}) {
         $vval = $stats->{'hosts'}{$dsn}{$vstat}{$vnam};
         if (defined($vval)) {
-          verb("Stats Data: $vstat($vnam) = $vval");
+          $nlib->verb("Stats Data: $vstat($vnam) = $vval");
           if ($vnam eq 'version') {
                $memdversion = $vval;
           }
@@ -1985,8 +1985,8 @@ if (defined($o_timecheck)) {
 $nlib->calculate_ratevars();
 
 # Memory Use Utilization
-my $bytes = vardata('bytes');
-my $maxbytes = vardata('limit_maxbytes');
+my $bytes = $nlib->vardata('bytes');
+my $maxbytes = $nlib->vardata('limit_maxbytes');
 my $utilization = 0;
 if (defined($o_utilsize) && defined($bytes) && defined($maxbytes)) {
     if (defined($maxbytes) && $maxbytes!=0) {
@@ -2003,7 +2003,7 @@ if (defined($o_utilsize) && defined($bytes) && defined($maxbytes)) {
 if (defined($nlib->vardata('rusage_user'))) {
    $nlib->add_var('rusage_user_ms',int($nlib->vardata('rusage_user')*100+0.5));
 }
-if (defined(vardata('rusage_system'))) {
+if (defined($nlib->vardata('rusage_system'))) {
    $nlib->add_var('rusage_system_ms',int($nlib->vardata('rusage_system')*100+0.5));
 }
 
@@ -2011,8 +2011,8 @@ if (defined(vardata('rusage_system'))) {
 my $hits_total=0;
 my $hitrate=0;
 my $hitrate_all=0;
-my $hits_hits = vardata('get_hits');
-my $get_misses = vardata('get_misses');
+my $hits_hits = $nlib->vardata('get_hits');
+my $get_misses = $nlib->vardata('get_misses');
 if (defined($o_hitrate) && defined($get_misses) && defined($hits_hits)) {
     if (defined($o_prevperf) && defined($o_perf)) {
 	$nlib->set_perfdata('get_misses','get_misses='.$get_misses,'c');

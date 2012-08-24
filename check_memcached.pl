@@ -6,7 +6,8 @@
 # Version : 0.75
 # Date    : Aug 25, 2012
 # Author  : William Leibzon - william@leibzon.org
-# Licence : GPL - summary below, full text at http://www.fsf.org/licenses/gpl.txt
+# Licence : GPL  (main code) summary below and full text at http://www.fsf.org/licenses/gpl.txt
+#	    LGPL (library functions) full text at http://www.fsf.org/licenses/lgpl.txt
 #
 # =========================== PROGRAM LICENSE =================================
 #
@@ -378,22 +379,24 @@ my $memd= undef;                # DB connection object
 sub p_version { print "check_memcached.pl version : $Version\n"; }
 
 sub print_usage_line {
-   print "Usage: $0 [-v [debugfilename]] -H <host> [-p <port>] [-s <memcache stat arrays>] [-a <memcache statistics variables> -w <variables warning thresholds> -c <variables critical thresholds>] [-A <performance output variables>] [-T [conntime_warn,conntime_crit]] [-R [hitrate_warn,hitrate_crit]] [-U [utilization_size_warn,utilization_size_crit]] [-f] [-T <timeout>] [-V] [-P <previous performance data in quoted string>]\n";
+    print "Usage: $0 [-v [debugfilename]] -H <host> [-p <port>] [-s <memcache stat arrays>] [-a <memcache statistics variables> -w <variables warning thresholds> -c <variables critical thresholds>] [-A <performance output variables>] [-T [conntime_warn,conntime_crit]] [-R [hitrate_warn,hitrate_crit]] [-U [utilization_size_warn,utilization_size_crit]] [-f] [-T <timeout>] [-V] [-P <previous performance data in quoted string>]\n";
 }
 
 sub print_usage {
-   print_usage_line();
-   print "For more details on options do: $0 --help\n";
+    print_usage_line();
+    print "For more details on options do: $0 --help\n";
 }
 
 sub help {
-   print "Memcache Check for Nagios version ",$Version,"\n";
-   print " by William Leibzon - william(at)leibzon.org\n\n";
-   print "This is memcache monitoring plugin, it lets you do threshold checks on status variables\n";
-   print "and returns performance data for graphing and further processing. The plugin also measures\n";
-   print "access time and calculates hitrate and memory utilization\n\n";
-   print_usage_line();
-   print <<EOT;
+    my $nlib = shift;
+
+    print "Memcache Check for Nagios version ",$Version,"\n";
+    print " by William Leibzon - william(at)leibzon.org\n\n";
+    print "This is memcache monitoring plugin, it lets you do threshold checks on status variables\n";
+    print "and returns performance data for graphing and further processing. The plugin also measures\n";
+    print "access time and calculates hitrate and memory utilization\n\n";
+    print_usage_line();
+    print <<EOT;
 
 General and Server Connection Options:
  -v, --verbose[=FILENAME], --debug[=FILENAME]
@@ -480,46 +483,101 @@ Measured/Calculated Data:
    with '-f' it will also include it in performance data. You can also specify
    parameter value which are interpreted as WARNING and CRITICAL thresholds.
 
-Stats Variable Options (this is alternative to specifying them as list with -a):
-  These options are all --long_name=<list of specifiers separated by ,>
-  where specifiers are one or more of:
-    WARN:threshold  - warning alert threshold
-    CRIT:threshold  - critical alert threshold
-      Where threshold is a value which may have the following prefix:
-        > - warn if data is above this value (default for numeric values)
-        < - warn if data is below this value (must be followed by number)
-        = - warn if data is equal to this value (default for non-numeric values)
-        ! - warn if data is not equal to this value
-      Threshold can also be specified as range in two forms:
-        num1:num2  - warn if data is outside range i.e. if data<num1 or data>num2
-        \@num1:num2 - warn if data is in range i.e. data>=num1 && data<=num2
-    ABSENT:OK|WARNING|CRITICAL|UNKNOWN - Nagios alert (or lock of thereof) if data is absent
-    ZERO:OK|WARNING|CRITICAL|UNKNOWN   - Nagios alert (or lock of thereof) if result is 0
-    DISPLAY:YES|NO  - Specifies if data should be included in nagios status line output
-    PERF:YES|NO     - Output results as performance data or not (always YES if asked for rate)
-
 EOT
-  # add more options based on KNOWN_STATUS_VARS array
-  my ($vname,$vname2) = (undef,undef);
-  foreach (keys(%KNOWN_STATUS_VARS)) {
-     $vname = $_;
-     $vname2=$o_rprefix.$vname.$o_rsuffix;
-     if (exists($KNOWN_STATUS_VARS{$vname}[3])) {
-	print ' --'.$vname."=WARN:threshold,CRIT:threshold,<other specifiers>\n";
-	print "   ".$KNOWN_STATUS_VARS{$vname}[3]."\n";
-	if ($KNOWN_STATUS_VARS{$vname}[1] eq 'COUNTER') {
-	    print ' --'.$vname2."=WARN:threshold,CRIT:threshold,<other specifiers>\n";
-	    print "   Rate of Change of ".$KNOWN_STATUS_VARS{$vname}[3]."\n";
-	}
-     }
-  }
-  printf("\n");
+
+    if (defined($nlib) && $nlib->{'enable_long_options'} == 1) {
+	my $long_opt_help = $nlib->additional_options_help();
+        if ($long_opt_help) {
+	    print "Stats Variable Options (this is alternative to specifying them as list with -a):\n";
+	    print $long_opt_help;
+	    print "\n";
+        }
+    }
 }
 
-############################ START OF THE LIBRARY FUNCTIONS #################################
+############################ START OF THE LIBRARY FUNCTIONS #####################################
 #
 # THIS IS WORK IN PROGRESS, THE LIBRARY HAS NOT BEEN RELEASED YET AND INTERFACES MAY CHANGE
 #
+# ====================================== SUMMARY ================================================
+#
+# Name    : Naglio Perl Library For Developing Nagios Plugins
+# Version : 0.2
+# Date    : Aug 25, 2012
+# Author  : William Leibzon - william@leibzon.org
+# Licence : LGPL - full text at http://www.fsf.org/licenses/lgpl.txt
+#
+# ============================= LIBRARY HISTORY AND VERSIONS ====================================
+# 
+# Note: you may safely skip this section if you're looking at documentation about this library or plugin
+#
+# [2006-2008]  The history of this library goes back to plugins such as check_snmp_temperature.pl,
+#	       check_mysqld,pl and others released as early as 2006 with common functions to
+#	       support prefixes "<,>,=,!" for specifying thresholds and checking data against
+#	       these thresholds. Several of my plugins had common architecture supporting multiple
+#	       variables or attributes to be checked using -a/--attributes/--variables option and
+#	       --warn and --crit options with list of thresholds for these attributes and --perfvars
+#	       specifying variables whose data would only go as PERFOUT for graphing. 
+#
+# [2008-2011]  Threshold parsing and check code had been rewritten and support added for specifying
+#	       range per plugin guidelines: http://nagiosplug.sourceforge.net/developer-guidelines.html
+#	       Internal structures had been changing and becoming more complex to various cases.
+#	       In 2010-2012 plugins started to get support for ;warn;crit output of thresholds in perf,
+#	       as specified in the guidelines.
+#
+# [Early 2012] Code from check_memcached had been used as a base for check_memcached and then
+#	       check_redis plugins with some of the latest threshold code from check_netstat
+#	       with more updates. Starting with check_redis the code from check_options() and
+#	       from main part of plugin that was very similar across my plugins were separated
+#	       into their own functions. KNOWN_STATS_VARS array was introduced as well to be
+#	       able to properly add UNIT symbol ('c', '%', 's') to perfout for variables.
+#	       check_memcached and check_redis also included support for calculating rate of
+#	       variables in a similar way to how its been done in check_snmp_netint
+#
+# [0.1 - July 17, 2012] In 0.6 release of check_redis.pl support had been added for long options
+#	       with special threshold line syntax:
+#                --option=WARN:threshold,CRIT:threshold,ABSENT:OK|WARNING|CRITICAL|UNKNOWN,DISPLAY:YES|NO,PERF:YES|NO
+#	       This was extension from just doing --option=WARN,CRIT to have a more universal
+#	       and extendable way to specify and alike parameters for checking. check_redis 0.6
+#	       also introduced support automatically adding long options with above syntax based
+#	       on description in KNOWN_STATS_VARS. The functions for the library were all separated
+#	       into their own section of the code. When inported to check_memcached global variables
+#	       were added to that section and accessor functions written for some of them.
+#	       This is considered 0.1 version of the library
+#
+# [0.2 - Aug 25, 2012] In August the library code in check_memcached had been re-written from
+#	       just functions to object-oriented perl interface. All variables were hidden from
+#	       direct access with accessor functions written. Documentation header had been added
+#	       to each library function and the header for the library itself. This was major work
+#	       taking a week to do although functions and mainly same as in 0.1. They are also still
+#	       not stabilized and so library is only to be inluded within plugins. But its clearly a
+#	       library now and can stand on its own if needed. License changed to LGPL for this code.
+#
+# ================================== LIBRARY TODO =================================================
+#
+# (a) Add library function to support '--extra-opts' to read plugin options from a file
+#     This is being to be compatible with http://nagiosplugins.org/extra-opts
+# (b) Special config option to support regex when selecting variable name(s). Since actual selection
+#     and data would be added by plugin code outside the library, the library needs to support that
+#     variables/attributes could be prototypes (regex names) rather than actual names and to allow
+#     to link actual data variables to these prototypes
+# (c) Support for expressions in places of numeric values for thresholds. The idea is to allow to refer
+#     to another variable ot to special macro. I know at least one person has extended my check_mysqld
+#     to support using mysql variables (not same as status data) for thresholds. I previously also
+#     had planned such support with experimental check_snmp_attributes plugin library/base. The idea
+#     was also floated around on nagoos-devel list.
+# (d) Support specifying variables as expressions. This is straight out of check_snmp_atributes and
+#     maybe part of it can be reused for this
+# (e) Add common SNMP functions into library as so many of my plugins use it#
+# (f) Add more functions to make this library easier to use and stabilize its interfaces.
+#     Port my plugins to this library.
+# (f) Add support for functions in Nagios-Plugins perl library. While its interfaces are different,
+#     I believe, it'd be possible to add "shim" code to support them too.
+# (h) Write proper Perl-style documentation as well as web documentation (much of above maybe
+#     moved to web documentation) and move library to separate GITHUB project. Release it.
+# (i) Port this library to Python and write one or two example plugins
+#
+# ================================================================================================
 {
 package Naglio;
 use fields qw();
@@ -528,7 +586,7 @@ my %ERRORS = ('OK'=>0,'WARNING'=>1,'CRITICAL'=>2,'UNKNOWN'=>3,'DEPENDENT'=>4);
 my $DEFAULT_PERF_OK_STATUS_REGEX = 'GAUGE|COUNTER|^DATA$|BOOLEAN';
 
 #  @DESCRIPTION   : Library object constructor
-#  @LAST CHANGED  : 08-20-12 by WL
+#  @LAST CHANGED  : 08-23-12 by WL
 #  @INPUT         : Hash array of named config settings. All parameters are optiona. Currently supported are:
 #		       plugin_name => string - short name of the plugin
 #		       plugin_description => string - plugin longer description
@@ -539,6 +597,9 @@ my $DEFAULT_PERF_OK_STATUS_REGEX = 'GAUGE|COUNTER|^DATA$|BOOLEAN';
 #						             0 means output is something like "less than or equal", "more than", etc.
 #		       usage_function => &ref  - function that would display helpful text in case of error with options for this plugin
 #		       all_variables_perf => 0 or 1 - 1 means data for all variables would go to PERF. This is what '-A *' or just -A do
+#		       enable_long_options => 0 or 1  - 1 enables long options generated based on knownStatsVars. This is automatically enabled (from 0
+#							to 1) when plugin references additional_options_list() unless this is set to -1 at library init
+#		       enable_rate_of_change => 0 or 1  - enables support for calculating rate of change based on previously saved data, default is 1
 #  @RETURNS       : Reference representing object instance of this library
 #  @PRIVACY & USE : PUBLIC, To be used when initializing the library
 sub lib_init {
@@ -561,7 +622,7 @@ sub lib_init {
     my @prev_time=  ();     	# timestamps if more then one set of previois performance data
 
     my $self = {  # library and nagios versions
-		_NaglioLibraryVersion => 0.1,	# this library's version
+		_NaglioLibraryVersion => 0.2,	# this library's version
 		_NagiosVersion => 3, 		# assume nagios core 3.x unless known otherwise
                 # library internal data structures
 		_allVars => \@allVars,
@@ -600,8 +661,11 @@ sub lib_init {
 		debug_file => "",		# instead of setting file name in verbose, can also set it here
 		output_comparison_symbols => 1, # should plugin output >,<.=,! for threshold match
 						# if 0, it will say it in human form, i.e. "less"
-		AllVarsToPerf => 0,		# should we all variables go to PERF (even those not listed in o_variables and o_perfvars)
-	      };				# this is the option set to 1 when --perfvars '*' is used
+		all_variables_perf => 0,	# should we all variables go to PERF (even those not listed in o_variables and o_perfvars)
+						#this is the option set to 1 when --perfvars '*' is used
+		enable_long_options => 0,	# enable support for long options generated based on knownStatusVars description
+		enable_rate_of_change => 1,	# enables support for calculatin rate of chane and for rate of change long options
+	      };
 
     # now deal with arguments that maybe passed to library when initalizing
     if (exists($other_args{'KNOWN_STATUS_VARS'})) {
@@ -616,7 +680,9 @@ sub lib_init {
 	    $self->{'debug_file'} = $other_args{'debug_log_filename'};
         }
     }
-    $self->{'AllVarsToPerf'} = 1 if exists($other_args{'all_variables_perf'});
+    $self->{'all_variables_perf'} = $other_args{'all_variables_perf'} if exists($other_args{'all_variables_perf'});
+    $self->{'enable_long_options'} = $other_args{'enable_long_options'} if exists($other_args{'enable_long_options'});
+    $self->{'enable_rate_of_change'} = $other_args{'enable_rate_of_change'} if exists($other_args{'enable_rate_of_change'});
     $self->{'output_comparison_symbols'} = $other_args{'output_comparison_symbols'} if exists($other_args{'output_comparison_symbols'});
     $self->{'usage_function'} = $other_args{'usage_gunction'} if exists($other_args{'usage_function'});
     $self->{'plugin_name'} = $other_args{'plugin_name'} if exists($other_args{'plugin_name'});
@@ -625,23 +691,10 @@ sub lib_init {
     return bless $self, $class;
 }
 
-# This is just another naame for object constructor function
+# This is just an alias for object constructor lib_init function
 sub new {
     return lib_init(@_);
 }
-
-# from Perl book, defining functions for all variables set in $self
-# sub AUTOLOAD {
-#    my $self = shift;
-#    croak "$self not an object" unless ref($invocant);
-#    my $name = our $AUTOLOAD;
-#    return if $name =~ /::DESTROY$/;
-#    unless (exists $self->($name)) {
-#        croak "Can't access '$name' field in $self";
-#    }
-#    if (@_) { return $self->($name) = shift }
-#    else { return $self->($name) }
-# }
 
 #  @DESCRIPTION   : Allows functions to take be used both directly and as object referenced functions
 #                   In the 2nd case they get $self as 1st argument, in 1st they don't. this just adds
@@ -843,7 +896,7 @@ sub statusdata {
 
 #  @DESCRIPTION   : This function sets text or data for variable-specific PERFORMANCE output
 #		    (;warn;crit would be added to it later if thresholds were set for this variable)
-#  @LAST CHANGED  : 08-21-12 by WL
+#  @LAST CHANGED  : 08-23-12 by WL
 #  @INPUT         : ARG1 - variable name
 #		    ARG2 - either "var=data" text or just "data" (in which case var= is prepended to it)
 #		    ARG3 - string for UNIT type ('c' for continous, '%' for percent, 's' for seconds) to added after data
@@ -889,7 +942,7 @@ sub set_perfdata {
 }
 
 #  @DESCRIPTION   : This function is used when building performance output
-#  @LAST CHANGED  : 08-21-12 by WL
+#  @LAST CHANGED  : 08-23-12 by WL
 #  @INPUT         : ARG1 - variable name
 #		    ARG2 - optional data argument, if not present variable's dataresults are used
 #		    ARG3 - one of: "REPLACE" - if existing preset perfdata is present, it would be replaced with ARG2
@@ -1013,6 +1066,7 @@ sub check_threshold {
 
 #  @DESCRIPTION   : This function is called to parse threshold string
 #  @LAST CHANGED  : 08-20-12 by WL
+#		    (the code in this function can be traced back to late 2006. It has not much changed from 2008)
 #  @INPUT         : ARG1 - String for one variable WARN or CRIT threshold which can be as follows:
 #			 data  - warn if data is above this value if numeric data, or equal for non-numeric
 #        		 >data - warn if data is above this value (default for numeric values)
@@ -1125,7 +1179,7 @@ sub add_var {
     else { 
 	$dataresults->{$dnam} = [$dval, 0, 0, ''];
     }
-    if ($self->{'AllVarsToPerf'} == 1) {
+    if ($self->{'all_variables_perf'} == 1) {
         $thresholds->{$dnam}={} if !exists($thresholds->{$dnam});
 	if (!defined($thresholds->{$dnam}{'PERF'})) {
 	    push @{$perfVars}, $dnam;
@@ -1323,7 +1377,7 @@ sub set_threshold {
     return 1;
 }
 
-#  @DESCRIPTION   : Returns list variables for inclusion as GetOptions(..) parameters
+#  @DESCRIPTION   : Returns list variables for GetOptions(..) that are lon-options based on known/defined variable
 #  @LAST CHANGED  : 08-20-12 by WL
 #  @INPUT         : none
 #  @RETURNS       : Array of additional options based on KNOWN_STATS_VARS
@@ -1332,22 +1386,78 @@ sub additional_options_list {
     my $self = shift;
 
     my $known_vars = $self->{'knownStatusVars'};
-    my ($o_rprefix, $o_rsuffix) = ("", "");
+    my ($o_rprefix, $o_rsuffix, $v, $v2) = ('','','','');
     $o_rprefix = $self->{'o_rprefix'} if defined($self->{'o_rprefix'});
     $o_rsuffix = $self->{'o_rsuffix'} if defined($self->{'o_rsuffix'});
     my @VarOptions = ();
 
-    if (defined($self) && defined($known_vars)) {
-      foreach(keys %{$known_vars}) {
-        my $v = $_;
-        my $v2 = $o_rprefix.$v.$o_rsuffix;
-        if (exists($known_vars->{$v}[3]) && $known_vars->{$v}[3] ne '') {
+    if ($self->{'enable_long_options'} != -1) {
+      if (defined($self) && defined($known_vars)) {
+	foreach(keys %{$known_vars}) {
+	  $v = $_;
+	  if (exists($known_vars->{$v}[3]) && $known_vars->{$v}[3] ne '') {
               push @VarOptions,$v."=s";
-              push @VarOptions,$v2."=s" if $known_vars->{$v}[1] eq 'COUNTER' && ($o_rprefix ne '' || $o_rsuffix ne ''); 
-        }
+	      if ($self->{'enable_rate_of_change'}==1 && $known_vars->{$v}[1] eq 'COUNTER' && ($o_rprefix ne '' || $o_rsuffix ne '')) {
+		   $v2 = $o_rprefix.$v.$o_rsuffix;
+		   push @VarOptions,$v2."=s" 
+	      }
+	  }
+	}
       }
     }
+    if (scalar(@VarOptions)>0) {
+      $self->{'enable_long_options'} = 1;
+    }
     return @VarOptions;
+}
+
+#  @DESCRIPTION   : Prints out help for generated long options
+#  @LAST CHANGED  : 08-20-12 by WL
+#  @INPUT         : none
+#  @RETURNS       : a string of text for help output
+#  @PRIVACY & USE : PUBLIC, Special use case with GetOpt::Long. Must be used as an object instance function
+sub additional_options_help {
+  my $self = shift;
+  my $vname;
+  my $vname2;
+  my $counter = 0;
+  my $known_vars = $self->{'knownStatusVars'};
+
+  if ($self->{'enable_long_options'} != 1) { return ''; }
+
+  my $out="   These options are all --long_name=<list of specifiers separated by ,>
+   where specifiers are one or more of:
+     WARN:threshold  - warning alert threshold
+     CRIT:threshold  - critical alert threshold
+       Threshold is a value (usually numeric) which may have the following prefix:
+         > - warn if data is above this value (default for numeric values)
+         < - warn if data is below this value (must be followed by number)
+         = - warn if data is equal to this value (default for non-numeric values)
+         ! - warn if data is not equal to this value
+       Threshold can also be specified as a range in two forms:
+         num1:num2  - warn if data is outside range i.e. if data<num1 or data>num2
+         \@num1:num2 - warn if data is in range i.e. data>=num1 && data<=num2
+     ABSENT:OK|WARNING|CRITICAL|UNKNOWN - Nagios alert (or lock of thereof) if data is absent
+     ZERO:OK|WARNING|CRITICAL|UNKNOWN   - Nagios alert (or lock of thereof) if result is 0
+     DISPLAY:YES|NO - Specifies if data should be included in nagios status line output
+     PERF:YES|NO    - Output results as performance data or not (always YES if asked for rate)\n\n";
+
+  # add more options based on KNOWN_STATUS_VARS array
+  foreach (keys(%{$known_vars})) {
+     $vname = $_;
+     if (exists($known_vars->{$vname}[3])) {
+	$counter++;
+	$out .= ' --'.$vname."=WARN:threshold,CRIT:threshold,<other specifiers>\n";
+	$out .= "   ".$known_vars->{$vname}[3]."\n";
+	if ($known_vars->{$vname}[1] eq 'COUNTER' && $self->{'enable_rate_of_change'}==1) {
+	    $vname2=$o_rprefix.$vname.$o_rsuffix;
+	    $out .= ' --'.$vname2."=WARN:threshold,CRIT:threshold,<other specifiers>\n";
+	    $out .= "   Rate of Change of ".$known_vars->{$vname}[3]."\n";
+	}
+     }
+  }
+  if ($counter>0) { return $out; }
+  return "";
 }
 
 #  @DESCRIPTION   : Processes standard options parsing out of them variables to be checked
@@ -1396,7 +1506,7 @@ sub options_startprocessing {
 		$self->{'o_perfvars'}='*';
 	}
 	if ($o_perfvars eq '*') {
-		$self->{'AllVarsToPerf'} = 1;
+		$self->{'all_variables_perf'} = 1;
 	}
 	else {
 		# below loop converts rate variables to internal representation
@@ -1721,6 +1831,7 @@ sub main_checkvars {
 #  @INPUT         : none
 #  @RETURNS       : nothing (future: 1 on success, 0 on error)
 #  @PRIVACY & USE : PUBLIC, To be called after variables have values. Must be used as an object instance function
+#		    Calling this function direcly is optional, its automatically called on 1st call to perfdata()
 sub main_perfvars {
     my $self = shift;
 
@@ -1816,7 +1927,7 @@ sub calculate_ratevars {
 }
 
 }
-############################# END OF THE LIBRARY FUNCTIONS ##################################
+##################################### END OF THE LIBRARY FUNCTIONS #########################################
 
 # parse command line options
 sub check_options {
@@ -1849,7 +1960,7 @@ sub check_options {
     ($o_rprefix,$o_rsuffix)=split(/,/,$o_ratelabel) if defined($o_ratelabel) && $o_ratelabel ne '';
 
     # Standard nagios plugin required options
-    if (defined($o_help)) { help(); exit $ERRORS{"UNKNOWN"} };
+    if (defined($o_help)) { help($nlib); exit $ERRORS{"UNKNOWN"} };
     if (defined($o_version)) { p_version(); exit $ERRORS{"UNKNOWN"} };
 
     # access/connection options
@@ -1891,8 +2002,10 @@ $SIG{'ALRM'} = sub {
 
 ########## MAIN #######
 
-my $nlib = Naglio->lib_init('usage_function' => \&print_usage);
-$nlib->set_knownvars(\%KNOWN_STATUS_VARS,$PERF_OK_STATUS_REGEX);
+my $nlib = Naglio->lib_init('usage_function' => \&print_usage,
+			    'enable_long_options' => 1,
+			    'enable_rate_of_change' => 1);
+$nlib->set_knownvars(\%KNOWN_STATUS_VARS, $PERF_OK_STATUS_REGEX);
 
 check_options($nlib);
 

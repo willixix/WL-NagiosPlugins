@@ -854,7 +854,7 @@ sub perf_name {
 }
 
 #  @DESCRIPTION   : Determines appropriate output name (for STATUS and PERF) taking into account
-#		   'NAME' override in long thresholds line specification
+#		    rate variales prefix/suffix and 'NAME' override in long thresholds line specification
 #  @LAST CHANGED  : 08-25-12 by WL
 #  @INPUT         : ARG1 - varible name
 #  @RETURNS       : name for output
@@ -881,7 +881,13 @@ sub out_name {
 	}
     }
     else {
-	$name_out = $dname;
+	# this is for output of rate variables which name internally start with &
+	if ($dname =~ /^&(.*)/) {
+	    $name_out = $self->{'o_rprefix'}.$1.$self->{'o_rsuffix'};
+	}
+	else {
+	    $name_out = $dname;
+	}
     }
     return $name_out;
 }
@@ -1112,7 +1118,7 @@ sub add_knownvar {
 
 #  @DESCRIPTION   : This function is used for checking data values against critical and warning thresholds
 #  @LAST CHANGED  : 08-20-12 by WL
-#  @INPUT         : ARG1 - variable name
+#  @INPUT         : ARG1 - variable name (used for text output in case it falls within threshold)
 #		    ARG2 - data to be checked
 #                   ARG3 - threshold to be checked, internal structure returned by parse_threshold()
 #  @RETURNS       : Returns "" (empty string) if data is not within threshold range
@@ -1124,7 +1130,7 @@ sub check_threshold {
     my $lv1 = $th_array->[1];
     my $lv2 = $th_array->[2];
     my $issymb = 1;
-    $issymb = 0 if defined($self) && $self->{'output_comparison_symbols'}==0;
+    $issymb = 0 if defined($self) && $self->{'output_comparison_symbols'} eq 0;
 
     # verb("debug check_threshold: $mod : ".(defined($lv1)?$lv1:'')." : ".(defined($lv2)?$lv2:''));
     return "" if !defined($lv1) || ($mod eq '' && $lv1 eq ''); 
@@ -1252,10 +1258,10 @@ sub var_pattern_match {
 
     foreach $v (@{$allvars}) {
 	$pattern='';
-	if ($is_regex_match==1 && !defined($thresholds->{$v}{'PATTERN'})) {
+	if ($is_regex_match eq 1 && !defined($thresholds->{$v}{'PATTERN'})) {
 	    $pattern=$v;
 	}
-	elsif ($is_regex_match!=0 && defined($thresholds->{$v}{'PATTERN'})) {
+	elsif ($is_regex_match ne 0 && defined($thresholds->{$v}{'PATTERN'})) {
 	    $pattern = $thresholds->{$v}{'PATTERN'};
 	}
 	if ($pattern ne '' && $name =~ /$pattern/) {
@@ -1309,7 +1315,7 @@ sub add_data {
 	push @{$thresholds->{$anam}{'PERF_DATALIST'}}, $dnam;
 	if (!defined($thresholds->{$anam}{'PERF'})) {
 	    push @{$perfVars}, $anam;
-	    # $thresholds->{$anam}{'PERF'} = 'YES';
+	    $thresholds->{$anam}{'PERF'} = 'YES';
 	}
     }
 }
@@ -1541,7 +1547,7 @@ sub additional_options_list {
 	foreach $v (keys %{$known_vars}) {
 	  if (exists($known_vars->{$v}[3]) && $known_vars->{$v}[3] ne '') {
               push @VarOptions,$v."=s";
-	      if ($self->{'enable_rate_of_change'}==1 && $known_vars->{$v}[1] eq 'COUNTER' && ($o_rprefix ne '' || $o_rsuffix ne '')) {
+	      if ($self->{'enable_rate_of_change'} eq 1 && $known_vars->{$v}[1] eq 'COUNTER' && ($o_rprefix ne '' || $o_rsuffix ne '')) {
 		   $v2 = $o_rprefix.$v.$o_rsuffix;
 		   push @VarOptions,$v2."=s" 
 	      }
@@ -1593,7 +1599,7 @@ sub additional_options_help {
 	$counter++;
 	$out .= ' --'.$vname."=WARN:threshold,CRIT:threshold,<other specifiers>\n";
 	$out .= "   ".$known_vars->{$vname}[3]."\n";
-	if ($known_vars->{$vname}[1] eq 'COUNTER' && $self->{'enable_rate_of_change'}==1) {
+	if ($known_vars->{$vname}[1] eq 'COUNTER' && $self->{'enable_rate_of_change'} eq 1) {
 	    $vname2=$o_rprefix.$vname.$o_rsuffix;
 	    $out .= ' --'.$vname2."=WARN:threshold,CRIT:threshold,<other specifiers>\n";
 	    $out .= "   Rate of Change of ".$known_vars->{$vname}[3]."\n";
@@ -1672,7 +1678,7 @@ sub options_startprocessing {
 	  }
 	}
 	else {
-	  print "Specifying warning and critical thresholds with -w and -c requires '-a' parameter with list of variables to be checked\n";
+	  print "Specifying warning or critical thresholds requires specifying list of variables to be checked\n";
 	  if (defined($self)) { $self->usage(); }
 	  exit $ERRORS{"UNKNOWN"};
 	}
@@ -1749,7 +1755,7 @@ sub _options_setthresholds {
     }
 }
 
-#  @DESCRIPTION   : Internal helper function. Determines time when previous performance data was calculated and saved at
+#  @DESCRIPTION   : Internal helper function. Finds time when previous performance data was calculated/saved at
 #  @DEVNOTE	  : Right now this library and function only supports one previous performance data set,
 #		    but check_snmp_netint plugin supports multiple sets and there the code is more complex,
 #		    As this function originated there, that code is commented out right now.
@@ -1799,7 +1805,7 @@ sub options_finishprocessing {
 		    $self->{'_perfcheck_time'} = $self->_set_prevtime($prevperf,$self->{'o_prevtime'});
 	      }
 	      else {
-		    print "--preverf can only be used with --perf or --perfvars options\n";
+		    print "--prevperf can only be used with --perf or --perfvars options\n";
 		    if (defined($self)) { $self->usage(); }
 		    exit $ERRORS{"UNKNOWN"};
 	      }
@@ -1887,7 +1893,7 @@ sub set_statuscode {
 #  @DESCRIPTION   : This function is called closer to end of the code after plugin retrieved data and
 #		    assigned values to variables. This function checks variables against all thresholds.
 #		    It prepares statusdata and statusinfo and exitcode. 
-#  @LAST CHANGED  : 08-22-12 by WL
+#  @LAST CHANGED  : 08-25-12 by WL
 #  @INPUT         : none
 #  @RETURNS       : nothing (future: 1 on success, 0 on error)
 #  @PRIVACY & USE : PUBLIC, To be called after variables have values. Must be used as an object instance function
@@ -1900,68 +1906,68 @@ sub main_checkvars {
     my $thresholds = $self->{'_thresholds'};
     my $dataresults = $self->{'_dataresults'};
     my $allVars = $self->{'_allVars'};
-    my $o_rprefix = $self->{'o_rprefix'};
-    my $o_rsuffix = $self->{'o_rsuffix'};
-    my ($avar,$avar_out,$avar_perf,$chk)=(undef,undef,undef,undef);
+    my $datavars = $self->{'_datavars'};
+
+    my ($dvar,$avar,$aname,$perf_str,$chk)=(undef,undef,undef,undef,undef);
 
     # main loop to check for warning & critical thresholds
     for (my $i=0;$i<scalar(@{$allVars});$i++) {
-	$avar=$allVars->[$i];
-	$avar_out = $avar;
-	# this is for output of rate variables which name internally start with &
-	if ($avar =~ /^&(.*)/) {
-	    $avar_out = $o_rprefix.$1.$o_rsuffix;
-	}
-	if (defined($dataresults->{$avar}[0])) {
-	    # main check
-	    if ($dataresults->{$avar}[0]==0 && exists($thresholds->{$avar}{'ZERO'})) {
-		$self->set_statuscode($thresholds->{$avar}{'ZERO'});
-		$self->addto_statusinfo_output($avar, "$avar is zero") if $self->statuscode() ne 'OK';
-	    }
-	    else {
-		$chk=undef;
-		if (exists($thresholds->{$avar}{'CRIT'})) {
-		    $chk = $self->check_threshold($avar,lc $dataresults->{$avar}[0], $thresholds->{$avar}{'CRIT'});
-		    if ($chk) {
-		    	$self->set_statuscode("CRITICAL");
-		    	$self->addto_statusinfo_output($avar,$chk);
+	$avar = $allVars->[$i];
+	foreach $dvar (@{$datavars->{$avar}}) {
+	    $aname = $self->out_name($dvar);
+	    if (defined($dataresults->{$dvar}[0])) {
+		# main check
+		if (defined($avar)) {
+		    if ($dataresults->{$dvar}[0] eq 0 && exists($thresholds->{$avar}{'ZERO'})) {
+			$self->set_statuscode($thresholds->{$avar}{'ZERO'});
+			$self->addto_statusinfo_output($dvar, "$aname is zero") if $self->statuscode() ne 'OK';
+		    }
+		    else {
+			$chk=undef;
+			if (exists($thresholds->{$avar}{'CRIT'})) {
+			    $chk = $self->check_threshold($aname,lc $dataresults->{$dvar}[0], $thresholds->{$avar}{'CRIT'});
+			    if ($chk) {
+				$self->set_statuscode("CRITICAL");
+				$self->addto_statusinfo_output($dvar,$chk);
+			    }
+			}
+			if (exists($thresholds->{$avar}{'WARN'}) && (!defined($chk) || !$chk)) {
+			    $chk = $self->check_threshold($aname,lc $dataresults->{$dvar}[0], $thresholds->{$avar}{'WARN'});
+			    if ($chk) {
+				$self->set_statuscode("WARNING");
+				$self->addto_statusinfo_output($dvar,$chk);
+			    }
+			}
 		    }
 		}
-		if (exists($thresholds->{$avar}{'WARN'}) && (!defined($chk) || !$chk)) {
-		    $chk = $self->check_threshold($avar,lc $dataresults->{$avar}[0], $thresholds->{$avar}{'WARN'});
-		    if ($chk) {
-		   	$self->set_statuscode("WARNING");
-		    	$self->addto_statusinfo_output($avar,$chk);
-		    }
-		}
-	    }
-	    # if we did not output to status line yet, do so
-	    $self->addto_statusdata_output($avar,$avar_out." is ".$dataresults->{$avar}[0]);
+		# if we did not output to status line yet, do so
+		$self->addto_statusdata_output($dvar,$aname." is ".$dataresults->{$dvar}[0]);
 
-	    # if we were asked to output performance, prepare it but do not output until later
-	    if ((defined($self->{'o_perf'}) && !exists($thresholds->{$avar}{'PERF'})) || 
-		 (exists($thresholds->{$avar}{'PERF'}) && $thresholds->{$avar}{'PERF'} eq 'YES')) {
-		    $avar_perf = $avar_out.'='.$dataresults->{$avar}[0];
-		    $self->set_perfdata($avar, $avar_perf, undef, "IFNOTSET");
-		    $dataresults->{$avar}[2]=0; # this would clear -1 from preset perf data, making it ready for output
-		    # below is where threshold info gets added to perfdata
-		    if ((exists($thresholds->{$avar}{'WARN'}[5]) && $thresholds->{$avar}{'WARN'}[5] ne '') ||
-			(exists($thresholds->{$avar}{'CRIT'}[5]) && $thresholds->{$avar}{'CRIT'}[5] ne '')) {
-			    $avar_perf = ';';
-			    $avar_perf .= $thresholds->{$avar}{'WARN'}[5] if exists($thresholds->{$avar}{'WARN'}[5]) && $thresholds->{$avar}{'WARN'}[5] ne '';
-			    $avar_perf .= ';'.$thresholds->{$avar}{'CRIT'}[5] if exists($thresholds->{$avar}{'CRIT'}[5]) && $thresholds->{$avar}{'CRIT'}[5] ne '';
-			    $self->set_perfdata($avar, $avar_perf, '', "ADD");
-		    }
-	    }
-	}
-	else {
-	    if (exists($thresholds->{$avar}{'ABSENT'})) {
-		$self->set_statuscode($thresholds->{$avar}{'ABSENT'});
+		# if we were asked to output performance, prepare it but do not output until later
+		if ((defined($self->{'o_perf'}) && defined($avar) && !exists($thresholds->{$avar}{'PERF'})) || 
+		    (exists($thresholds->{$avar}{'PERF'}) && $thresholds->{$avar}{'PERF'} eq 'YES')) {
+			$perf_str = perf_name($aname).'='.$dataresults->{$dvar}[0];
+			$self->set_perfdata($dvar, $perf_str, undef, "IFNOTSET"); # with undef UNIT would get added
+			$dataresults->{$dvar}[2]=0; # this would clear -1 from preset perf data, making it ready for output
+			# below is where threshold info gets added to perfdata
+			if ((exists($thresholds->{$avar}{'WARN'}[5]) && $thresholds->{$avar}{'WARN'}[5] ne '') ||
+			    (exists($thresholds->{$avar}{'CRIT'}[5]) && $thresholds->{$avar}{'CRIT'}[5] ne '')) {
+				$perf_str = ';';
+				$perf_str .= $thresholds->{$avar}{'WARN'}[5] if exists($thresholds->{$avar}{'WARN'}[5]) && $thresholds->{$avar}{'WARN'}[5] ne '';
+				$perf_str .= ';'.$thresholds->{$avar}{'CRIT'}[5] if exists($thresholds->{$avar}{'CRIT'}[5]) && $thresholds->{$avar}{'CRIT'}[5] ne '';
+				$self->set_perfdata($dvar, $perf_str, '', "ADD");
+			}
+		}
 	    }
 	    else {
-		$self->set_statuscode("CRITICAL");
+		if (defined($avar) && defined($thresholds->{$avar}{'ABSENT'})) {
+		    $self->set_statuscode($thresholds->{$avar}{'ABSENT'});
+		}
+		else {
+		    $self->set_statuscode("CRITICAL");
+		}
+		$self->addto_statusinfo_output($dvar, "$aname data is missing");
 	    }
-	    $self->addto_statusinfo_output($avar, "$avar data is missing");
 	}
     }
     $self->{'_called_main_checkvars'}=1;
@@ -1982,32 +1988,39 @@ sub main_perfvars {
     my $PERF_OK_STATUS_REGEX = $self->{'perfOKStatusRegex'};
     my $perfVars = $self->{'_perfVars'};
     my $known_vars = $self->{'knownStatusVars'};
+    my $datavars = $self->{'_datavars'};
     my $avar;
+    my $dvar;
 
     $self->main_checkvars() if !exists($self->{'_called_main_checkvars'});
     if (exists($self->{'_called_main_perfvars'})) { return; }
 
     for (my $i=0;$i<scalar(@{$perfVars});$i++) {
 	$avar=$perfVars->[$i];
-	if (defined($dataresults->{$avar}[0])) {
-		$self->verb("Perfvar: $avar = ".$dataresults->{$avar}[0]);
+	if (scalar(@{$datavars->{$avar}})==0) {
+		$self->verb("Perfvar: $avar selected for PERFOUT but data not available");
+	}
+	foreach $dvar (@{$datavars->{$avar}}) {
+	    if (defined($dataresults->{$dvar}[0])) {
+		$self->verb("Perfvar: $dvar (specified as $avar) = ".$dataresults->{$avar}[0]);
 	        if (!defined($known_vars->{$avar}[1]) || $known_vars->{$avar}[1] =~ /$PERF_OK_STATUS_REGEX/ ) {
-			$self->addto_perfdata_output($avar);
+			$self->addto_perfdata_output($dvar);
 		}
 		else {
 			$self->verb(" -- not adding to perfdata because of its '".$known_vars->{$avar}[1]."' type variable --");
 		} 
-	}
-	else {
+	    }
+	    else {
 		$self->verb("Perfvar: $avar selected for PERFOUT but data not available");
+	    }
 	}
     }
     if (defined($self->{'o_prevperf'})) {
         $self->addto_perfdata_output('_ptime', "_ptime=".time(), "REPLACE");
     }
-    foreach $avar (keys %{$dataresults}) {
-        if (defined($dataresults->{$avar}[3]) && $dataresults->{$avar}[3] ne '') {
-            $self->addto_perfdata_output($avar);
+    foreach $dvar (keys %{$dataresults}) {
+        if (defined($dataresults->{$dvar}[3]) && $dataresults->{$dvar}[3] ne '') {
+            $self->addto_perfdata_output($dvar);
         }
     }
 
@@ -2031,6 +2044,7 @@ sub perfdata {
     return "";
 }
 
+# TODO - REWRITE TO SUPPORT REGEX
 #  @DESCRIPTION   : This function is called after data is available and calculates rate variables
 #		    based on current and previous (saved in perfdata) values.
 #  @LAST CHANGED  : 08-22-12 by WL

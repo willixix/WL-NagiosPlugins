@@ -847,7 +847,7 @@ sub perf_name {
     my $in = shift;
     my $out = $in;
     $out =~ s/'\/\(\)/_/g; #' get rid of special characters in performance description name
-    if ($in !~ /\w/ && $in eq $out) {
+    if ($in !~ /\s/ && $in eq $out) {
         return $in;
     }
     return "'".$out."'";
@@ -866,7 +866,7 @@ sub out_name {
     my $vr = $self->data2varname($dname,1);
     my $name_out;
 
-    if (exists($thresholds->{$vr}{'NAME'})) {
+    if (defined($vr) && exists($thresholds->{$vr}{'NAME'})) {
 	if (exists($thresholds->{$vr}{'PATTERN'}) || $self->{'enable_regex_match'} == 1) {
 	    $thresholds->{$vr}{'NAMES_INDEX'} = {} if !exists($thresholds->{$vr}{'NAMES_INDEX'});
 	    if (!exists($thresholds->{$vr}{'NAMES_INDEX'}{$dname})) {
@@ -983,7 +983,7 @@ sub set_perfdata {
 	}
 	else {
 	    $vr = $self->data2varname($avar,1);
-	    if (exists($known_vars->{$vr}[2])) {
+	    if (defined($vr) && exists($known_vars->{$vr}[2])) {
 		$bdata .= $known_vars->{$vr}[2];
 	    }
 	}
@@ -1021,7 +1021,7 @@ sub addto_perfdata_output {
 	$opt = uc $opt;
     }
     $vr = $self->data2varname($avar,1);
-    if (defined($avar) &&
+    if (defined($avar) && defined($vr) &&
         (!exists($thresholds->{$vr}{'PERF'}) || $thresholds->{$vr}{'PERF'} eq 'YES') &&
         (!defined($dataresults->{$avar}[2]) || $dataresults->{$avar}[2] < 1)) {
            my $bdata = '';
@@ -1049,15 +1049,15 @@ sub addto_perfdata_output {
 #  @DESCRIPTION   : Accessor function for map from data collected to variable names specified in options and thresholds
 #  @LAST CHANGED  : 08-22-13 by WL
 #  @INPUT         : ARG1 - data variable name
-#		    ARG2 - if 0 return undef if no match for ARG1 found, if 1 return ARG1
+#		    ARG2 - if undef or 0 return undef if no match for ARG1 found, if 1 return ARG1
 #  @RETURNS       : string of variable name as was specified with --variables or --thresholds
 #  @PRIVACY & USE : PUBLIC. Must be used as an object instance function
 sub data2varname {
-    my ($self,$dname, $ropt) = @_;
+    my ($self,$dname,$ropt) = @_;
     my $dataresults = $self->{'_dataresults'};
 
-    return $dataresults->{$dname}[4] if defined($self) && exists($dataresults->{$dname}[4]);
-    return $dname if defined($ropt) && $ropt;
+    return $dataresults->{$dname}[4] if defined($self) && defined($dataresults->{$dname}[4]);
+    return $dname if defined($ropt) && $ropt eq 1;
     return undef;
 }
 
@@ -1305,7 +1305,7 @@ sub add_data {
     # setperf if all variables go to perf
     if ($self->{'all_variables_perf'} == 1) {
         $thresholds->{$anam}={} if !exists($thresholds->{$anam});
-	$thresholds->{$anam}{'PERF_DATALIST'} = [] if !exists($thresholds->{$anam}['PERF_DATALIST']);
+	$thresholds->{$anam}{'PERF_DATALIST'} = [] if !exists($thresholds->{$anam}{'PERF_DATALIST'});
 	push @{$thresholds->{$anam}{'PERF_DATALIST'}}, $dnam;
 	if (!defined($thresholds->{$anam}{'PERF'})) {
 	    push @{$perfVars}, $anam;
@@ -1349,7 +1349,7 @@ sub parse_thresholds_list {
    my @tin = split (',', uc $in);
    # old format with =warn,crit thresolds without specifying which one
    if (exists($tin[0]) && $tin[0] !~ /^WARN/ && $tin[0] !~ /^CRIT/ && $tin[0] !~ /^ABSENT/ && $tin[0] !~ /^ZERO/ &&
-			  $tin[0] !~ /^DISPLAY/ && $tin[0] !~ /^PERF/ && $tin[0] !~ /^SAVED/ && $tin[0] != /^PATTERN/ && $tin[0] != /^NAME/) {
+			  $tin[0] !~ /^DISPLAY/ && $tin[0] !~ /^PERF/ && $tin[0] !~ /^SAVED/ && $tin[0] !~ /^PATTERN/ && $tin[0] !~ /^NAME/) {
 	if (scalar(@tin)==2) {
 	     if (defined($self)) {
 		  $thres->{'WARN'} = $self->parse_threshold($tin[0]); 
@@ -1475,8 +1475,8 @@ sub parse_thresholds_list {
 sub add_thresholds {
     my ($self,$var,$th_in) = @_;
     my $th;
-    if ((ref $th) && (exists($th->{'WARN'}) || exists($th->{'CRIT'}) || exists($th->{'DISPLAY'}) || exists($th->{'PERF'}) || exists($th->{'SAVED'}) ||
-		      exists($th->{'ABSENT'}) || exits($th->{'ZERO'}) || exists($th->{'PATTERN'}))) {
+    if ((ref $th_in) && (exists($th_in->{'WARN'}) || exists($th_in->{'CRIT'}) || exists($th_in->{'DISPLAY'}) || exists($th_in->{'PERF'}) || exists($th_in->{'SAVED'}) ||
+		      exists($th_in->{'ABSENT'}) || exits($th_in->{'ZERO'}) || exists($th_in->{'PATTERN'}))) {
 	$th = $th_in;
     }
     else {

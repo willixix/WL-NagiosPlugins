@@ -1997,21 +1997,23 @@ sub main_perfvars {
 
     for (my $i=0;$i<scalar(@{$perfVars});$i++) {
 	$avar=$perfVars->[$i];
-	if (scalar(@{$datavars->{$avar}})==0) {
+	if (!defined($datavars->{$avar}) || scalar(@{$datavars->{$avar}})==0) {
 		$self->verb("Perfvar: $avar selected for PERFOUT but data not available");
 	}
-	foreach $dvar (@{$datavars->{$avar}}) {
-	    if (defined($dataresults->{$dvar}[0])) {
-		$self->verb("Perfvar: $dvar (specified as $avar) = ".$dataresults->{$avar}[0]);
-	        if (!defined($known_vars->{$avar}[1]) || $known_vars->{$avar}[1] =~ /$PERF_OK_STATUS_REGEX/ ) {
+	else {
+	    foreach $dvar (@{$datavars->{$avar}}) {
+	    	if (defined($dataresults->{$dvar}[0])) {
+		    $self->verb("Perfvar: $dvar ($avar) = ".$dataresults->{$avar}[0]);
+	            if (!defined($known_vars->{$avar}[1]) || $known_vars->{$avar}[1] =~ /$PERF_OK_STATUS_REGEX/ ) {
 			$self->addto_perfdata_output($dvar);
-		}
-		else {
+		    }
+		    else {
 			$self->verb(" -- not adding to perfdata because of its '".$known_vars->{$avar}[1]."' type variable --");
-		} 
-	    }
-	    else {
-		$self->verb("Perfvar: $avar selected for PERFOUT but data not available");
+		    } 
+	        }
+	        else {
+		    $self->verb("Perfvar: $avar selected for PERFOUT but data not available");
+	        }
 	    }
 	}
     }

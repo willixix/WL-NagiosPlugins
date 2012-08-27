@@ -282,6 +282,7 @@
 use strict;
 use IO::Socket;
 use Time::HiRes;
+use Text::ParseWords;
 use Cache::Memcached;
 use Getopt::Long qw(:config no_ignore_case);
 
@@ -361,6 +362,7 @@ my $o_perfvars= undef;          # list of variables to include in perfomance dat
 my $o_warn=     undef;          # warning level option
 my $o_crit=     undef;          # Critical level option
 my $o_perf=     undef;          # Performance data option
+my @o_check=	undef;		# General check option that maybe repeated more than once
 my $o_timeout=  undef;          # Timeout to use - note that normally timeout is take from nagios anyway
 my $o_mdsopt=	undef;		# Stat List to get data for
 my @o_mdslist= ('misc','malloc'); # Default List, if -S option is entered, this is replaced 
@@ -379,7 +381,7 @@ my $memd= undef;                # DB connection object
 sub p_version { print "check_memcached.pl version : $Version\n"; }
 
 sub print_usage_line {
-    print "Usage: $0 [-v [debugfilename]] -H <host> [-p <port>] [-s <memcache stat arrays>] [-a <memcache statistics variables> -w <variables warning thresholds> -c <variables critical thresholds>] [-A <performance output variables>] [-T [conntime_warn,conntime_crit]] [-R [hitrate_warn,hitrate_crit]] [-U [utilization_size_warn,utilization_size_crit]] [-f] [-T <timeout>] [-V] [-P <previous performance data in quoted string>]\n";
+    print "Usage: $0 [-v [debugfilename]] -H <host> [-p <port>] [-s <memcache stat arrays>] [-a <memcache statistics variables> -w <variables warning thresholds> -c <variables critical thresholds>] [-A <performance output variables>] [-T [conntime_warn,conntime_crit]] [-R [hitrate_warn,hitrate_crit]] [-U [utilization_size_warn,utilization_size_crit]] [-f] [-T <timeout>] [-V] [-P <previous performance data in quoted string>] [-+ <long threshold specification with name or pattern>]\n";
 }
 
 sub print_usage {
@@ -463,6 +465,26 @@ Performance Data Processing Options:
    of another base variable. You can specify PREFIX or SUFFIX or both. Default
    if not specified is '_rate' suffix string i.e. --rate_label=,_rate
 
+General Check Option:
+  -+ <list of specifiers> , --check-long_name=<list of specifiers separated by ,>
+   where specifiers must include NAME or PATTERN and one or more of:
+     NAME:<string>  - Default name for this variable as you'd have specified with -v
+     PATTERN:<regex> - Regular Expression that allows to match multiple data results
+     WARN:threshold  - warning alert threshold
+     CRIT:threshold  - critical alert threshold
+       Threshold is a value (usually numeric) which may have the following prefix:
+         > - warn if data is above this value (default for numeric values)
+         < - warn if data is below this value (must be followed by number)
+         = - warn if data is equal to this value (default for non-numeric values)
+         ! - warn if data is not equal to this value
+       Threshold can also be specified as a range in two forms:
+         num1:num2  - warn if data is outside range i.e. if data<num1 or data>num2
+         \@num1:num2 - warn if data is in range i.e. data>=num1 && data<=num2
+     ABSENT:OK|WARNING|CRITICAL|UNKNOWN - Nagios alert (or lock of thereof) if data is absent
+     ZERO:OK|WARNING|CRITICAL|UNKNOWN   - Nagios alert (or lock of thereof) if result is 0
+     DISPLAY:YES|NO - Specifies if data should be included in nagios status line output
+     PERF:YES|NO    - Output results as performance data or not (always YES if asked for rate)
+
 Measured/Calculated Data:
  -T, --response_time=[WARN,CRIT]
    If this is used as just -T the plugin will measure and output connection 
@@ -545,13 +567,14 @@ EOT
 #	       were added to that section and accessor functions written for some of them.
 #	       This is considered 0.1 version of the library
 #
-# [0.2 - Aug 25, 2012] In August the library code in check_memcached had been re-written from
+# [0.2 - Aug 28, 2012] In August the library code in check_memcached had been re-written from
 #	       just functions to object-oriented perl interface. All variables were hidden from
 #	       direct access with accessor functions written. Documentation header had been added
 #	       to each library function and the header for the library itself. This was major work
-#	       taking a week to do although functions and mainly same as in 0.1. They are also still
-#	       not stabilized and so library is only to be inluded within plugins. But its clearly a
-#	       library now and can stand on its own if needed. License changed to LGPL for this code.
+#	       taking over a week to do although functions and mainly sllllame as in 0.1. They are
+#	       not stabilized and so library is only to be included within plugins. Support was
+#	       also added for regex matching and PATTERN option spec.
+#	       License changed to LGPL for this code.
 #
 # ================================== LIBRARY TODO =================================================
 #
@@ -581,25 +604,28 @@ EOT
 {
 package Naglio;
 use fields qw();
+use Text::ParseWords;
 
 my %ERRORS = ('OK'=>0,'WARNING'=>1,'CRITICAL'=>2,'UNKNOWN'=>3,'DEPENDENT'=>4);
 my $DEFAULT_PERF_OK_STATUS_REGEX = 'GAUGE|COUNTER|^DATA$|BOOLEAN';
 
 #  @DESCRIPTION   : Library object constructor
-#  @LAST CHANGED  : 08-23-12 by WL
+#  @LAST CHANGED  : 08-27-12 by WL
 #  @INPUT         : Hash array of named config settings. All parameters are optiona. Currently supported are:
-#		       plugin_name => string - short name of the plugin
-#		       plugin_description => string - plugin longer description
-#		       plugin_authors => string - list of plugin authors
+#		       plugin_name => string               - short name of the plugin
+#		       plugin_description => string        - plugin longer description
+#		       plugin_authors => string 	   - list of plugin authors
 #                      knownStatsVars => reference to hash - hash array defining known variables, what type they are, their description
-#		       verbose => 1 or "" or "filename" - set to 1 or "" if verbose/debug or to filename to send data to (may not be called "0" or "1")
+#		       usage_function => &ref  		   - function that would display helpful text in case of error with options for this plugin
+#		       verbose => 1 or "" or "filename"    - set to 1 or "" if verbose/debug or to filename to send data to (may not be called "0" or "1")
 #                      output_comparison_symbols => 0 or 1 - 1 means library output in case threshold is met can use "<", ">", "="
 #						             0 means output is something like "less than or equal", "more than", etc.
-#		       usage_function => &ref  - function that would display helpful text in case of error with options for this plugin
-#		       all_variables_perf => 0 or 1 - 1 means data for all variables would go to PERF. This is what '-A *' or just -A do
-#		       enable_long_options => 0 or 1  - 1 enables long options generated based on knownStatsVars. This is automatically enabled (from 0
-#							to 1) when plugin references additional_options_list() unless this is set to -1 at library init
-#		       enable_rate_of_change => 0 or 1  - enables support for calculating rate of change based on previously saved data, default is 1
+#		       all_variables_perf => 0 or 1        - 1 means data for all variables would go to PERF. This is what '-A *' or just -A do
+#		       enable_long_options => 0 or 1       - 1 enables long options generated based on knownStatsVars. This is automatically enabled (from 0
+#							     to 1) when plugin references additional_options_list() unless this is set to -1 at library init
+#		       enable_rate_of_change => 0 or 1     - enables support for calculating rate of change based on previously saved data, default is 1
+#		       enable_regex_match => 0 or 1	   - when set to 1 each threshold-specified var name is treated as regex and can match
+#							     to multiple collected data. this can also be enabled per-variable with PATTERN spec
 #  @RETURNS       : Reference representing object instance of this library
 #  @PRIVACY & USE : PUBLIC, To be used when initializing the library
 sub lib_init {
@@ -672,34 +698,60 @@ sub lib_init {
 						# a value of 2 means its enabled, but for options with PATTERN specifier (this is not configurale value)
 	      };
 
-    # now deal with arguments that maybe passed to library when initalizing
+    # bless to create an object
+    bless $self, $class;
+
+    # deal with arguments that maybe passed to library when initalizing
     if (exists($other_args{'KNOWN_STATUS_VARS'})) {
         $self->{'knownStatusVars'} = $other_args{'KNOWN_STATUS_VARS'};
     }
-    if (exists($other_args{'verbose'}) || exists($other_args{'debug'})) {
-        $self->{'verbose'} = 1;
-        if (exists($other_args{'verbose'}) && $other_args{'verbose'}) {
-	    $self->{'debug_file'} = $other_args{'verbose'};
-        }
-        if (exists($other_args{'debug_log_filename'})) {
-	    $self->{'debug_file'} = $other_args{'debug_log_filename'};
-        }
-    }
-    $self->{'all_variables_perf'} = $other_args{'all_variables_perf'} if exists($other_args{'all_variables_perf'});
-    $self->{'enable_long_options'} = $other_args{'enable_long_options'} if exists($other_args{'enable_long_options'});
-    $self->{'enable_rate_of_change'} = $other_args{'enable_rate_of_change'} if exists($other_args{'enable_rate_of_change'});
-    $self->{'enable_regex_match'} = 1 if exists($other_args{'enable_regex_match'}) && $other_args{'enable_regex_match'}!=0;
-    $self->{'output_comparison_symbols'} = $other_args{'output_comparison_symbols'} if exists($other_args{'output_comparison_symbols'});
-    $self->{'usage_function'} = $other_args{'usage_gunction'} if exists($other_args{'usage_function'});
     $self->{'plugin_name'} = $other_args{'plugin_name'} if exists($other_args{'plugin_name'});
     $self->{'plugin_description'} = $other_args{'plugin_description'} if exists($other_args{'plugin_description'});
     $self->{'plugin_authors'} = $other_args{'plugin_authors'} if exists($other_args{'plugin_authors'});
-    return bless $self, $class;
+    $self->{'usage_function'} = $other_args{'usage_gunction'} if exists($other_args{'usage_function'});
+    $self->configure(%other_args);
+
+    # return self object
+    return $self;
 }
 
 # This is just an alias for object constructor lib_init function
 sub new {
     return lib_init(@_);
+}
+
+#  @DESCRIPTION   : Allows to confiure some settings after initialization (all these can also be done as part of lib_init)
+#  @LAST CHANGED  : 08-27-12 by WL
+#  @INPUT         : Hash array of named config settings. All parameters are optiona. Currently supported are:
+#		       verbose => 1 or "" or "filename"    - set to 1 or "" if verbose/debug or to filename to send data to (may not be called "0" or "1")
+#                      output_comparison_symbols => 0 or 1 - 1 means library output in case threshold is met can use "<", ">", "="
+#						             0 means output is something like "less than or equal", "more than", etc.
+#		       all_variables_perf => 0 or 1        - 1 means data for all variables would go to PERF. This is what '-A *' or just -A do
+#		       enable_long_options => 0 or 1       - 1 enables long options generated based on knownStatsVars. This is automatically enabled (from 0
+#							     to 1) when plugin references additional_options_list() unless this is set to -1 at library init
+#		       enable_rate_of_change => 0 or 1     - enables support for calculating rate of change based on previously saved data, default is 1
+#		       enable_regex_match => 0 or 1	   - when set to 1 each threshold-specified var name is treated as regex and can match
+#							     to multiple collected data. this can also be enabled per-variable with PATTERN spec
+#  @RETURNS       :  nothing (future: 1 on success, 0 on error)
+#  @PRIVACY & USE : PUBLIC, Must be used as an object instance function.
+sub configure {
+    my $self = shift;
+    my %args = @_;
+
+    if (exists($args{'verbose'}) || exists($args{'debug'})) {
+        $self->{'verbose'} = 1;
+        if (exists($args{'verbose'}) && $args{'verbose'}) {
+	    $self->{'debug_file'} = $args{'verbose'};
+        }
+        if (exists($args{'debug_log_filename'})) {
+	    $self->{'debug_file'} = $args{'debug_log_filename'};
+        }
+    }
+    $self->{'all_variables_perf'} = $args{'all_variables_perf'} if exists($args{'all_variables_perf'});
+    $self->{'enable_long_options'} = $args{'enable_long_options'} if exists($args{'enable_long_options'});
+    $self->{'enable_rate_of_change'} = $args{'enable_rate_of_change'} if exists($args{'enable_rate_of_change'});
+    $self->{'enable_regex_match'} = 1 if exists($args{'enable_regex_match'}) && $args{'enable_regex_match'}!=0;
+    $self->{'output_comparison_symbols'} = $args{'output_comparison_symbols'} if exists($args{'output_comparison_symbols'});
 }
 
 #  @DESCRIPTION   : Allows functions to take be used both directly and as object referenced functions
@@ -814,25 +866,29 @@ sub trim {
 #  @DESCRIPTION   : Takes as input string from PERF or SAVED data from previous plugin invocation
 #                   which should contain space-separated list of var=data pairs. The string is
 #                   parsed and it returns back hash array of var=>data pairs.
-#  @LAST CHANGED  : 08-20-12 by WL
+#		      - Function written in 2007 for check_snmp_netint, first release 06/01/07
+# 		      - Modified to use quotewords as suggested by Nicholas Scott, release of 05/20/12
+#  @LAST CHANGED  : 08-27-12 by WL
 #  @INPUT         : ARG1 - string of text passed from SERVICEPERFDATA OR SERVICESAVEDDATA MACRO
 #  @RETURNS       : hash array (see description)
 #  @PRIVACY & USE : PUBLIC, Maybe used directly or as object instance function
+# TODO: double-check this works when there are no single quotes as check_snmp_netint always did quotes
 sub process_perf {
    my ($self,$in) = _self_args(@_);
    my %pdh;
    my ($nm,$dt);
-   foreach (split(' ',$in)) {
+   use Text::ParseWords;
+   foreach (quotewords('\s+',1,$in)) {
        if (/(.*)=(.*)/) {
            ($nm,$dt)=($1,$2);
 	   if (defined($self)) { $self->verb("prev_perf: $nm = $dt"); }
 	   else { verb("prev_perf: $nm = $dt"); }
-            # in some of my plugins time_ is to profile execution time for part of plugin
-            # $pdh{$nm}=$dt if $nm !~ /^time_/;
-            $pdh{$nm}=$dt;
-            $pdh{$nm}=$1 if $dt =~ /(\d+)[cs]/; # 'c' or 's' maybe have been added
-	    # support for more than one set of previously cached performance data
-            # push @prev_time,$1 if $nm =~ /.*\.(\d+)/ && (!defined($prev_time[0]) || $prev_time[0] ne $1);
+           # in some of my plugins time_ is to profile execution time for part of plugin
+           # $pdh{$nm}=$dt if $nm !~ /^time_/;
+           $pdh{$nm}=$dt;
+           $pdh{$nm}=$1 if $dt =~ /(\d+)[cs%]/; # 'c' or 's' or % maybe have been added
+	   # support for more than one set of previously cached performance data
+           # push @prev_time,$1 if $nm =~ /.*\.(\d+)/ && (!defined($prev_time[0]) || $prev_time[0] ne $1);
        }
    }
    return %pdh;
@@ -855,8 +911,8 @@ sub perf_name {
 
 #  @DESCRIPTION   : Determines appropriate output name (for STATUS and PERF) taking into account
 #		    rate variales prefix/suffix and 'NAME' override in long thresholds line specification
-#  @LAST CHANGED  : 08-25-12 by WL
-#  @INPUT         : ARG1 - varible name
+#  @LAST CHANGED  : 08-26-12 by WL
+#  @INPUT         : ARG1 - variable name (variable as found in dataresults)
 #  @RETURNS       : name for output
 #  @PRIVACY & USE : PUBLIC, but its use should be limited. To be as an object instance function,
 sub out_name {
@@ -919,7 +975,7 @@ sub statusinfo {
 }
 
 #  @DESCRIPTION   : Builds Statuline. Adds variable data for status line output in non-error condition.
-#  @LAST CHANGED  : 08-25-12 by WL
+#  @LAST CHANGED  : 08-26-12 by WL
 #  @INPUT         : ARG1 - variable name
 #		    ARG2 - formatted for human consumption text of collected data for this variable
 #  @RETURNS       : nothing (future: 1 on success, 0 on error)
@@ -956,7 +1012,7 @@ sub statusdata {
 
 #  @DESCRIPTION   : This function sets text or data for data variable PERFORMANCE output
 #		    (;warn;crit would be added to it later if thresholds were set for this variable)
-#  @LAST CHANGED  : 08-25-12 by WL
+#  @LAST CHANGED  : 08-26-12 by WL
 #  @INPUT         : ARG1 - variable name
 #		    ARG2 - either "var=data" text or just "data" (in which case var= is prepended to it)
 #		    ARG3 - string for UNIT type ('c' for continous, '%' for percent, 's' for seconds) to added after data
@@ -1006,7 +1062,7 @@ sub set_perfdata {
 }
 
 #  @DESCRIPTION   : This function is used when building performance output
-#  @LAST CHANGED  : 08-25-12 by WL
+#  @LAST CHANGED  : 08-26-12 by WL
 #  @INPUT         : ARG1 - variable name
 #		    ARG2 - optional data argument, if not present variable's dataresults are used
 #		    ARG3 - one of: "REPLACE" - if existing preset perfdata is present, it would be replaced with ARG2
@@ -1243,7 +1299,7 @@ sub threshold_specok {
 }
 
 #  @DESCRIPTION   : this compares var names from data to names given as plugin options treating them regex
-#  @LAST CHANGED  : 08-25-12 by WL
+#  @LAST CHANGED  : 08-26-12 by WL
 #  @INPUT         : ARG1 - the name to search for
 #  @RETURNS       : Keyname for what first one that matched from _thresholds
 #                   Undef if nothing matched
@@ -1334,7 +1390,7 @@ sub vardata {
 
 #  @DESCRIPTION   : This function parses "WARN:threshold,CRIT:threshold,ABSENT:OK|WARNING|CRITICAL|UNKNOWN" combined threshold string
 #		    Parsing of actual threshold i.e. what is after WARN, CRIT is done by parse_threshold() function
-#  @LAST CHANGED  : 08-25-12 by WL
+#  @LAST CHANGED  : 08-27-12 by WL
 #  @INPUT         : ARG1 - String containing threshold line like "WARN:threshold,CRIT:threshold,ABSENT:OK|WARNING|CRITICAL|UNKNOWN"
 #		    Acceptable comma-separated parts threshold specifiers are:
 #		       WARN:<threshold> - warning threshold
@@ -1436,6 +1492,7 @@ sub parse_thresholds_list {
              }
 	     elsif (/^PATTERN\:(.*)/) {
 		   $thres->{'PATTERN'} = $1;
+		   $self->{'enable_regex_match'} = 2 if defined($self) && $self->{'enable_regex_match'} eq 0;
 	     }
 	     elsif (/^NAME\:(.*)/) {
 		   $thres->{'NAME'} = $1;
@@ -1467,7 +1524,7 @@ sub parse_thresholds_list {
 }
 
 #  @DESCRIPTION   : Adds variable to those whose thresholds would be checked
-#  @LAST CHANGED  : 08-25-12 by WL
+#  @LAST CHANGED  : 08-27-12 by WL
 #  @INPUT         :  ARG1 - name of the data variable
 #  		     ARG2 - either:
 #			 1) ref to combined thresholds hash array i.e. { 'WARN' => threshold array, 'CRIT' => threshold array, ABSENT => ... }
@@ -1481,12 +1538,27 @@ sub parse_thresholds_list {
 sub add_thresholds {
     my ($self,$var,$th_in) = @_;
     my $th;
-    if ((ref $th_in) && (exists($th_in->{'WARN'}) || exists($th_in->{'CRIT'}) || exists($th_in->{'DISPLAY'}) || exists($th_in->{'PERF'}) || exists($th_in->{'SAVED'}) ||
-		      exists($th_in->{'ABSENT'}) || exits($th_in->{'ZERO'}) || exists($th_in->{'PATTERN'}))) {
+    if ((ref $th_in) && (exists($th_in->{'WARN'}) || exists($th_in->{'CRIT'}) || exists($th_in->{'DISPLAY'}) ||
+		         exists($th_in->{'PERF'}) || exists($th_in->{'SAVED'}) || exists($th_in->{'ABSENT'}) ||
+			 exists($th_in->{'ZERO'}) || exists($th_in->{'PATTERN'}))) {
 	$th = $th_in;
     }
     else {
 	$th = $self->parse_thresholds_list($th_in);
+    }
+    if (!defined($var)) {
+	if (defined($th->{'NAME'})) {
+	    $var = $th->{'NAME'};
+	}
+	elsif (defined($th->{'PATTERN'})) {
+	    $var = $th->{'PATTERN'};
+	}
+	else {
+	    print "Can not parse. No name or pattern in threshold: $th_in\n";
+	    print "Specify threshold line as:  NAME:name,PATTERN:regex,WARN:threshold,CRIT:threshold,ABSENT:OK|WARNING|CRITICAL|UNKNOWN,ZERO:OK|WARNING|CRITICAL|UNKNOWN\n";
+	    $self->usage();
+	    exit $ERRORS{"UNKNOWN"};
+	}
     }
     push @{$self->{'_allVars'}}, $var if !exists($self->{'_thresholds'}{$var});
     $self->{'_thresholds'}{$var}=$th;
@@ -1728,7 +1800,7 @@ sub _options_setthresholds {
 	  exit $ERRORS{"UNKNOWN"};
     }
     for (my $i=0; $i<scalar(@{$ar_varsL}); $i++) {
-	  $ar_varsL->[$i] = '&'.$1 if $ar_varsL->[$i] =~ /^$o_rprefix(.*)$o_rsuffix$/; # always lowercase here
+	  $ar_varsL->[$i] = '&'.$1 if $ar_varsL->[$i] =~ /^$o_rprefix(.*)$o_rsuffix$/;
 	  if ($ar_varsL->[$i] =~ /^&(.*)/) {
 		if (!defined($self->{'o_prevperf'})) {
 			print "Calculating rate variable such as ".$ar_varsL->[$i]." requires previous performance data. Please add '-P \$SERVICEPERFDATA\$' to your nagios command line.\n";
@@ -1823,7 +1895,7 @@ sub options_finishprocessing {
 		$thresholds->{$_}{'PERF'} = 'YES';
 	    }
 	}
-	# mask as having finished
+	# mark as having finished
 	$self->{'_called_options_finishprocessing'}=1;
     }
 }
@@ -1834,11 +1906,11 @@ sub options_finishprocessing {
 #  @RETURNS       : value of that variable on previous plugin run, undef if not known
 #  @PRIVACY & USE : PUBLIC, Must be used as an object instance function
 sub prev_perf {
-  my ($self,$var) = @_;
-  if (defined($self) && defined($self->{'_prevPerf'}{$var})) {
-      return $self->{'_prevPerf'}{$var};
-  }
-  return undef;
+    my ($self,$var) = @_;
+    if (defined($self) && defined($self->{'_prevPerf'}{$var})) {
+        return $self->{'_prevPerf'}{$var};
+    }
+    return undef;
 }
 
 #  @DESCRIPTION   : Accessor function for exit status code
@@ -1847,8 +1919,8 @@ sub prev_perf {
 #  @RETURNS       : current expected exit status code
 #  @PRIVACY & USE : PUBLIC, Must be used as an object instance function
 sub statuscode {
-   my $self = shift;
-   return $self->{'_statuscode'};
+    my $self = shift;
+    return $self->{'_statuscode'};
 }
 
 #  @DESCRIPTION   : Sets plugin exist status
@@ -1857,43 +1929,43 @@ sub statuscode {
 #  @RETURNS       : 0 on success, 1 if this status code is below level that plugin would exit with and as such it was not set
 #  @PRIVACY & USE : PUBLIC, Must be used as an object instance function
 sub set_statuscode {
-   my ($self,$newcode) = @_;
+    my ($self,$newcode) = @_;
 
-   if ($newcode eq 'UNKNOWN') {
-      $self->{'_statuscode'} = 'UNKNOWN';
-      return 0;
-   }
-   if ($self->{'_statuscode'} eq 'UNKNOWN') { return 1; }
-   elsif ($self->{'_statuscode'} eq 'CRITICAL') {
-      if ($newcode eq 'CRITICAL') { return 0;}
-      else { return 1; }
-   }
-   elsif ($self->{'_statuscode'} eq 'WARNING') {
-      if ($newcode eq 'CRITICAL') {
-	 $self->{'_statuscode'} ='CRITICAL';
-	 return 0;
-      }
-      elsif ($newcode eq 'WARNING') { return 0; }
-      else { return 1; }
-   }
-   elsif ($self->{'_statuscode'} eq 'OK') {
-      if ($newcode eq 'CRITICAL' || $newcode eq 'WARNING') {
-	 $self->{'_statuscode'} = $newcode;
-	 return 0;
-      }
-      else { return 1; }
-   }
-   else {
-      printf "SYSTEM ERROR: status code $newcode not supported";
-      exit $ERRORS{'UNKNOWN'};
-   }
-   return 1; # should never get here
+    if ($newcode eq 'UNKNOWN') {
+        $self->{'_statuscode'} = 'UNKNOWN';
+        return 0;
+    }
+    if ($self->{'_statuscode'} eq 'UNKNOWN') { return 1; }
+    elsif ($self->{'_statuscode'} eq 'CRITICAL') {
+        if ($newcode eq 'CRITICAL') { return 0;}
+        else { return 1; }
+    }
+    elsif ($self->{'_statuscode'} eq 'WARNING') {
+        if ($newcode eq 'CRITICAL') {
+	    $self->{'_statuscode'} ='CRITICAL';
+	    return 0;
+        }
+        elsif ($newcode eq 'WARNING') { return 0; }
+        else { return 1; }
+    }
+    elsif ($self->{'_statuscode'} eq 'OK') {
+        if ($newcode eq 'CRITICAL' || $newcode eq 'WARNING') {
+	    $self->{'_statuscode'} = $newcode;
+	    return 0;
+        }
+        else { return 1; }
+    }
+    else {
+        printf "SYSTEM ERROR: status code $newcode not supported";
+        exit $ERRORS{'UNKNOWN'};
+    }
+    return 1; # should never get here
 }
 
 #  @DESCRIPTION   : This function is called closer to end of the code after plugin retrieved data and
 #		    assigned values to variables. This function checks variables against all thresholds.
 #		    It prepares statusdata and statusinfo and exitcode. 
-#  @LAST CHANGED  : 08-25-12 by WL
+#  @LAST CHANGED  : 08-27-12 by WL
 #  @INPUT         : none
 #  @RETURNS       : nothing (future: 1 on success, 0 on error)
 #  @PRIVACY & USE : PUBLIC, To be called after variables have values. Must be used as an object instance function
@@ -1976,7 +2048,7 @@ sub main_checkvars {
 }
 
 #  @DESCRIPTION   : This function is at the end. It prepares PERFOUT for output collecting all perf variables data
-#  @LAST CHANGED  : 08-22-12 by WL
+#  @LAST CHANGED  : 08-26-12 by WL
 #  @INPUT         : none
 #  @RETURNS       : nothing (future: 1 on success, 0 on error)
 #  @PRIVACY & USE : PUBLIC, To be called after variables have values. Must be used as an object instance function
@@ -2003,16 +2075,16 @@ sub main_perfvars {
 	else {
 	    foreach $dvar (@{$datavars->{$avar}}) {
 	    	if (defined($dataresults->{$dvar}[0])) {
-		    $self->verb("Perfvar: $dvar ($avar) = ".$dataresults->{$avar}[0]);
+		    $self->verb("Perfvar: $dvar ($avar) = ".$dataresults->{$dvar}[0]);
 	            if (!defined($known_vars->{$avar}[1]) || $known_vars->{$avar}[1] =~ /$PERF_OK_STATUS_REGEX/ ) {
 			$self->addto_perfdata_output($dvar);
 		    }
 		    else {
-			$self->verb(" -- not adding to perfdata because of its '".$known_vars->{$avar}[1]."' type variable --");
+			$self->verb(" -- not adding to perfdata because of it is '".$known_vars->{$avar}[1]."' type variable --");
 		    } 
 	        }
 	        else {
-		    $self->verb("Perfvar: $avar selected for PERFOUT but data not available");
+		    $self->verb("Perfvar: $avar selected for PERFOUT but data not defined");
 	        }
 	    }
 	}
@@ -2022,6 +2094,7 @@ sub main_perfvars {
     }
     foreach $dvar (keys %{$dataresults}) {
         if (defined($dataresults->{$dvar}[3]) && $dataresults->{$dvar}[3] ne '') {
+	    $self->verb("Perfvar: $dvar -- ".$dataresults->{$dvar}[3]);
             $self->addto_perfdata_output($dvar);
         }
     }
@@ -2046,10 +2119,9 @@ sub perfdata {
     return "";
 }
 
-# TODO - REWRITE TO SUPPORT REGEX
 #  @DESCRIPTION   : This function is called after data is available and calculates rate variables
 #		    based on current and previous (saved in perfdata) values.
-#  @LAST CHANGED  : 08-22-12 by WL
+#  @LAST CHANGED  : 08-27-12 by WL
 #  @INPUT         : none
 #  @RETURNS       : nothing (future: 1 on success, 0 on error)
 #  @PRIVACY & USE : PUBLIC, To be called after variables have values. Must be used as an object instance function
@@ -2060,25 +2132,31 @@ sub calculate_ratevars {
     my $ptime = $self->{'_perfcheck_time'};
     my $thresholds = $self->{'_thresholds'};
     my $dataresults = $self->{'_dataresults'};
+    my $datavars = $self->{'_datavars'};
     my $allVars = $self->{'_allVars'};
 
-    my $avar;
+    my ($avar,$dvar,$nvar) = (undef,undef,undef);
     my $timenow=time();
     if (defined($self->{'o_prevperf'}) && (defined($self->{'o_perf'}) || defined($self->{'o_perfvars'}))) {
 	for (my $i=0;$i<scalar(@{$allVars});$i++) {
 	    if ($allVars->[$i] =~ /^&(.*)/) {
 		$avar = $1;
-		# this forces perfdata output if it was not already
-		if (defined($dataresults->{$avar}) && $dataresults->{$avar}[2]<1 &&
-		    (!defined($dataresults->{$avar}[3]) || $dataresults->{$avar}[3] eq '')) {
-			$self->set_perfdata($avar, $avar.'='.$dataresults->{$avar}[0], undef, "IFNOTSET");
-			$self->set_threshold($avar,'PERF','YES');
-			$self->set_threshold($avar,'SAVED','YES');  # will replace PERF in the future
-		}
-		if (defined($prev_perf->{$avar}) && defined($ptime)) {
-		    $self->add_data($allVars->[$i],
-		      sprintf("%.2f",($dataresults->{$avar}[0]-$prev_perf->{$avar})/($timenow-$ptime)));
-		    $self->verb("Calculating Rate of Change for $avar : ".$allVars->[$i]."=".$dataresults->{$allVars->[$i]}[0]);
+		if (defined($datavars->{$avar}) && scalar(@{$datavars->{$avar}})>0) {
+		    foreach $dvar (@{$datavars->{$avar}}) {
+			$nvar = '&'.$dvar;
+			# this forces perfdata output if it was not already
+			if (defined($dataresults->{$dvar}) && $dataresults->{$dvar}[2]<1 &&
+			    (!defined($dataresults->{$dvar}[3]) || $dataresults->{$dvar}[3] eq '')) {
+				$self->set_perfdata($dvar, perf_name($self->out_name($dvar)).'='.$dataresults->{$dvar}[0], undef, "IFNOTSET");
+				$self->set_threshold($dvar,'PERF','YES');
+				$self->set_threshold($dvar,'SAVED','YES');  # will replace PERF in the future
+			}
+			if (defined($prev_perf->{$dvar}) && defined($ptime)) {
+			    $self->add_data($nvar,
+			      sprintf("%.2f",($dataresults->{$dvar}[0]-$prev_perf->{$dvar})/($timenow-$ptime)));
+			    $self->verb("Calculating Rate of Change for $dvar ($avar) : ".$nvar."=". $self->vardata($nvar));
+			}
+		    }
 		}
 	    }
 	}
@@ -2094,7 +2172,7 @@ sub check_options {
     my %Options = ();
     Getopt::Long::Configure("bundling");
     GetOptions(\%Options, 
-   	'v:s'	=> \$o_verb,		'verbose:s' => \$o_verb, "debug:s" => \$o_verb,
+   	'v:s'	=> \$o_verb,		'verbose:s'	=> \$o_verb, "debug:s" => \$o_verb,
         'h'     => \$o_help,            'help'          => \$o_help,
         'H:s'   => \$o_host,            'hostname:s'    => \$o_host,
         'p:i'   => \$o_port,            'port:i'        => \$o_port,
@@ -2111,6 +2189,7 @@ sub check_options {
 	'U:s'	=> \$o_utilsize,	'utilization:s' => \$o_utilsize,
         'P:s'   => \$o_prevperf,        'prev_perfdata:s' => \$o_prevperf,
         'E:s'   => \$o_prevtime,        'prev_checktime:s'=> \$o_prevtime,
+	'+:s' 	=> \@o_check, 		'check=s' => \@o_check,
 	'rate_label:s'	=> \$o_ratelabel,
 	map { ($_) } $nlib->additional_options_list()
     );
@@ -2142,6 +2221,11 @@ sub check_options {
     if (defined($o_utilsize) && $o_utilsize ne '') {
           $nlib->verb("Processing memory utilization thresholds: $o_utilsize");
           $nlib->add_thresholds('utilization',$o_utilsize);
+    }
+    # general check option, allows to specify everything, can be repeated more than once
+    foreach (@o_check) {
+	  $nlib->ver("Processing geenral check option: ".$_);
+	  $nlib->add_thresholds(undef,$_);
     }
 
     # finish it up

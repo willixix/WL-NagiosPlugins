@@ -253,7 +253,7 @@
 #
 # define command {
 #    command_name    check_memcached
-#    command_line    $USER1$/check_memcached.pl -H $HOSTADDRESS$ -p $ARG1$ -T $ARG2$ -R $ARG3$ -U $ARG4$ --curr_connections="ZERO:WARNING,DISPLAY:YES,PERF:YES,$ARG5$" --evictions="ZERO:OK,DISPLAY:YES,PERF:YES,$ARG6$" -f -A 'utilization,hitrate,response_time,curr_connections,evictions,cmd_set,bytes_written,curr_items,uptime,rusage_system,get_hits,total_connections,get_misses,bytes,time,connection_structures,total_items,limit_maxbytes,rusage_user,cmd_get,bytes_read,threads,rusage_user_ms,rusage_system_ms,cas_hits,conn_yields,incr_misses,decr_misses,delete_misses,incr_hits,decr_hits,delete_hits,cas_badval,cas_misses,cmd_flush,listen_disabled_num,accepting_conns,pointer_size,pid' -P "$SERVICEPERFDATA$"
+#    command_line    $USER1$/check_memcached.pl -H $HOSTADDRESS$ -p $ARG1$ -T $ARG2$ -R $ARG3$ -U $ARG4$ --curr_connections="ZERO:WARNING,DISPLAY:YES,PERF:YES,$ARG5$" --evictions="ZERO:OK,DISPLAY:YES,PERF:YES,$ARG6$" -f -A 'utilization,hitrate,response_time,curr_connections,evictions,cmd_set,bytes_written,curr_items,uptime,rusage_system,get_hits,total_connections,get_misses,bytes,time,connection_structures,total_items,limit_maxbytes,rusage_user,cmd_get,bytes_read,threads,rusage_user_ms,rusage_system_ms,cas_hits,conn_yields,incr_misses,decr_misses,delete_misses,incr_hits,decr_hits,delete_hits,cas_badval,cas_misses,cmd_flush,listen_disabled_num,accepting_conns,pointer_size' -P "$SERVICEPERFDATA$"
 # }
 #
 # define service {
@@ -599,7 +599,7 @@ EOT
 #
 # Name    : Naglio Perl Library For Developing Nagios Plugins
 # Version : 0.2
-# Date    : Aug 25, 2012
+# Date    : Aug 28, 2012
 # Author  : William Leibzon - william@leibzon.org
 # Licence : LGPL - full text at http://www.fsf.org/licenses/lgpl.txt
 #
@@ -2288,7 +2288,6 @@ sub check_options {
 	map { ($_) } $nlib->additional_options_list()
     );
 
-    # This gets list of variables into our structures
     ($o_rprefix,$o_rsuffix)=split(/,/,$o_ratelabel) if defined($o_ratelabel) && $o_ratelabel ne '';
 
     # Standard nagios plugin required options
@@ -2339,8 +2338,8 @@ $SIG{'ALRM'} = sub {
 
 ########## MAIN #######
 
-my $nlib = Naglio->lib_init('plugin_name' => 'check_memcaached',
-			    'plugins_authors' => 'William Leizon',
+my $nlib = Naglio->lib_init('plugin_name' => 'check_memcached.pl',
+			    'plugins_authors' => 'William Leibzon',
 			    'plugin_description' => 'Memcached Monitoring Plugin for Nagios',
 			    'usage_function' => \&print_usage,
                             'enable_long_options' => 1,
@@ -2348,7 +2347,6 @@ my $nlib = Naglio->lib_init('plugin_name' => 'check_memcaached',
 $nlib->set_knownvars(\%KNOWN_STATUS_VARS, $PERF_OK_STATUS_REGEX);
 
 check_options($nlib);
-
 $nlib->verb("check_memcached.pl plugin version ".$Version);
 
 # Check global timeout if plugin screws up
@@ -2405,7 +2403,7 @@ foreach $vstat (keys %{$stats->{'hosts'}{$dsn}}) {
         $vval = $stats->{'hosts'}{$dsn}{$vstat}{$vnam};
         if (defined($vval)) {
           $nlib->verb("Stats Data: $vstat($vnam) = $vval");
-          if ($vnam eq 'version') {
+	  if (exists($KNOWN_STATUS_VARS{$vnam}) && $KNOWN_STATUS_VARS{$vnam}[1] eq 'VERSION') {
                $memdversion = $vval;
           }
           else {

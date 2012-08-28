@@ -3,8 +3,8 @@
 # ============================== SUMMARY =====================================
 #
 # Program : check_memcached.pl
-# Version : 0.75
-# Date    : Aug 25, 2012
+# Version : 0.8
+# Date    : Aug 28, 2012
 # Author  : William Leibzon - william@leibzon.org
 # Licence : GPL  (main code) summary below and full text at http://www.fsf.org/licenses/gpl.txt
 #	    LGPL (library functions) full text at http://www.fsf.org/licenses/lgpl.txt
@@ -79,7 +79,62 @@
 #   percent of max memory currently in use. The option is -U or --utilization
 #   and as you probably guessed can be used by itself or as -U warn,crit
 #
-# 3. Memcache Statistics Variables and calculating their Rate of Change
+# 3. Options for Checking Variables
+#
+#   All status variables from memcached can be checked with the plugin. For some
+#   status variables separate long option is provided to specify threshold.
+#        --curr_connections=<thresholds>
+#
+#   You can also specify all variables together with -a (--variables) option.
+#   For example:
+#       -a curr_connections,evictions
+#   When you do above results are included in status output line and you
+#   are required to specify thresholds with -w or --warn and -c or --crit
+#   with exactly number of thresholds as a number of variables specified
+#   in -a. If you simply want variable values on status line without specifying
+#   any threshold, use ~ in place of threshold value or skip value but specify
+#   all apropriate commas. For example:
+#           -a curr_connections,evications -w ~,~ -c ~,~
+#      OR   -a curr_connections,evications -w , -c ,
+#
+#   If you use new syntax with a long option for specific stats variables, you can
+#   specify settings for how to handle them. With each option you can use one or more
+#   threshold specifiers:
+#       NAME:<string>   - Overrides name for this variable for use in status and PERF output
+#       PATTERN:<regex> - Regular Expression that allows to match multiple data results
+#       WARN:threshold  - warning alert threshold
+#       CRIT:threshold  - critical alert threshold
+#         Threshold is a value (usually numeric) which may have the following prefix:
+#           > - warn if data is above this value (default for numeric values)
+#           < - warn if data is below this value (must be followed by number)
+#           = - warn if data is equal to this value (default for non-numeric values)
+#           ! - warn if data is not equal to this value
+#         Threshold can also be specified as a range in two forms:
+#           num1:num2  - warn if data is outside range i.e. if data<num1 or data>num2
+#           \@num1:num2 - warn if data is in range i.e. data>=num1 && data<=num2
+#       ABSENT:OK|WARNING|CRITICAL|UNKNOWN - Nagios alert (or lock of thereof) if data is absent
+#       ZERO:OK|WARNING|CRITICAL|UNKNOWN   - Nagios alert (or lock of thereof) if result is 0
+#       DISPLAY:YES|NO - Specifies if data should be included in nagios status line output
+#       PERF:YES|NO    - Output in performance data or not (always YES if -F option is used)
+#       UOM:<string>   - Unit Of Measurement symbol to add to perf data - 'c','%','s','B'
+#			 This is used by prorams that graph perf data such as PNP
+#
+#   These can be specified in any order separated by ",". For example:
+#      --curr_connectins=CRIT:>100,WARN:>50,ABSENT:CRITICAL,ZERO:OK,DISPLAY:YES,PERF:YES
+#
+#   Variables that are not known to plugin and don't have specific long option (or even if
+#   they do) can be specified using general long option --check or --option or -o
+#   (all are aliases for same option):
+#      --check=NAME:curr_connections,CRIT:>100,WARN:>50,ABSENT:CRITICAL,DISPLAY:YES,PERF:YES
+#
+#   Then NAME is used to specify what to match and multiple data vars maybe matched
+#   with PATTERN regex option (and please only use PATTERN with --check and not confuse
+#   plugin by using it in a named long option). Either NAME or PATTERN are required.
+#   Example of using regex to specify thresholds for slabs-specific data is:
+#      -s misc,malloc,slabs,items \
+#      -o "PATTERN:slabs_\d+_chunks_per_page,DISPLAY:NO,PERF:YES,WARN:>5000,CRIT:>20000"
+#
+# 4. Memcache Statistics Variables and Calculating their Rate of Change
 #
 #   All statistics variables from memcached 'stats' can be checked with the plugin. 
 #   And as some people know there are actually several stats arrays in memcached. 
@@ -122,7 +177,7 @@
 #     -P "$SERVICEPERFDATA$"
 #   And don't forget the quotes, in this case they are not just for documentation.
 # 
-# 4. Threshold Specification
+# 5. Threshold Specification
 #
 #   The plugin fully supports Nagios plug-in specification for specifying thresholds:
 #     http://nagiosplug.sourceforge.net/developer-guidelines.html#THRESHOLDFORMAT
@@ -144,7 +199,7 @@
 #   checks. A quick example of such special use is '--warn=^<100 --crit=>200' which
 #   means warning alert if value is < 100 and critical alert if its greater than 200.
 #
-# 5. Performance Data
+# 6. Performance Data
 #
 #   Using '-f' option causes values of all variables you specified in -a as
 #   well as response time from -T, hitrate from -R and memory use from -U
@@ -172,9 +227,9 @@
 #   in performance output. Additionally last time plugin was run is also in
 #   performance data as special _ptime variable.
 #
-# 6. Example of Nagios Config Definitions
+# 7. Example of Nagios Config Definitions
 #
-# Sample command and service definitions are below:
+# A. Sample command and service definitions using -a -c -w options (old style):
 #
 # define command {
 #    command_name    check_memcached
@@ -194,8 +249,22 @@
 #       hostgroups              memcached
 # }
 #
-# Example of command-line use:
-#   /usr/lib/nagios/plugins/check_memcached.pl -H localhost -a 'curr_connections,evictions' -w ~,~ -c ~,~ -s misc,malloc,sizes -U -A -R -T -f -v
+# B. Command line definition using long option (new style)
+#
+# define command {
+#    command_name    check_memcached
+#    command_line    $USER1$/check_memcached.pl -H $HOSTADDRESS$ -p $ARG1$ -T $ARG2$ -R $ARG3$ -U $ARG4$ --curr_connections="ZERO:WARNING,DISPLAY:YES,PERF:YES,$ARG5$" --evictions="ZERO:OK,DISPLAY:YES,PERF:YES,$ARG6$" -f -A 'utilization,hitrate,response_time,curr_connections,evictions,cmd_set,bytes_written,curr_items,uptime,rusage_system,get_hits,total_connections,get_misses,bytes,time,connection_structures,total_items,limit_maxbytes,rusage_user,cmd_get,bytes_read,threads,rusage_user_ms,rusage_system_ms,cas_hits,conn_yields,incr_misses,decr_misses,delete_misses,incr_hits,decr_hits,delete_hits,cas_badval,cas_misses,cmd_flush,listen_disabled_num,accepting_conns,pointer_size,pid' -P "$SERVICEPERFDATA$"
+# }
+#
+# define service {
+#       use                     prod-service
+#       service_description     Memcached: Port 11212
+#       check_command           check_memcached!11212!'WARN:>0.1,CRIT:>0.2'!'WARN:<60,CRIT:<30'!'WARN:>95,CRIT:>98'!'WARN:>200,CRIT:>500'!'WARN:>100'
+#       hostgroups              memcached
+# }
+#
+# C. Example of command-line use:
+#   /usr/lib/nagios/plugins/check_memcached.pl -H localhost -a 'curr_connections,evictions' -w ~,~ -c ~,~ -s misc,malloc,slabs -U -A -R -T -f -v
 #
 # In above the -v option means "verbose" and with it plugin will output some debugging
 # information about what it is doing. The option is not intended to be used when plugin
@@ -244,11 +313,13 @@
 #			   --connected_clients=WARN:threshold,CRIT:threshold
 #			 and added DISPLAY:YES|NO and PERF specifiers for above too.
 # [0.71 - Aug 18, 2012] Fixed bug with hitrate perf output reported perf by daryl herzman
-# [0.75 - Aug 23, 2012] A lot of internal rewrites in the library. Its now not just a
-#		        a set of functions, but not proper object library with internal
-#			variables hidden from outside.
 #
-# TODO or consider for future:
+# [0.8  - Aug 28, 2012] A lot of internal rewrites in the library. Its now not just a
+#		        a set of functions, but a proper object library with internal
+#			variables hidden from outside. Support has also been added for
+#		        regex matching with PATTERN specifier and for generalized
+#                       --check option that can be used where specific long option is
+#			not available. For use with that option also added UOM specifier.
 #
 #  1. Library Enhancements (will apply to multiple plugins that share common code)
 #     (a) Add '--extra-opts' to allow to read options from a file as specified
@@ -261,13 +332,15 @@
 #         just a different way to specify options for this plugin. 
 #     (c) Allow regex when selecting variable name(s) with -a, this will be enabled with
 #	  a special option and not be default
+#	  [DONE]
 #
 #  2. Memcache Specific
 #     (a) Support SASL Authentication
-#     (b). There has been a request to allow to specify threshold checks both for each slab
-#          (which is possible to do now starting with 0.62 version of the plugin) and for
-#          all slabs as well. This applies to "items" and "slabs" statistics and will probably
-#          be implimented by allowing regex checks in place of specific variable name.
+#     (b) There has been a request to allow to specify threshold checks both for each slab
+#         (which is possible to do now starting with 0.62 version of the plugin) and for
+#         all slabs as well. This applies to "items" and "slabs" statistics and will probably
+#         be implimented by allowing regex checks in place of specific variable name.
+#	  [DONE]
 #
 #  Others are welcome recommand a new feature to be added here. If so please email to 
 #         william@leibzon.org.
@@ -300,7 +373,7 @@ if ($@) {
  %ERRORS = ('OK'=>0,'WARNING'=>1,'CRITICAL'=>2,'UNKNOWN'=>3,'DEPENDENT'=>4);
 }
 
-my $Version='0.75';
+my $Version='0.8';
 
 # This is a list of known statistics variables (plus few variables added by plugin),
 # used in order to designate COUNTER variables with 'c' in perfout for graphing programs
@@ -362,7 +435,7 @@ my $o_perfvars= undef;          # list of variables to include in perfomance dat
 my $o_warn=     undef;          # warning level option
 my $o_crit=     undef;          # Critical level option
 my $o_perf=     undef;          # Performance data option
-my @o_check=	undef;		# General check option that maybe repeated more than once
+my @o_check=	();		# General check option that maybe repeated more than once
 my $o_timeout=  undef;          # Timeout to use - note that normally timeout is take from nagios anyway
 my $o_mdsopt=	undef;		# Stat List to get data for
 my @o_mdslist= ('misc','malloc'); # Default List, if -S option is entered, this is replaced 
@@ -381,7 +454,7 @@ my $memd= undef;                # DB connection object
 sub p_version { print "check_memcached.pl version : $Version\n"; }
 
 sub print_usage_line {
-    print "Usage: $0 [-v [debugfilename]] -H <host> [-p <port>] [-s <memcache stat arrays>] [-a <memcache statistics variables> -w <variables warning thresholds> -c <variables critical thresholds>] [-A <performance output variables>] [-T [conntime_warn,conntime_crit]] [-R [hitrate_warn,hitrate_crit]] [-U [utilization_size_warn,utilization_size_crit]] [-f] [-T <timeout>] [-V] [-P <previous performance data in quoted string>] [-+ <long threshold specification with name or pattern>]\n";
+    print "Usage: $0 [-v [debugfilename]] -H <host> [-p <port>] [-s <memcache stat arrays>] [-a <memcache statistics variables> -w <variables warning thresholds> -c <variables critical thresholds>] [-A <performance output variables>] [-T [contime_warn,contime_crit]] [-R [hitrate_warn,hitrate_crit]] [-U [utilization_size_warn,utilization_size_crit]] [-f] [-T <timeout>] [-V] [-P <previous performance data in quoted string>] [-o <threshold specification with name or pattern>]\n";
 }
 
 sub print_usage {
@@ -465,10 +538,10 @@ Performance Data Processing Options:
    of another base variable. You can specify PREFIX or SUFFIX or both. Default
    if not specified is '_rate' suffix string i.e. --rate_label=,_rate
 
-General Check Option:
-  -+ <list of specifiers> , --check-long_name=<list of specifiers separated by ,>
-   where specifiers must include NAME or PATTERN and one or more of:
-     NAME:<string>  - Default name for this variable as you'd have specified with -v
+General Check Option (all 3 forms equivalent, can be repated more than once):
+  -o <list of specifiers>, --option=<list of specifiers>, --check=<list of specifiers>
+   where specifiers are separated by , and must include NAME or PATTERN:
+     NAME:<string>   - Default name for this variable as you'd have specified with -v
      PATTERN:<regex> - Regular Expression that allows to match multiple data results
      WARN:threshold  - warning alert threshold
      CRIT:threshold  - critical alert threshold
@@ -484,6 +557,7 @@ General Check Option:
      ZERO:OK|WARNING|CRITICAL|UNKNOWN   - Nagios alert (or lock of thereof) if result is 0
      DISPLAY:YES|NO - Specifies if data should be included in nagios status line output
      PERF:YES|NO    - Output results as performance data or not (always YES if asked for rate)
+     UOM:<string>   - Unit Of Measurement symbol to add to perf data - 'c','%','s','B'
 
 Measured/Calculated Data:
  -T, --response_time=[WARN,CRIT]
@@ -552,7 +626,7 @@ EOT
 #	       with more updates. Starting with check_redis the code from check_options() and
 #	       from main part of plugin that was very similar across my plugins were separated
 #	       into their own functions. KNOWN_STATS_VARS array was introduced as well to be
-#	       able to properly add UNIT symbol ('c', '%', 's') to perfout for variables.
+#	       able to properly add UOM symbol ('c', '%', 's', 'ms', 'B', 'KB') to perfout.
 #	       check_memcached and check_redis also included support for calculating rate of
 #	       variables in a similar way to how its been done in check_snmp_netint
 #
@@ -573,29 +647,27 @@ EOT
 #	       to each library function and the header for the library itself. This was major work
 #	       taking over a week to do although functions and mainly sllllame as in 0.1. They are
 #	       not stabilized and so library is only to be included within plugins. Support was
-#	       also added for regex matching and PATTERN option spec.
-#	       License changed to LGPL for this code.
+#	       also added for regex matching with PATTERN option spec. Also added NAME spec.
+#	       License changed to LGPL from GPL for this code.
 #
 # ================================== LIBRARY TODO =================================================
 #
 # (a) Add library function to support '--extra-opts' to read plugin options from a file
 #     This is being to be compatible with http://nagiosplugins.org/extra-opts
-# (b) Special config option to support regex when selecting variable name(s). Since actual selection
-#     and data would be added by plugin code outside the library, the library needs to support that
-#     variables/attributes could be prototypes (regex names) rather than actual names and to allow
-#     to link actual data variables to these prototypes
-# (c) Support for expressions in places of numeric values for thresholds. The idea is to allow to refer
-#     to another variable ot to special macro. I know at least one person has extended my check_mysqld
-#     to support using mysql variables (not same as status data) for thresholds. I previously also
-#     had planned such support with experimental check_snmp_attributes plugin library/base. The idea
-#     was also floated around on nagoos-devel list.
-# (d) Support specifying variables as expressions. This is straight out of check_snmp_atributes and
-#     maybe part of it can be reused for this
+# (b) Support regex matching and allowing multiple data for same threshold definition.
+#     [DONE]
+# (c) Support for expressions in places of numeric values for thresholds. The idea is to allow
+#     to refer to another variable or to special macro. I know at least one person has extended
+#     my check_mysqld to support using mysql variables (not same as status data) for thresholds.
+#     I also previouslyhad planned such support with experimental check_snmp_attributes plugin
+#     library/base. The idea was also floated around on nagios-devel list.
+# (d) Support specifying variables as expressions. This is straight out of check_snmp_atributes
+#     and maybe part of it can be reused for this
 # (e) Add common SNMP functions into library as so many of my plugins use it#
 # (f) Add more functions to make this library easier to use and stabilize its interfaces.
 #     Port my plugins to this library.
-# (f) Add support for functions in Nagios-Plugins perl library. While its interfaces are different,
-#     I believe, it'd be possible to add "shim" code to support them too.
+# (f) Add support for functions in Nagios-Plugins perl library. While its interfaces are
+#     different, I believe, it'd be possible to add "shim" code to support them too.
 # (h) Write proper Perl-style documentation as well as web documentation (much of above maybe
 #     moved to web documentation) and move library to separate GITHUB project. Release it.
 # (i) Port this library to Python and write one or two example plugins
@@ -763,7 +835,7 @@ sub configure {
 #  @RETURNS       : arbitrary list of arguments with 1st being object hash or undef
 #  @PRIVACY & USE : PRIVATE
 sub _self_args {
-    return @_ if ref $_[0] && exists($_[0]->{'_NaglioLibraryVersion'});
+    return @_ if ref($_[0]) && exists($_[0]->{'_NaglioLibraryVersion'});
     unshift @_,undef;
     return @_;
 }
@@ -886,7 +958,7 @@ sub process_perf {
            # in some of my plugins time_ is to profile execution time for part of plugin
            # $pdh{$nm}=$dt if $nm !~ /^time_/;
            $pdh{$nm}=$dt;
-           $pdh{$nm}=$1 if $dt =~ /(\d+)[cs%]/; # 'c' or 's' or % maybe have been added
+           $pdh{$nm}=$1 if $dt =~ /(\d+)[csB%]/; # 'c' or 's' or B or % maybe have been added
 	   # support for more than one set of previously cached performance data
            # push @prev_time,$1 if $nm =~ /.*\.(\d+)/ && (!defined($prev_time[0]) || $prev_time[0] ne $1);
        }
@@ -933,7 +1005,7 @@ sub out_name {
 	    $name_out = $thresholds->{$vr}{'NAME'} .'_'. $thresholds->{$vr}{'NAMES_INDEX'}{$dname};
 	}
 	else {
-	    $name_out = $thresholds->{'vr'}{'NAME'};
+	    $name_out = $thresholds->{$vr}{'NAME'};
 	}
     }
     else {
@@ -981,19 +1053,22 @@ sub statusinfo {
 #  @RETURNS       : nothing (future: 1 on success, 0 on error)
 #  @PRIVACY & USE : PUBLIC, but its direct use is discouraged. Must be used as an object instance function
 sub addto_statusdata_output {
-    my ($self,$avar,$adata) = @_;
+    my ($self,$dvar,$data) = @_;
     my $thresholds = $self->{'_thresholds'};
     my $dataresults = $self -> {'_dataresults'};
+    my $avar = $self->data2varname($dvar,1);
+
+    # $self->verb("debug: addto_statusdata_output - dvar is $dvar and avar is $avar");
     if ((!exists($thresholds->{$avar}{'DISPLAY'}) || $thresholds->{$avar}{'DISPLAY'} eq 'YES') &&
-        (!exists($dataresults->{$avar}[1]) || $dataresults->{$avar}[1] == 0)) {
+        (!exists($dataresults->{$dvar}[1]) || $dataresults->{$dvar}[1] == 0)) {
            $self->{'_statusdata'} .= ", " if $self->{'_statusdata'};
-           if (defined($adata)) {
-              $self->{'_statusdata'} .= trim($adata);
+           if (defined($data)) {
+              $self->{'_statusdata'} .= trim($data);
            }
-           elsif (exists($dataresults->{$avar}[0])) {
-              $self->{'_statusdata'} .= $self->out_name($avar) ." is ".$dataresults->{$avar}[0];
+           elsif (exists($dataresults->{$dvar}[0])) {
+              $self->{'_statusdata'} .= $self->out_name($dvar) ." is ".$dataresults->{$dvar}[0];
            }
-           $dataresults->{$avar}[1]++;
+           $dataresults->{$dvar}[1]++;
     }
 }
 
@@ -1015,7 +1090,7 @@ sub statusdata {
 #  @LAST CHANGED  : 08-26-12 by WL
 #  @INPUT         : ARG1 - variable name
 #		    ARG2 - either "var=data" text or just "data" (in which case var= is prepended to it)
-#		    ARG3 - string for UNIT type ('c' for continous, '%' for percent, 's' for seconds) to added after data
+#		    ARG3 - UOM symol ('c' for continous, '%' for percent, 's' for seconds) to added after data
 #			   if undef then it is looked up in known variables and if one is present there, its used
 #		    ARG4 - one of: "REPLACE" - if existing preset perfdata is present, it would be replaced with ARG2
 #		                   "ADD"     - if existing preset perfdata is there, ARG2 string would be added to it (DEFAULT)
@@ -1026,6 +1101,7 @@ sub statusdata {
 sub set_perfdata {
     my ($self,$avar,$adata,$unit,$opt) = @_;
     my $dataresults = $self->{'_dataresults'};
+    my $thresholds = $self->{'_thresholds'};
     my $known_vars = $self->{'knownStatusVars'};
     my $bdata = $adata;
     my $vr = undef;
@@ -1044,9 +1120,15 @@ sub set_perfdata {
 	    $bdata .= $unit;
 	}
 	else {
+	    # appending UOM is done here
 	    $vr = $self->data2varname($avar,1);
-	    if (defined($vr) && exists($known_vars->{$vr}[2])) {
-		$bdata .= $known_vars->{$vr}[2];
+	    if (defined($vr)) {
+		if (exists($thresholds->{$vr}{'UOM'})) {
+		    $bdata .= $thresholds->{$vr}{'UOM'};
+		}
+	        elsif (exists($known_vars->{$vr}[2])) {
+		     $bdata .= $known_vars->{$vr}[2];
+		}
 	    }
 	}
 	# preset perfdata in dataresults array
@@ -1095,7 +1177,7 @@ sub addto_perfdata_output {
 	      $bdata .= perf_name($self->out_name($avar)) .'='. $dataresults->{$avar}[0];
            }
 	   # this would use existing preset data now if it was present due to default
-	   # setting UNIT from KNOWN_STATUS_VARS array is now in set_perfdata if 3rd arg is undef
+	   # setting UOM from KNOWN_STATUS_VARS array is now in set_perfdata if 3rd arg is undef
 	   $self->set_perfdata($avar,$bdata,undef,$opt);
 	   # now we actually add to perfdata from [3] of dataresults
 	   if (exists($dataresults->{$avar}[3]) && $dataresults->{$avar}[3] ne '') {
@@ -1134,7 +1216,7 @@ sub data2varname {
 #			   The array elements are:
 #			    1st - string of source for this variable. not used by the library at all, but maybe used by code getting the data
 #			    2nd - type of data in a variable. May be "GAUGE", "VERSION", "COUNTER", "BOOLEAN", "TEXTINFO", "TEXTDATA", "SETTING"
-#			    3rd - either empty or one-character UNIT letter to be added to perforance data - 'c' for continous, '%' percent, 's' seconds
+#			    3rd - either empty or one-character UOM to be added to perforance data - 'c' for continous, '%' percent, 's' seconds
 #			    4th - either empty or a description of this variable. If not empty, the variable becomes long-option and this is help text
 #		    ARG2 - regex of acceptable types of data for performance output. Anything else is ignored (i.e. no no output to perf), but
 #			   is still available for threshold checks. if this is undef, then default of 'GAUGE|COUNTER|^DATA$|BOOLEAN' is used
@@ -1162,7 +1244,7 @@ sub set_knownvars {
 #  @INPUT         : ARG1 - variable name
 #	            ARG2 - string of source for this variable. not used by the library at all, but maybe used by code getting the data
 #	            ARG3 - type of data in a variable. May be "GAUGE", "VERSION", "COUNTER", "BOOLEAN", "TEXTINFO", "TEXTDATA", "SETTING"
-#	            ARG4 - either empty or one-character UNIT letter to be added to perforance data - 'c' for continous, '%' percent, 's' seconds
+#	            ARG4 - either empty or one-character UOM symbol to be added to perforance data - 'c' for continous, '%' percent, 's' seconds
 #		    ARG5 - either empty or a description of this variable. If not empty, the variable becomes long-option and this is help text
 #  @RETURNS       : nothing (future: 1 on success, 0 on error)
 #  @PRIVACY & USE : PUBLIC, Must be used as object instance function
@@ -1321,7 +1403,7 @@ sub var_pattern_match {
 	    $pattern = $thresholds->{$v}{'PATTERN'};
 	}
 	if ($pattern ne '' && $name =~ /$pattern/) {
-	    $self->verb("Data name '".$name."' matches pattern '".$pattern);
+	    $self->verb("Data name '".$name."' matches pattern '".$pattern."'");
 	    return $v;
 	}
     }
@@ -1329,7 +1411,7 @@ sub var_pattern_match {
 }
 
 #  @DESCRIPTION   : This function adds data results
-#  @LAST CHANGED  : 08-24-12 by WL
+#  @LAST CHANGED  : 08-27-12 by WL
 #  @INPUT         : ARG1 - name of data variable
 #                   ARG2 - data for this variable
 #		    ARG3 - name of checked variable/parameter corresponding to this data variable
@@ -1343,14 +1425,6 @@ sub add_data {
     my $datavars = $self -> {'_datavars'};
     my $perfVars = $self->{'_perfVars'};
 
-    # set dataresults
-    if (exists($dataresults->{$dnam})) {
-   	$dataresults->{$dnam}[0] = $dval;
-	$dataresults->{$dnam}[4] = $anam if defined($anam);
-    }
-    else { 
-	$dataresults->{$dnam} = [$dval, 0, 0, '', $anam];
-    }
     # determine what plugin options-specified var & threshold this data corresponds to
     if (!defined($anam)) {
 	if ($self->{'enable_regex_match'} == 0) {
@@ -1360,6 +1434,14 @@ sub add_data {
 	    $anam = $self->var_pattern_match($dnam);
 	    $anam = $dnam if !defined($anam);
 	}
+    }
+    # set dataresults
+    if (exists($dataresults->{$dnam})) {
+        $dataresults->{$dnam}[0] = $dval;
+        $dataresults->{$dnam}[4] = $anam if defined($anam);
+    }
+    else {
+        $dataresults->{$dnam} = [$dval, 0, 0, '', $anam];
     }
     # reverse map array
     $datavars->{$anam} = [] if !exists($datavars->{$anam});
@@ -1402,16 +1484,23 @@ sub vardata {
 #		       SAVED:YES|NO   - put results in saved data (this really should not be set manually)
 #		       PATTERN:<regex> - enables regex match allowing more than one real data name to match this threshold
 #		       NAME:<string> - overrides output status and perf name for this variable
+#		       UOM:<string>  - unit of measurement symbol to add to perf 
 #  @RETURNS       : Returns reference to a hash array, a library's structure for holding processed MULTI-THRESHOLD spec
 #		    Note that this is MULTI-THRESHOLD hash structure, it itself contains threshold hashes returned by parse_threshold()
 #  @PRIVACY & USE : PUBLIC, but its use is discouraged. Maybe used directly or as an object instance function.
 sub parse_thresholds_list {
    my ($self,$in) = _self_args(@_);
    my $thres = {};
-   my @tin = split (',', uc $in);
+   my @tin = undef;
+   my $t = undef;
+   my $t2 = undef;
+
+   @tin = split(',', $in);
+   $t = uc $tin[0] if exists($tin[0]);
    # old format with =warn,crit thresolds without specifying which one
-   if (exists($tin[0]) && $tin[0] !~ /^WARN/ && $tin[0] !~ /^CRIT/ && $tin[0] !~ /^ABSENT/ && $tin[0] !~ /^ZERO/ &&
-			  $tin[0] !~ /^DISPLAY/ && $tin[0] !~ /^PERF/ && $tin[0] !~ /^SAVED/ && $tin[0] !~ /^PATTERN/ && $tin[0] !~ /^NAME/) {
+   if (defined($t) && $t !~ /^WARN/ && $t !~ /^CRIT/ && $t !~ /^ABSENT/ && $t !~ /^ZERO/ &&
+	  $t !~ /^DISPLAY/ && $t !~ /^PERF/ && $t !~ /^SAVED/ &&
+          $t !~ /^PATTERN/ && $t !~ /^NAME/ && $t !~ /^UOM/) {
 	if (scalar(@tin)==2) {
 	     if (defined($self)) {
 		  $thres->{'WARN'} = $self->parse_threshold($tin[0]); 
@@ -1433,8 +1522,9 @@ sub parse_thresholds_list {
    }
    # new format with prefix specifying if its WARN or CRIT and support of ABSENT
    else {
-	foreach(@tin) {
-	     if (/^WARN\:(.*)/) {
+	foreach $t (@tin) {
+	     $t2 = uc $t;
+	     if ($t2 =~ /^WARN\:(.*)/) {
 		    if (defined($self)) {
 			$thres->{'WARN'} = $self->parse_threshold($1);
 		    }
@@ -1442,7 +1532,7 @@ sub parse_thresholds_list {
 			$thres->{'WARN'} = parse_threshold($1);
 		    }
 	     }
-	     elsif (/^CRIT\:(.*)/) {
+	     elsif ($t2 =~ /^CRIT\:(.*)/) {
 		    if (defined($self)) {
 			$thres->{'CRIT'} = $self->parse_threshold($1);
 		    }
@@ -1450,7 +1540,7 @@ sub parse_thresholds_list {
 			$thres->{'CRIT'} = parse_threshold($1);
 		    }
 	     }
-	     elsif (/^ABSENT\:(.*)/) {
+	     elsif ($t2 =~ /^ABSENT\:(.*)/) {
 		    if (exists($ERRORS{$1})) {
 			$thres->{'ABSENT'} = $1;
 		    }
@@ -1460,7 +1550,7 @@ sub parse_thresholds_list {
 			exit $ERRORS{"UNKNOWN"};
 		    }
 	     }
-	     elsif (/^ZERO\:(.*)/) {
+	     elsif ($t2 =~ /^ZERO\:(.*)/) {
 		    if (exists($ERRORS{$1})) {
 			$thres->{'ZERO'} = $1;
 		    }
@@ -1470,7 +1560,7 @@ sub parse_thresholds_list {
 			exit $ERRORS{"UNKNOWN"};
 		    }
 	     }
-	     elsif (/^DISPLAY\:(.*)/) {
+	     elsif ($t2 =~ /^DISPLAY\:(.*)/) {
 		   if ($1 eq 'YES' || $1 eq 'NO') {
 			$thres->{'DISPLAY'} = $1;
 		   }
@@ -1480,7 +1570,7 @@ sub parse_thresholds_list {
 			exit $ERRORS{"UNKNOWN"};
 		   }
 	     }
-	     elsif (/^PERF\:(.*)/) {
+	     elsif ($t2 =~ /^PERF\:(.*)/) {
                   if ($1 eq 'YES' || $1 eq 'NO') {
                         $thres->{'PERF'} = $1;
                    }
@@ -1490,12 +1580,15 @@ sub parse_thresholds_list {
                         exit $ERRORS{"UNKNOWN"};
                    }
              }
-	     elsif (/^PATTERN\:(.*)/) {
+	     elsif ($t =~ /^PATTERN\:(.*)/i) {
 		   $thres->{'PATTERN'} = $1;
 		   $self->{'enable_regex_match'} = 2 if defined($self) && $self->{'enable_regex_match'} eq 0;
 	     }
-	     elsif (/^NAME\:(.*)/) {
+	     elsif ($t =~ /^NAME\:(.*)/i) {
 		   $thres->{'NAME'} = $1;
+	     }
+	     elsif ($t =~ /^UOM\:(.*)/i) {
+		   $thres->{'UOM'} = $1;
 	     }
 	     else {
 		    print "Can not parse. Unknown threshold specification: $_\n";
@@ -1538,7 +1631,7 @@ sub parse_thresholds_list {
 sub add_thresholds {
     my ($self,$var,$th_in) = @_;
     my $th;
-    if ((ref $th_in) && (exists($th_in->{'WARN'}) || exists($th_in->{'CRIT'}) || exists($th_in->{'DISPLAY'}) ||
+    if (ref($th_in) && (exists($th_in->{'WARN'}) || exists($th_in->{'CRIT'}) || exists($th_in->{'DISPLAY'}) ||
 		         exists($th_in->{'PERF'}) || exists($th_in->{'SAVED'}) || exists($th_in->{'ABSENT'}) ||
 			 exists($th_in->{'ZERO'}) || exists($th_in->{'PATTERN'}))) {
 	$th = $th_in;
@@ -1592,7 +1685,7 @@ sub get_threshold {
 sub set_threshold {
     my ($self,$var,$thname,$thdata) = @_;
     if ($thname ne 'WARN' && $thname ne 'CRIT' && $thname ne 'ZERO' && $thname ne 'PATTERN' && $thname ne 'NAME' &&
-        $thname ne 'ABSENT' && $thname ne 'PERF' && $thname ne 'DISPLAY' && $thname ne 'SAVED') {
+        $thname ne 'ABSENT' && $thname ne 'PERF' && $thname ne 'DISPLAY' && $thname ne 'SAVED' && $thname ne 'UOM') {
        return 0;
     }
     $self->{'_thresholds'}{$var}={} if !exists($self->{'_thresholds'}{$var});
@@ -2019,7 +2112,7 @@ sub main_checkvars {
 		if ((defined($self->{'o_perf'}) && defined($avar) && !exists($thresholds->{$avar}{'PERF'})) || 
 		    (exists($thresholds->{$avar}{'PERF'}) && $thresholds->{$avar}{'PERF'} eq 'YES')) {
 			$perf_str = perf_name($aname).'='.$dataresults->{$dvar}[0];
-			$self->set_perfdata($dvar, $perf_str, undef, "IFNOTSET"); # with undef UNIT would get added
+			$self->set_perfdata($dvar, $perf_str, undef, "IFNOTSET"); # with undef UOM would get added
 			$dataresults->{$dvar}[2]=0; # this would clear -1 from preset perf data, making it ready for output
 			# below is where threshold info gets added to perfdata
 			if ((exists($thresholds->{$avar}{'WARN'}[5]) && $thresholds->{$avar}{'WARN'}[5] ne '') ||
@@ -2094,7 +2187,7 @@ sub main_perfvars {
     }
     foreach $dvar (keys %{$dataresults}) {
         if (defined($dataresults->{$dvar}[3]) && $dataresults->{$dvar}[3] ne '') {
-	    $self->verb("Perfvar: $dvar -- ".$dataresults->{$dvar}[3]);
+	    $self->verb("Perfvar (Dataresults Loop): $dvar => ".$dataresults->{$dvar}[3]);
             $self->addto_perfdata_output($dvar);
         }
     }
@@ -2168,6 +2261,7 @@ sub calculate_ratevars {
 
 # parse command line options
 sub check_options {
+    my $opt;
     my $nlib = shift;
     my %Options = ();
     Getopt::Long::Configure("bundling");
@@ -2189,7 +2283,7 @@ sub check_options {
 	'U:s'	=> \$o_utilsize,	'utilization:s' => \$o_utilsize,
         'P:s'   => \$o_prevperf,        'prev_perfdata:s' => \$o_prevperf,
         'E:s'   => \$o_prevtime,        'prev_checktime:s'=> \$o_prevtime,
-	'+:s' 	=> \@o_check, 		'check=s' => \@o_check,
+	'o=s'	=> \@o_check,		'check|option=s' => \@o_check,
 	'rate_label:s'	=> \$o_ratelabel,
 	map { ($_) } $nlib->additional_options_list()
     );
@@ -2223,9 +2317,9 @@ sub check_options {
           $nlib->add_thresholds('utilization',$o_utilsize);
     }
     # general check option, allows to specify everything, can be repeated more than once
-    foreach (@o_check) {
-	  $nlib->ver("Processing geenral check option: ".$_);
-	  $nlib->add_thresholds(undef,$_);
+    foreach $opt (@o_check) {
+	  $nlib->verb("Processing general check option: ".$opt);
+	  $nlib->add_thresholds(undef,$opt);
     }
 
     # finish it up
@@ -2245,9 +2339,12 @@ $SIG{'ALRM'} = sub {
 
 ########## MAIN #######
 
-my $nlib = Naglio->lib_init('usage_function' => \&print_usage,
-			    'enable_long_options' => 1,
-			    'enable_rate_of_change' => 1);
+my $nlib = Naglio->lib_init('plugin_name' => 'check_memcaached',
+			    'plugins_authors' => 'William Leizon',
+			    'plugin_description' => 'Memcached Monitoring Plugin for Nagios',
+			    'usage_function' => \&print_usage,
+                            'enable_long_options' => 1,
+                            'enable_rate_of_change' => 1);
 $nlib->set_knownvars(\%KNOWN_STATUS_VARS, $PERF_OK_STATUS_REGEX);
 
 check_options($nlib);

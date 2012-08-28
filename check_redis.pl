@@ -517,6 +517,8 @@ my $o_rprefix='';
 
 ## Additional global variables
 my $redis= undef;               # DB connection object
+my @query=();                   # array of queries with each entry being keyed hash of processedoption data on howto query
+
 
 sub p_version { print "check_redis.pl version : $Version\n"; }
 
@@ -2579,7 +2581,7 @@ $SIG{'ALRM'} = sub {
 
 my $nlib = Naglio->lib_init('plugin_name' => 'check_redis.pl',
 			    'plugins_authors' => 'William Leibzon',
-			    'plugin_description' => 'Memcached Monitoring Plugin for Nagios',
+			    'plugin_description' => 'Redis Monitoring Plugin for Nagios',
 			    'usage_function' => \&print_usage,
                             'enable_long_options' => 1,
                             'enable_rate_of_change' => 1);
@@ -2590,11 +2592,11 @@ $nlib->verb("check_redis.pl plugin version ".$Version);
 
 # Check global timeout if plugin screws up
 if (defined($TIMEOUT)) {
-  verb("Alarm at $TIMEOUT");
+  $nlib->verb("Alarm at $TIMEOUT");
   alarm($TIMEOUT);
 }
 else {
-  verb("no timeout defined : $o_timeout + 10");
+  $nlib->verb("no timeout defined : $o_timeout + 10");
   alarm ($o_timeout+10);
 }
 
@@ -2724,7 +2726,7 @@ for (my $i=0; $i<scalar(@query);$i++) {
       $nlib->verb("Result of querying ".$query[$i]{'key_query'}." is: $result");
   }
   else {
-      $nlibp->verb("could not get results for ".$query[$i]{'key_query'});
+      $nlib->verb("could not get results for ".$query[$i]{'key_query'});
   }
   # else {
   #    if (exists($query[$i]{'alert'}) && $query[$i]{'alert'} ne 'OK') {
@@ -2754,9 +2756,9 @@ foreach $vnam (keys %{$stats}) {
 			my ($k,$d) = split(/=/,$_);
 			$nlib->add_data($vnam.'_'.$k,$d); 
 			$dbs{$vnam}{$k}=$d;
-			$self->verb(" - stats data added: ".$vnam.'_'.$k.' = '.$d);
-			$total_keys+=$d if $k eq 'keys' && isnum($d);
-			$total_expires+=$d if $k eq 'expires' && isnum($d);
+			$nlib->verb(" - stats data added: ".$vnam.'_'.$k.' = '.$d);
+			$total_keys+=$d if $k eq 'keys' && Naglio::isnum($d);
+			$total_expires+=$d if $k eq 'expires' && Naglio::isnum($d);
 		}
 	}
 	elsif ($vnam =~ /~slave/) {
@@ -2805,7 +2807,7 @@ if (defined($o_hitrate) && defined($nlib->vardata('keyspace_hits')) && defined($
         $hitrate_all = $hits_hits/$hits_total*100 if $hits_total!=0;
         $hits_hits -= $nlib->prev_perf('keyspace_hits');
         $hits_total -= $nlib->prev_perf('keyspace_misses');
-        $hits_total -= $nlib->$prev_perf('keyspace_hits');
+        $hits_total -= $nlib->prev_perf('keyspace_hits');
         verb("Calculating Hitrate. Adjusted based on previous values. total=".$hits_total." hits=".$hits_hits);
     }
     if (defined($hits_hits)) {
@@ -2825,14 +2827,14 @@ if (defined($o_hitrate) && defined($nlib->vardata('keyspace_hits')) && defined($
 # Replication Delay 
 my $repl_delay=0;
 if (defined($o_repdelay) && defined($nlib->vardata('master_last_io_seconds_ago')) && defined($nlib->vardata('role'))) {
-    if ($nlib->vardata('role'} eq 'slave') {
+    if ($nlib->vardata('role') eq 'slave') {
 	$repl_delay = $nlib->vardata('master_link_down_since_seconds');
 	if (!defined($repl_delay) || $repl_delay < $nlib->vardata('master_last_io_seconds_ago')) {
 	    $repl_delay = $nlib->vardata('master_last_io_seconds_ago');
 	}
 	if (defined($repl_delay) && $repl_delay!=0) {
 	    $nlib->add_data('replication_delay',$repl_delay);
-	    $nlib->addto_statusdata('replication_delay',sprintf("replication_delay is %.2f%%", $nlib->varadata('replication_delay')));
+	    $nlib->addto_statusdata_output('replication_delay',sprintf("replication_delay is %.2f%%", $nlib->varadata('replication_delay')));
 	    if (defined($o_perf)) {
 		$nlib->set_perfdata('replication_delay',sprintf("replication_delay=%.4f%%", $nlib->vardata('replication_delay')));
 	    }
@@ -2843,28 +2845,28 @@ if (defined($o_repdelay) && defined($nlib->vardata('master_last_io_seconds_ago')
 # Memory Use Utilization
 if (defined($o_memutilization) && defined($nlib->vardata('used_memory_rss'))) {
     if (defined($o_totalmemory)) {
-        $nlib->add_data('memory_utilization',$nlib->vardata('used_memory_rss')/$o_totalmemory*100;
-	$nlib->verb('memory utilization % : '.$nlib->vardata('memory_utilization').' = '.$nlib->('used_memory_rss').' (used_memory_rss) / '.$o_totalmemory.' * 100');
+        $nlib->add_data('memory_utilization',$nlib->vardata('used_memory_rss')/$o_totalmemory*100);
+	$nlib->verb('memory utilization % : '.$nlib->vardata('memory_utilization').' = '.$nlib->vardata('used_memory_rss').' (used_memory_rss) / '.$o_totalmemory.' * 100');
     }
     elsif ($o_memutilization ne '') {
 	print "ERROR: Can not calculate memory utilization if you do not specify total memory on a system (-M option)\n";
 	print_usage();
 	exit $ERRORS{"UNKNOWN"};
     }
-    if (defined($dataresults{'memory_utilization'}) && defined($o_perf)) {
+    if (defined($o_perf) && defined($nlib->vardata('memory_utilization'))) {
 	$nlib->set_perfdata('memory_utilization',sprintf(" memory_utilization=%.4f%%", $nlib->vardata('memory_utilization')));
     }
-    if (defined($dataresults{'used_memory_human'}) && defined($nlib->vardata('used_memory_peak_human'))) {
+    if (defined($nlib->vardata('used_memory_human')) && defined($nlib->vardata('used_memory_peak_human'))) {
 	my $sdata="memory use is ".$nlib->vardata('used_memory_human')." (";
 	$sdata.='peak '.$nlib->vardata('used_memory_peak_human');
 	if (defined($nlib->vardata('memory_utilization'))) {
 		$sdata.= sprintf(", %.2f%% of max", $nlib->vardata('memory_utilization'));
 	}
-	if (defined($dataresults{'mem_fragmentation_ratio'})) {
+	if (defined($nlib->vardata('mem_fragmentation_ratio'))) {
 		$sdata.=", fragmentation ".$nlib->vardata('mem_fragmentation_ratio').'%';
 	}
 	$sdata.=")";
-	$nlib->addto_statusdata('memory_utilization',$sdata);
+	$nlib->addto_statusdata_output('memory_utilization',$sdata);
     }
 }
 

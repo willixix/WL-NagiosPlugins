@@ -2563,7 +2563,7 @@ sub check_options {
     }
 
     # query option processing
-    option_query();
+    option_query($nlib);
 
     # finish it up
     $nlib->options_finishprocessing();

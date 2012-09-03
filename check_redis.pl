@@ -3,8 +3,8 @@
 # ============================== SUMMARY =====================================
 #
 # Program : check_redis.pl
-# Version : 0.7
-# Date    : Aug 28, 2012
+# Version : 0.71
+# Date    : Sep 03, 2012
 # Author  : William Leibzon - william@leibzon.org
 # Licence : GPL - summary below, full text at http://www.fsf.org/licenses/gpl.txt
 #
@@ -360,6 +360,7 @@
 #			 not available. For use with that option also added UOM specifier.
 #		         Also added checkin 'master_last_io_seconds_ago' (when link is down)
 #			 for when replication_delay info is requested.
+#  [0.71 - Sep 03, 2012] Fixed bug in a new library related to when data is missing
 #
 # TODO or consider for future:
 #
@@ -417,7 +418,7 @@ if ($@) {
  %ERRORS = ('OK'=>0,'WARNING'=>1,'CRITICAL'=>2,'UNKNOWN'=>3,'DEPENDENT'=>4);
 }
 
-my $Version='0.7';
+my $Version='0.71';
 
 # This is a list of known stat and info variables including variables added by plugin,
 # used in order to designate COUNTER variables with 'c' in perfout for graphing programs
@@ -1646,7 +1647,7 @@ sub parse_thresholds_list {
 		    }
 	     }
 	     elsif ($t2 =~ /^ABSENT\:(.*)/) {
-		    if (exists($ERRORS{$1})) {
+		    if (defined($ERRORS{$1})) {
 			$thres->{'ABSENT'} = $1;
 		    }
 		    else {
@@ -2183,6 +2184,16 @@ sub main_checkvars {
     # main loop to check for warning & critical thresholds
     for (my $i=0;$i<scalar(@{$allVars});$i++) {
 	$avar = $allVars->[$i];
+	if (!defined($datavars->{$avar}) || scalar(@{$datavars->{$avar}})==0) {
+	    if (defined($thresholds->{$avar}{'ABSENT'})) {
+                $self->set_statuscode($thresholds->{$avar}{'ABSENT'});
+            }
+            else {
+                $self->set_statuscode("CRITICAL");
+            }
+	    $aname = $self->out_name($avar);
+            $self->addto_statusinfo_output($avar, "$aname data is missing");
+        }
 	foreach $dvar (@{$datavars->{$avar}}) {
 	    $aname = $self->out_name($dvar);
 	    if (defined($dataresults->{$dvar}[0])) {
@@ -2228,15 +2239,6 @@ sub main_checkvars {
 				$self->set_perfdata($dvar, $perf_str, '', "ADD");
 			}
 		}
-	    }
-	    else {
-		if (defined($avar) && defined($thresholds->{$avar}{'ABSENT'})) {
-		    $self->set_statuscode($thresholds->{$avar}{'ABSENT'});
-		}
-		else {
-		    $self->set_statuscode("CRITICAL");
-		}
-		$self->addto_statusinfo_output($dvar, "$aname data is missing");
 	    }
 	}
     }

@@ -1646,7 +1646,7 @@ sub parse_thresholds_list {
 		    }
 	     }
 	     elsif ($t2 =~ /^ABSENT\:(.*)/) {
-		    if (exists($ERRORS{$1})) {
+		    if (defined($ERRORS{$1})) {
 			$thres->{'ABSENT'} = $1;
 		    }
 		    else {

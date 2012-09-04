@@ -3,8 +3,8 @@
 # ============================== SUMMARY =====================================
 #
 # Program : check_memcached.pl
-# Version : 0.8
-# Date    : Aug 28, 2012
+# Version : 0.81
+# Date    : Sep 04, 2012
 # Author  : William Leibzon - william@leibzon.org
 # Licence : GPL  (main code) summary below and full text at http://www.fsf.org/licenses/gpl.txt
 #	    LGPL (library functions) full text at http://www.fsf.org/licenses/lgpl.txt
@@ -320,6 +320,7 @@
 #		        regex matching with PATTERN specifier and for generalized
 #                       --check option that can be used where specific long option is
 #			not available. For use with that option also added UOM specifier.
+# [0.81 - Sep 04, 2012] Fix bug in the library on handling absent data
 #
 #  1. Library Enhancements (will apply to multiple plugins that share common code)
 #     (a) Add '--extra-opts' to allow to read options from a file as specified
@@ -373,7 +374,7 @@ if ($@) {
  %ERRORS = ('OK'=>0,'WARNING'=>1,'CRITICAL'=>2,'UNKNOWN'=>3,'DEPENDENT'=>4);
 }
 
-my $Version='0.8';
+my $Version='0.81';
 
 # This is a list of known statistics variables (plus few variables added by plugin),
 # used in order to designate COUNTER variables with 'c' in perfout for graphing programs
@@ -649,6 +650,7 @@ EOT
 #	       not stabilized and so library is only to be included within plugins. Support was
 #	       also added for regex matching with PATTERN option spec. Also added NAME spec.
 #	       License changed to LGPL from GPL for this code.
+# [0.21 - Sep 3, 2012] Fix bug in handling absent data
 #
 # ================================== LIBRARY TODO =================================================
 #
@@ -1541,21 +1543,23 @@ sub parse_thresholds_list {
 		    }
 	     }
 	     elsif ($t2 =~ /^ABSENT\:(.*)/) {
-		    if (exists($ERRORS{$1})) {
-			$thres->{'ABSENT'} = $1;
+		    my $val = $1;
+		    if (defined($ERRORS{$val})) {
+			$thres->{'ABSENT'} = $val;
 		    }
 		    else {
-			print "Invalid value $1 after ABSENT. Acceptable values are: OK, WARNING, CRITICAL, UNKNOWN\n";
+			print "Invalid value $val after ABSENT. Acceptable values are: OK, WARNING, CRITICAL, UNKNOWN\n";
 			if (defined($self)) { $self->usage(); }
 			exit $ERRORS{"UNKNOWN"};
 		    }
 	     }
 	     elsif ($t2 =~ /^ZERO\:(.*)/) {
-		    if (exists($ERRORS{$1})) {
-			$thres->{'ZERO'} = $1;
+		    my $val = $1;
+		    if (exists($ERRORS{$val})) {
+			$thres->{'ZERO'} = $val;
 		    }
 		    else {
-			print "Invalid value $1 after ZERO. Acceptable values are: OK, WARNING, CRITICAL, UNKNOWN\n";
+			print "Invalid value $val after ZERO. Acceptable values are: OK, WARNING, CRITICAL, UNKNOWN\n";
 			if (defined($self)) { $self->usage(); }
 			exit $ERRORS{"UNKNOWN"};
 		    }
@@ -2058,7 +2062,7 @@ sub set_statuscode {
 #  @DESCRIPTION   : This function is called closer to end of the code after plugin retrieved data and
 #		    assigned values to variables. This function checks variables against all thresholds.
 #		    It prepares statusdata and statusinfo and exitcode. 
-#  @LAST CHANGED  : 08-27-12 by WL
+#  @LAST CHANGED  : 09-03-12 by WL
 #  @INPUT         : none
 #  @RETURNS       : nothing (future: 1 on success, 0 on error)
 #  @PRIVACY & USE : PUBLIC, To be called after variables have values. Must be used as an object instance function
@@ -2078,6 +2082,16 @@ sub main_checkvars {
     # main loop to check for warning & critical thresholds
     for (my $i=0;$i<scalar(@{$allVars});$i++) {
 	$avar = $allVars->[$i];
+	if (!defined($datavars->{$avar}) || scalar(@{$datavars->{$avar}})==0) {
+	    if (defined($thresholds->{$avar}{'ABSENT'})) {
+                $self->set_statuscode($thresholds->{$avar}{'ABSENT'});
+            }
+            else {
+                $self->set_statuscode("CRITICAL");
+            }
+	    $aname = $self->out_name($avar);
+            $self->addto_statusinfo_output($avar, "$aname data is missing");
+        }
 	foreach $dvar (@{$datavars->{$avar}}) {
 	    $aname = $self->out_name($dvar);
 	    if (defined($dataresults->{$dvar}[0])) {
@@ -2123,15 +2137,6 @@ sub main_checkvars {
 				$self->set_perfdata($dvar, $perf_str, '', "ADD");
 			}
 		}
-	    }
-	    else {
-		if (defined($avar) && defined($thresholds->{$avar}{'ABSENT'})) {
-		    $self->set_statuscode($thresholds->{$avar}{'ABSENT'});
-		}
-		else {
-		    $self->set_statuscode("CRITICAL");
-		}
-		$self->addto_statusinfo_output($dvar, "$aname data is missing");
 	    }
 	}
     }

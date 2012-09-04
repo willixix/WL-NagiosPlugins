@@ -971,21 +971,23 @@ sub parse_thresholds_list {
 		    }
 	     }
 	     elsif ($t2 =~ /^ABSENT\:(.*)/) {
-		    if (exists($ERRORS{$1})) {
-			$thres->{'ABSENT'} = $1;
+		    my $val = $1;
+		    if (defined($ERRORS{$val})) {
+			$thres->{'ABSENT'} = $val;
 		    }
 		    else {
-			print "Invalid value $1 after ABSENT. Acceptable values are: OK, WARNING, CRITICAL, UNKNOWN\n";
+			print "Invalid value $val after ABSENT. Acceptable values are: OK, WARNING, CRITICAL, UNKNOWN\n";
 			if (defined($self)) { $self->usage(); }
 			exit $ERRORS{"UNKNOWN"};
 		    }
 	     }
 	     elsif ($t2 =~ /^ZERO\:(.*)/) {
-		    if (exists($ERRORS{$1})) {
-			$thres->{'ZERO'} = $1;
+		    my $val = $1;
+		    if (exists($ERRORS{$val})) {
+			$thres->{'ZERO'} = $val;
 		    }
 		    else {
-			print "Invalid value $1 after ZERO. Acceptable values are: OK, WARNING, CRITICAL, UNKNOWN\n";
+			print "Invalid value $val after ZERO. Acceptable values are: OK, WARNING, CRITICAL, UNKNOWN\n";
 			if (defined($self)) { $self->usage(); }
 			exit $ERRORS{"UNKNOWN"};
 		    }
@@ -1686,4 +1688,119 @@ sub calculate_ratevars {
 	}
     }
 }
+
+#  @DESCRIPTION   : Function provides plugin name for output. Similar/Same as Nagios::Plugins get_shortname
+#  @LAST CHANGED  : 09-05-12 by WL
+#  @INPUT         : none
+#  @RETURNS       : returns string with a name
+#  @PRIVACY & USE : PUBLIC, Maybe used directly or as an object instance function
+sub get_shortname {
+  my ($self) = _self_args(@_);
+  my $name = "";
+
+  if (defined($self) && defined($self->{'plugin_name'})) {
+      $name = $self->{'plugin_name'};
+  }
+  else {
+      $name = uc basename( $ENV{NAGIOS_PLUGIN} || $0 );
+  }
+  $name=$1 if $name =~ /^check(.*)/;
+  $name=$1 if $name =~ /(.*)\.(.*)$/; 
+  return $name;
+}
+
+#  @DESCRIPTION   : Functions for those who don't need complex functionality. Similar to Nagios::Plugins nagios_exit and nagios_die functions.
+#		    It is by itself and not used by any other library functions.
+#  @LAST CHANGED  : 09-05-12 by WL
+#  @INPUT         : --- nagios_exit ---
+#		  : ARG1 - "OK", "WARNING", "CRITICAL" or "UNKNOWN"
+#		  : ARG2 - string to exit with
+#		  ; --- nagios_die ----
+#		  : ARG1 - string to exit with
+#		  : ARG2 - "OK", "WARNING", "CRITICAL" or "UNKNOWN"
+#  @RETURNS       : these functions exists/terminate execution
+#  @PRIVACY & USE : PUBLIC, Maybe used directly or as an object instance function
+sub nagios_exit {
+  my ($self, $code, $line) = _self_args(@_);
+  my $name = "";
+  if (defined($self)) {
+      $name = $self->get_shortname();
+  }
+  else {
+      $name = get_shortname();
+  }
+  $code = "UNKNOWN" if !defined($ERRORS{$code});
+  print $name ." ".$code;
+  print " - ".$line if defined($line);
+  exit $ERRORS{$code};
+}
+
+sub nagios_die {
+  my ($self, $line, $code) = _self_args(@_);
+  nagios_exit($code, $line);
+}
+
+#  @DESCRIPTION   : Function replicates functionality of same named Nagios::Plugins. See:
+#		    http://search.cpan.org/~tonvoon/Nagios-Plugin/lib/Nagios/Plugin/Functions.pm
+#		    It is by itself and not used by any other library functions.
+#  @LAST CHANGED  : 09-05-12 by WL
+#  @INPUT         : The following possible hash input keys:
+#			'critical' => ARRAYREF   - List of critical status messages
+#			'warning'  => ARRAYREF  - list of warning status messages
+#			'ok => ARRAYREF 	- array of ok  info
+#			'join' => str 	- does join on relevant type of message using str
+#			'join_all'str   - join on all types
+#  @RETURNS       : returns array of 2 arguments, first is an error code (OK, WARNIN, CRITICAL) and 2nd is message
+#  @PRIVACY & USE : PUBLIC, Maybe used directly or as an object instance function
+sub check_messages {
+    my @all_args = _self_ars(@_);
+    my $self = shift @all_args
+    my %args = @all_args;
+    my $ar_warn = [];
+    my $ar_crit = [];
+    my $ar_ok = [];
+    my $ret_code = "OK";
+    my $ret_msg_warn = "";
+    my $ret_msg_crit = "";
+    my $ret_msg_ok = "";
+    my $ret_msg = "";
+    my $join = " ";
+
+    $join = $args{'join'} if exists($args{'join'};
+    $join = $args{'join_all'} if exists($args{'join_all'};
+    if (exists($args{'warning'})) {
+	$ar_warn = $args{'warning'};
+	$ret_msg_warn = join($join,@{$ar_warn});
+    }
+    if (exists($args{'critical'})) {
+	$ar_crit = $args{'critical'};
+	$ret_msg_crit = join($join,@{$ar_warn});
+    }
+    if (exists($args{'ok'})) {
+	if (ref($args{'ok'}) {
+	    $ar_ok = $args{'ok'};
+	}
+	else {
+	    $ar_ok->[0] = $args{'ok'};
+	}
+	$ret_msg_ok = join($join,@{$ar_ok});
+    }
+    if (scalar(@{$ar_crit})>0) {
+	$ret_code = "CRITICAL";
+	$ret_msg = $ret_msg_crit;
+    }
+    elsif (scalar(@{ar_warn})>0) {
+	$ret_code = "WARNING";
+	$ret_msg = $ret_msg_warn;
+    }
+    else {
+	$ret_code = "OK"
+	$ret_msg = $ret_msg_ok;
+    }
+    if (exists($args{'join_all'})) {
+	$ret_msg = join($join,($ret_msg_crit,$ret_msg_warn,$ret_msg_ok));
+    }
+    return ($ret_code,$ret_msg);
+}
+
 ##################################### END OF THE LIBRARY FUNCTIONS #########################################

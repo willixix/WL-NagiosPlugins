@@ -755,6 +755,7 @@ EOT
 #	       not stabilized and so library is only to be included within plugins. Support was
 #	       also added for regex matching with PATTERN option spec. Also added NAME spec.
 #	       License changed to LGPL from GPL for this code.
+# [0.21 - Sep 3, 2012] Fix bug in handling absent data
 #
 # ================================== LIBRARY TODO =================================================
 #
@@ -1647,21 +1648,23 @@ sub parse_thresholds_list {
 		    }
 	     }
 	     elsif ($t2 =~ /^ABSENT\:(.*)/) {
-		    if (defined($ERRORS{$1})) {
-			$thres->{'ABSENT'} = $1;
+		    my $val = $1;
+		    if (defined($ERRORS{$val})) {
+			$thres->{'ABSENT'} = $val;
 		    }
 		    else {
-			print "Invalid value $1 after ABSENT. Acceptable values are: OK, WARNING, CRITICAL, UNKNOWN\n";
+			print "Invalid value $val after ABSENT. Acceptable values are: OK, WARNING, CRITICAL, UNKNOWN\n";
 			if (defined($self)) { $self->usage(); }
 			exit $ERRORS{"UNKNOWN"};
 		    }
 	     }
 	     elsif ($t2 =~ /^ZERO\:(.*)/) {
-		    if (exists($ERRORS{$1})) {
-			$thres->{'ZERO'} = $1;
+		    my $val = $1;
+		    if (exists($ERRORS{$val})) {
+			$thres->{'ZERO'} = $val;
 		    }
 		    else {
-			print "Invalid value $1 after ZERO. Acceptable values are: OK, WARNING, CRITICAL, UNKNOWN\n";
+			print "Invalid value $val after ZERO. Acceptable values are: OK, WARNING, CRITICAL, UNKNOWN\n";
 			if (defined($self)) { $self->usage(); }
 			exit $ERRORS{"UNKNOWN"};
 		    }
@@ -2164,7 +2167,7 @@ sub set_statuscode {
 #  @DESCRIPTION   : This function is called closer to end of the code after plugin retrieved data and
 #		    assigned values to variables. This function checks variables against all thresholds.
 #		    It prepares statusdata and statusinfo and exitcode. 
-#  @LAST CHANGED  : 08-27-12 by WL
+#  @LAST CHANGED  : 09-03-12 by WL
 #  @INPUT         : none
 #  @RETURNS       : nothing (future: 1 on success, 0 on error)
 #  @PRIVACY & USE : PUBLIC, To be called after variables have values. Must be used as an object instance function

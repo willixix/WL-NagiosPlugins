@@ -1077,7 +1077,6 @@ sub adjust_template {
 	$p->{'dsid'} = $ctpl->{'DSNAMES'}{$name};
 	$p->{'dstype'} = $ctpl->{'DSLIST'}[$p->{'dsid'}]{'DSTYPE'} if defined($ctpl->{'DSLIST'}[$p->{'dsid'}]{'DSTYPE'});
 	$ctref = $ctpl->{'DSLIST'}[$p->{'dsid'}];
-        $p->{'template'} = $ctpl->{'TEMPLATE'};
 	print_log("DEBUG: DSTYPE adjusted to '". $p->{'dstype'} . "' and dsid set to ".$p->{'dsid'}." for named DS $name as defined in ". $ctpl->{'TEMPLATE'}. " template", 3 );
     }
     elsif (!defined($ctpl->{'ONLY_NAMED_DS'}) || $ctpl->{'ONLY_NAMED_DS'} != 1) {
@@ -1091,7 +1090,6 @@ sub adjust_template {
 	      $p->{'dsid'} = $ctpl->{'dsid_count'};
 	      $p->{'dstype'} = $ctpl->{'DSLIST'}[$ncount]{'DSTYPE'} if defined($ctpl->{'DSLIST'}[$ncount]{'DSTYPE'});
 	      $ctref = $ctpl->{'DSLIST'}[$ncount];
-	      $p->{'template'} = $ctpl->{'TEMPLATE'};
 	      print_log("DEBUG: DSTYPE adjusted to '". $p->{'dstype'} . "' and dsid set to ".$p->{'dsid'}." for numbered DS $ncount as defined in ". $ctpl->{'TEMPLATE'}. " template", 3 );
 	}
 	elsif (defined($conf{'UOM2TYPE'}{$uom}) && defined($ctpl->{'DEFAULT_DSTYPE'}) && defined($ctpl->{'SET_DSTYPE'}) && $ctpl->{'DEFAULT_DSTYPE'} eq $ctpl->{'SET_DSTYPE'}) {
@@ -1121,6 +1119,7 @@ sub adjust_template {
     }
 
     # additional settings
+    $p->{'template'} = $ctpl->{'TEMPLATE'} if defined($ctpl->{'TEMPLATE'});
     $p->{'rrd_heartbeat'} = $ctref->{'RRD_HEARTBEAT'} if defined($ctref) && defined($ctref->{'RRD_HEARTBEAT'});
     $p->{'rrd_storage_type'} = $ctref->{'RRD_STORAGE_TYPE'} if defined($ctref) && defined($ctref->{'RRD_STORAGE_TYPE'});
     if (defined($ctref) && defined($ctref->{'USE_MAX_ON_CREATE'}) && $ctref->{'USE_MAX_ON_CREATE'} == 1 && defined $p->{'max'} ) {

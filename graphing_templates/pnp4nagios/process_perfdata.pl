@@ -669,47 +669,6 @@ sub write_env_to_template {
 }
 
 #
-# Recursive Template search 
-#
-sub adjust_template {
-    my $ctpl		  = shift;
-    my $command           = shift;
-    my $uom               = shift;
-    my $count             = shift;
-
-    if (!exists($ctpl->{'COMMAND'}) || $ctpl->{'COMMAND'} ne $command) {
-	my @temp_template = split /\!/, $command;
-	my $initial_template = trim(cleanup($temp_template[0]));
-
-	read_custom_template ($ctpl, $command); 
-	if ( defined($ctpl->{'TEMPLATE'}) && $ctpl->{'TEMPLATE'} ne $initial_template ) {
-	    read_custom_template ($ctpl, $ctpl->{'TEMPLATE'} );
-	}
-	$ctpl->{'COMMAND'}=$command;
-    }
-    if (defined($count) && defined($ctpl->{'DSLIST'}[$count]) && defined($ctpl->{'DSLIST'}[$count]{'DSTYPE'})) {
-    	$ctpl->{'DSTYPE'} = $ctpl->{'DSLIST'}[$count]{'DSTYPE'};
-	print_log( "DEBUG: DSTYPE adjusted to ". $ctpl->{'DSTYPE'} . " for key $count as defined in ". $ctpl->{'TEMPLATE'}. " template", 3 );
-    }
-    elsif (defined($conf{'UOM2TYPE'}{$uom}) && defined($ctpl->{'DEFAULT_DSTYPE'}) && defined($ctpl->{'SET_DSTYPE'}) && $ctpl->{'DEFAULT_DSTYPE'} eq $ctpl->{'SET_DSTYPE'}) {
-	print_log( "DEBUG: DSTYPE adjusted to '". $conf{'UOM2TYPE'}{$uom}."' for key $count by UOM='".$uom."'", 3 );
-	$ctpl->{'DSTYPE'} = $conf{'UOM2TYPE'}{$uom};
-    }
-    elsif (defined($ctpl->{'SET_DSTYPE'})) {
-	print_log( "DEBUG: DSTYPE set to '".$ctpl->{'SET_DSTYPE'}."' for key $count",3);
-	$ctpl->{'DSTYPE'} = $ctpl->{'SET_DSTYPE'}	
-    }
-    elsif (defined($ctpl->{'DEFAULT_DSTYPE'})) {
-	print_log( "DEBUG: DSTYPE set to default '".$ctpl->{'DEFAULT_DSTYPE'}."' type for key $count",3);
-	$ctpl->{'DSTYPE'} = $ctpl->{'DEFAULT_DSTYPE'};
-    }
-    else {
-	print_log( "DEBUG: DSTYPE set to config default '".$ctpl->{'DEFAULT_DSTYPE'}."' for key $count",3);
-	$ctpl->{'DEFAULT_DSTYPE'} = $conf{'DEFAULT_DSTYPE'};
-    }
-}
-
-#
 # Analyse check_command to find PNP Template .
 #
 sub read_custom_template {
@@ -1094,9 +1053,95 @@ sub trim {
 }
 
 #
+# Recursive Template search 
+#
+sub adjust_template {
+    my ($ctpl,$p,$command,$uom,$ncount,$name) = @_;
+    my $ctref = undef;
+
+    # template file is read (recursively search for it if necessary)
+    # it is only done once for same check no matter how many times adjust_template is called
+    if (!exists($ctpl->{'COMMAND'}) || $ctpl->{'COMMAND'} ne $command) {
+	my @temp_template = split /\!/, $command;
+	my $initial_template = trim(cleanup($temp_template[0]));
+	read_custom_template ($ctpl, $command); 
+	if ( defined($ctpl->{'TEMPLATE'}) && $ctpl->{'TEMPLATE'} ne $initial_template ) {
+	    read_custom_template ($ctpl, $ctpl->{'TEMPLATE'} );
+	}
+	$ctpl->{'COMMAND'}=$command;
+	$ctpl->{'dsid_count'}=0;
+    }
+ 
+    # We check if this name has been defined in template using DS = id:name:DSTYPE:... directive
+    if (defined($name) && exists($ctpl->{'DSNAMES'}{$name})) {
+	$p->{'dsid'} = $ctpl->{'DSNAMES'}{$name};
+	$p->{'dstype'} = $ctpl->{'DLIST'}[$p->{'dsid'}]{'DSTYPE'} if defined($ctpl->{'DLIST'}[$p->{'dsid'}]{'DSTYPE'});
+	$ctref = $ctpl->{'DLIST'}[$p->{'dsid'}];
+        $p->{'template'} = $ctpl->{'TEMPLATE'};
+	print_log("DEBUG: DSTYPE adjusted to '". $p->{'dstype'} . "' and dsid set to ".$p->{'dsid'}." for named DS $name as defined in ". $ctpl->{'TEMPLATE'}. " template", 3 );
+    }
+    elsif ($ctpl->{'ONLY_NAMED_DS'} != 1) {
+	# if this name was not listed, find first id that was not reserved by those that were named
+	while (exists($ctpl->{'DSLIST'}[$ctpl->{'dsid_count'}]) && 
+		exists($ctpl->{'DSLIST'}[$ctpl->{'dsid_count'}]{'NAME'})) { $ctpl->{'dsid_count'}++; }
+
+	# check if it may have been listed with DSTYPE without a name specified
+	if (defined($ncount) && defined($ctpl->{'DSLIST'}[$ncount]) && !exists($ctpl->{'DSLIST'}[$ncount]{'NAME'})) {
+	      $p->{'dsid'} = $ctpl->{'dsid_count'};
+	      $p->{'dstype'} = $ctpl->{'DLIST'}[$ncount]{'DSTYPE'} if defined($ctpl->{'DSLIST'}[$ncount]{'DSTYPE'});
+	      $ctref = $ctpl->{'DLIST'}[$ncount];
+	      $p->{'template'} = $ctpl->{'TEMPLATE'};
+	      print_log("DEBUG: DSTYPE adjusted to '". $p->{'dstype'} . "' and dsid set to ".$p->{'dsid'}." for numbered DS $ncount as defined in ". $ctpl->{'TEMPLATE'}. " template", 3 );
+	}
+	elsif (defined($conf{'UOM2TYPE'}{$uom}) && defined($ctpl->{'DEFAULT_DSTYPE'}) && defined($ctpl->{'SET_DSTYPE'}) && $ctpl->{'DEFAULT_DSTYPE'} eq $ctpl->{'SET_DSTYPE'}) {
+	      $p->{'dsid'} = $ctpl->{'dsid_count'};
+	      $p->{'dstype'} = $conf{'UOM2TYPE'}{$uom};
+	      $ctref = $ctpl;
+	      print_log( "DEBUG: DSTYPE adjusted to '". $conf{'UOM2TYPE'}{$uom}."' and dsid set to ".$p->{'dsid'}."' for key $ncount by UOM='".$uom."'", 3 );
+	}
+	elsif (defined($ctpl->{'SET_DSTYPE'})) {
+	      $p->{'dsid'} = $ctpl->{'dsid_count'};
+	      $p->{'dstype'} = $ctpl->{'SET_DSTYPE'};
+	      $ctref = $ctpl;
+	      print_log( "DEBUG: DSTYPE set to '".$ctpl->{'SET_DSTYPE'}."' and dsid set to ".$p->{'dsid'}."' for key $ncount",3);
+	}
+	elsif (defined($ctpl->{'DEFAULT_DSTYPE'})) {
+	      $p->{'dsid'} = $ctpl->{'dsid_count'};
+	      $p->{'dstype'} = $ctpl->{'DEFAULT_DSTYPE'};
+	      $ctref = $ctpl;
+	      print_log( "DEBUG: DSTYPE set to default '".$ctpl->{'DEFAULT_DSTYPE'}."' and dsid set to ".$p->{'dsid'}."' for key $ncount",3)
+	}
+	else {
+	      $p->{'dsid'} = $ctpl->{'dsid_count'};
+	      $p->{'dstype'} = $conf{'DEFAULT_DSTYPE'};
+	      print_log( "DEBUG: DSTYPE set to default '".$conf{'DEFAULT_DSTYPE'}."' and dsid set to ".$p->{'dsid'}."' for key $ncount",3)
+	}
+	$ctpl->{'dsid_count'}++;
+    }
+
+    # additional settings
+    $p->{'rrd_heartbeat'} = $ctref->{'RRD_HEARTBEAT'} if defined($ctref) && defined($ctref->{'RRD_HEARTBEAT'});
+    $p->{'rrd_storage_type'} = $ctref->{'RRD_STORAGE_TYPE'} if defined($ctref) && defined($ctref->{'RRD_STORAGE_TYPE'});
+    if (defined($ctref) && defned($ctref->{'USE_MAX_ON_CREATE'}) && $ctref->{'USE_MAX_ON_CREATE'} == 1 && defined $p->{'max'} ) {
+	$p->{'rrd_max'} = $p->{'max'};
+    } else {
+        $p->{'rrd_max'} = "U";
+    }
+    if (defined($ctref) && defined($ctref->{'USE_MIN_ON_CREATE'}) && $ctref->{'USE_MIN_ON_CREATE'} == 1 && defined $p->{'min'} ) {
+        $p->{'rrd_min'} = $p->{'min'};
+    }
+    elsif (defined($ctref) && defined($ctref->{'DSTYPE'}) && $ctref->{'DSTYPE'} eq 'DERIVE' ){
+        $p->{'rrd_min'} = 0; # Add minimum value 0 if DSTYPE = DERIVE
+    } else {
+	$p->{'rrd_min'} = "U";
+    }
+}
+
+#
 # Parse the Performance String and call data2rrd()
 #
 sub parse_perfstring {
+    my $perfstring = shift;
 
     #
     # Default RRD Datatype
@@ -1104,16 +1149,11 @@ sub parse_perfstring {
     #
     my %CTPL = ();
     my $CTREF;
-    $dstype = "GAUGE";
-    my $perfstring = shift;
     my $is_multi = "0";
     my @perfs;
     my @multi;
     my %p;
-    my $use_min_on_create = 0;
-    my $use_max_on_create = 0;
     my $count = 0;
-    my $dsid_count = 0;
     my $multiblock_count = 0;
 
     #
@@ -1157,55 +1197,15 @@ sub parse_perfstring {
                     data2rrd(@perfs) if ( $#perfs >= 0 );           # Process when a new block starts.
                     @perfs = ();                                    # Clear the perfs array.
                     # reset check_multi block count
-                    $dsid_count = 0;
+                    $multiblock_count = 0;
                 }
                 $p{label}            = cleanup( $multi[2] );           # store the original label from check_multi header
                 $p{name}             = cleanup( $multi[2] );           # store the original label from check_multi header
                 $p{hostname}         = cleanup( $NAGIOS{HOSTNAME} );
 
-                adjust_template(\%CTPL, $multi[1], $p{uom}, $multiblock_count );
+                adjust_template(\%CTPL, \%p, $multi[1], $p{uom}, $multiblock_count, $p{'name'} );
+		$multiblock_count++;
 
-		# we now check if this name has been defined in template using DS = id:name:DSTYPE:... directive
-		if (exists($CTPL{'DSNAMES'}{$p{name}})) {
-			$p{dsid} = $CTPL{'DSNAMES'}{$p{name}};
-			$CTREF = $CTPL{'DSLIST'}[$p{dsid}];
-			print_log("DEBUG: ".$p{name}." - using specified settings for named multi-block DS '".$p{name}."' and adjusting dsid to ".$p{dsid},3);
-		}
-		elsif ($CTPL{'ONLY_NAMED_DS'} != 1) {
-			# if this name was not listed, find first id that was not reserved
-			while (exists($CTPL{'DSLIST'}[$dsid_count]) && 
-				exists($CTPL{'DSLIST'}[$dsid_count]{'NAME'})) { $dsid_count++; }
-			if (exists($CTPL{'DSLIST'}[$multiblock_count]) && !exists($CTPL{'DSLIST'}[$multiblock_count]{'NAME'})) {
-			      $CTREF = $CTPL{'DSLIST'}[$multiblock_count];
-			      $p{dsid} = $dsid_count;
-			      print_log("DEBUG: ".$p{name}." - using specified settings for listed multi-block DS# $multiblock_count with dsid set to ".$p{dsid},3);
-			}
-			else {
-			      $CTREF = \%CTPL;
-			      $p{dsid} = $dsid_count;
-			      print_log("DEBUG: ".$p{name}." - multi-block, using default settings with dsid set to ".$p{dsid},3);
-			}
-			$dsid_count++;
-			$multiblock_count++;
-		}
-
-                if (defned($CTREF->{'USE_MAX_ON_CREATE'}) && $CTREF->{'USE_MAX_ON_CREATE'} == 1 && defined $p{max} ) {
-                    $p{rrd_max} = $p{max};
-                } else {
-                    $p{rrd_max} = "U";
-                }
-                if (defined($CTREF->{'USE_MIN_ON_CREATE'}) && $CTREF->{'USE_MIN_ON_CREATE'} == 1 && defined $p{min} ) {
-                    $p{rrd_min} = $p{min};
-                }
-		elsif (defined($CTREF->{'DSTYPE'}) && $CTREF->{'DSTYPE'} eq 'DERIVE' ){
-                    $p{rrd_min} = 0; # Add minimum value 0 if DSTYPE = DERIVE
-                } else {
-                    $p{rrd_min} = "U";
-                }
-                $p{dstype}           = $CTREF->{'DSTYPE'};
-                $p{rrd_heartbeat}    = $CTREF->{'RRD_HEARTBEAT'};
-                $p{template}         = $CTPL{'TEMPLATE'};
-                $p{rrd_storage_type} = $CTPL{'RRD_STORAGE_TYPE'};
                 $p{disp_hostname}    = $NAGIOS{DISP_HOSTNAME};
                 $p{auth_hostname}    = $NAGIOS{HOSTNAME};
                 $p{timet}            = $NAGIOS{TIMET};
@@ -1217,50 +1217,9 @@ sub parse_perfstring {
                 print_log( "DEBUG: Next check_multi data for block $count multiblock $multiblock_count", 3 );
 
 		# WL: I think this can be safely removed here
-                adjust_template(\%CTPL, $multi[1], $p{uom}, $multiblock_count );
+                adjust_template(\%CTPL, \%p, $multi[1], $p{uom}, $multiblock_count, $p{'name'} );
+		$multiblock_count++;
 
-		# WL: check, first if this name has been defined in template using DS = id:name:DSTYPE:... directive
-		if (exists($CTPL{'DSNAMES'}{$p{name}})) {
-			$p{dsid} = $CTPL{'DSNAMES'}{$p{name}};
-			$CTREF = $CTPL{'DSLIST'}[$p{dsid}];
-			print_log("DEBUG: ".$p{name}." - using specified settings for named multi-block DS '".$p{name}."' and adjusting dsid to ".$p{dsid},3);
-		}
-		elsif (!exists($CTPL{'ONLY_NAMES_DS'}) || $CTPL{'ONLY_NAMED_DS'} != 1) {
-			# if this name was not listed, find first id that was not reserved
-			while (exists($CTPL{'DSLIST'}[$dsid_count]) && 
-				exists($CTPL{'DSLIST'}[$dsid_count]{'NAME'})) { $dsid_count++; }
-			# check if it may have been listed with DSTYPE without a name specified
-			if (exists($CTPL{'DSLIST'}[$multiblock_count]) && !exists($CTPL{'DSLIST'}[$multiblock_count]{'NAME'})) {
-			      $CTREF = $CTPL{'DSLIST'}[$multiblock_count];
-			      $p{dsid} = $dsid_count;
-			      print_log("DEBUG: ".$p{name}." - using specified settings for listed multi-block DS# $multiblock_count with dsid set to ".$p{dsid},3);
-			}
-			else {
-			      $CTREF = \%CTPL;
-			      $p{dsid} = $dsid_count;
-			      print_log("DEBUG: ".$p{name}." - multi-block, using default settings with dsid set to ".$p{dsid},3);
-			}
-			$dsid_count++;
-			$multiblock_count++;
-		}
-
-                if ( $CTREF->{'USE_MAX_ON_CREATE'} == 1 && defined $p{max} ) {
-                    $p{rrd_max} = $p{max};
-                } else {
-                    $p{rrd_max} = "U";
-                }
-                if ( $CTREF->{'USE_MIN_ON_CREATE'} == 1 && defined $p{min} ) {
-                    $p{rrd_min} = $p{min};
-                } elsif( $CTREF->{'DSTYPE'} eq 'DERIVE' ){
-                    $p{rrd_min} = 0; # Add minimum value 0 if DSTYPE = DERIVE
-                } else {
-                    $p{rrd_min} = "U";
-                }
-                $p{dstype}           = $CTREF->{'DSTYPE'};
-                $p{rrd_heartbeat}    = $CTREF->{'RRD_HEARTBEAT'};
-
-                $p{template}         = $CTPL{'TEMPLATE'};
-                $p{rrd_storage_type} = $CTPL{'RRD_STORAGE_TYPE'};
                 $p{hostname}         = cleanup( $NAGIOS{HOSTNAME} );
                 $p{disp_hostname}    = $NAGIOS{DISP_HOSTNAME};
                 $p{auth_hostname}    = $NAGIOS{HOSTNAME};
@@ -1287,6 +1246,7 @@ sub parse_perfstring {
         #
         print_log( "DEBUG: Normal perfdata", 3 );
         $count = 0;
+	$is_multi = 0;
         while ($perfstring) {
             ( $perfstring, %p ) = _parse($perfstring);
             if ( !$p{label} ) {
@@ -1294,46 +1254,8 @@ sub parse_perfstring {
                 @perfs = ();
                 last;
             }
-            adjust_template(\%CTPL, $NAGIOS{CHECK_COMMAND}, $p{uom}, $count );
+            adjust_template(\%CTPL, \%p, $NAGIOS{CHECK_COMMAND}, $p{uom}, $count, $p{label} );
 
-	    # WL: check, first if this name has been defined in template using DS = id:name:DSTYPE:... directive
-	    if (exists($CTPL{'DSNAMES'}{$p{label}})) {
-		$p{dsid} = $CTPL{'DSNAMES'}{$p{label}};
-		$CTREF = $CTPL{'DSLIST'}[$p{dsid}];
-		print_log("DEBUG: ".$p{label}." - using specified settings for named DS '".$p{label}."' and adjusting dsid to ".$p{dsid},3);
-	    }
-	    elsif (!exists($CTPL{'ONLY_NAMED_DS'}) || $CTPL{'ONLY_NAMED_DS'} != 1) {
-		# if this name was not listed, find first id that was not reserved
-		while (exists($CTPL{'DSLIST'}[$dsid_count]) && exists($CTPL{'DSLIST'}[$dsid_count]{'NAME'})) { $dsid_count++; }
-		# check if it may have been listed with DSTYPE without a name specified
-		if (exists($CTPL{'DSLIST'}[$count]) && !exists($CTPL{'DSLIST'}[$count]{'NAME'})) {
-		    $CTREF = $CTPL{'DSLIST'}[$count];
-		    $p{dsid} = $dsid_count;
-		    print_log("DEBUG: ".$p{label}." - using specified settings for listed DS# $count with dsid set to ".$p{dsid},3);
-		}
-		else {
-		    $CTREF = \%CTPL;
-		    $p{dsid} = $dsid_count;
-		    print_log("DEBUG: ".$p{label}." - using default settings with dsid set to ".$p{dsid},3);
-		}
-		$dsid_count++;
-	    }
-	    if (defined($CTREF->{'USE_MAX_ON_CREATE'}) && $CTREF->{'USE_MAX_ON_CREATE'} == 1 && defined $p{max} ) {
-                $p{rrd_max} = $p{max};
-            } else {
-                $p{rrd_max} = "U";
-            }
-            if (defined($CTREF->{'USE_MIN_ON_CREATE'}) && $CTREF->{'USE_MIN_ON_CREATE'} == 1 && defined $p{min} ) {
-		$p{rrd_min} = $p{min};
-            } elsif(defined($CTREF->{'DSTYPE'}) && $CTREF->{'DSTYPE'} eq 'DERIVE' ){
-                $p{rrd_min} = 0; # Add minimum value 0 if DSTYPE = DERIVE
-            } else {
-                $p{rrd_min} = "U";
-            }
-            $p{dstype}           = $CTREF->{'DSTYPE'};
-            $p{rrd_heartbeat}    = $CTREF->{'RRD_HEARTBEAT'};
-            $p{template}         = $CTPL{'TEMPLATE'};
-            $p{rrd_storage_type} = $CTPL{'RRD_STORAGE_TYPE'};
             $p{multi}            = $is_multi;
             $p{hostname}         = cleanup( $NAGIOS{HOSTNAME} );
             $p{disp_hostname}    = $NAGIOS{DISP_HOSTNAME};

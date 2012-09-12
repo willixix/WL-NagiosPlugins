@@ -3,7 +3,8 @@
 ##
 ## pnp4nagios–0.6.16
 ## Copyright (c) 2005-2010 Joerg Linge (http://www.pnp4nagios.org)
-##  with additions (c) 2011-2012 by William Leibzon (william@leibzon.org)
+## 
+## Modified by William Leibzon (2010-2012) to add 'DS' and 'ONLY_NAMED_DS'
 ##
 ## This program is free software; you can redistribute it and/or
 ## modify it under the terms of the GNU General Public License
@@ -57,12 +58,13 @@ my %conf = (
     KEY_FILE           => '/opt/nagios/addons/pnp4nagios/etc/secret.key',
     UOM2TYPE           => { 'c' => 'DERIVE', 'd' => 'DERIVE' },
     PROCESS_UNSAFEDATA => 1,
-    UNSAFE_NAME_REGEX  => '^[^i][^s][^o].+\.\d+'
+    UNSAFE_NAME_REGEX  => '^[^i][^s][^o].+\.\d+',
+    DEFAULT_DSTYPE     => 'GAUGE',
 );
 
 my %const = (
     XML_STRUCTURE_VERSION => "4",
-    VERSION               => "0.6.16.w2",
+    VERSION               => "0.6.16.w3",
 );
 
 #
@@ -221,7 +223,7 @@ sub parse_env {
     %NAGIOS = ();
     $NAGIOS{DATATYPE} = "SERVICEPERFDATA";
 
-    if(defined $opt_gm){
+    if (defined $opt_gm){
         # Gearman Worker
         $job_data = decode_base64($job_data);
         if($conf{ENCRYPTION} == 1){
@@ -243,9 +245,8 @@ sub parse_env {
             $k =~ /([A-Z 0-9_]+)::(.*)$/;
             $NAGIOS{$1} = $2 if ($2);
         }
-    }else{
-
- 	    if ( ( !$ENV{NAGIOS_HOSTNAME} ) and ( !$ENV{ICINGA_HOSTNAME} ) ) {
+    } else{
+        if ( ( !$ENV{NAGIOS_HOSTNAME} ) and ( !$ENV{ICINGA_HOSTNAME} ) ) {
             print_log( "Cant find Nagios Environment. Exiting ....", 1 );
             exit 2;
         }
@@ -428,7 +429,7 @@ sub data2rrd {
             }
         }
 
-		if ( $i == 0 ){
+	if ( $i == 0 ) {
         	$ds_update = "$data[$i]{timet}";
         }
 
@@ -688,14 +689,23 @@ sub adjust_template {
     }
     if (defined($count) && defined($ctpl->{'DSLIST'}[$count]) && defined($ctpl->{'DSLIST'}[$count]{'DSTYPE'})) {
     	$ctpl->{'DSTYPE'} = $ctpl->{'DSLIST'}[$count]{'DSTYPE'};
-	print_log( "DEBUG: DSTYPE adjusted to ". $ctpl->{'DSTYPE'} ." as defined in ". $ctpl->{'TEMPLATE'}. " with key $count", 3 );
+	print_log( "DEBUG: DSTYPE adjusted to ". $ctpl->{'DSTYPE'} . " for key $count as defined in ". $ctpl->{'TEMPLATE'}. " template", 3 );
     }
-    elsif ( defined($conf{'UOM2TYPE'}{$uom}) && defined($ctpl->{'DEFAULT_DSTYPE'}) && defined($ctpl->{'SET_DSTYPE'}) && $ctpl->{'DEFAULT_DSTYPE'} eq $ctpl->{'SET_DSTYPE'}) {
-	print_log( "DEBUG: DSTYPE adjusted to '". $conf{'UOM2TYPE'}{$uom}."' by UOM='".$uom."' for key $count", 3 );
+    elsif (defined($conf{'UOM2TYPE'}{$uom}) && defined($ctpl->{'DEFAULT_DSTYPE'}) && defined($ctpl->{'SET_DSTYPE'}) && $ctpl->{'DEFAULT_DSTYPE'} eq $ctpl->{'SET_DSTYPE'}) {
+	print_log( "DEBUG: DSTYPE adjusted to '". $conf{'UOM2TYPE'}{$uom}."' for key $count by UOM='".$uom."'", 3 );
 	$ctpl->{'DSTYPE'} = $conf{'UOM2TYPE'}{$uom};
     }
+    elsif (defined($ctpl->{'SET_DSTYPE'})) {
+	print_log( "DEBUG: DSTYPE set to '".$ctpl->{'SET_DSTYPE'}."' for key $count",3);
+	$ctpl->{'DSTYPE'} = $ctpl->{'SET_DSTYPE'}	
+    }
+    elsif (defined($ctpl->{'DEFAULT_DSTYPE'})) {
+	print_log( "DEBUG: DSTYPE set to default '".$ctpl->{'DEFAULT_DSTYPE'}."' type for key $count",3);
+	$ctpl->{'DSTYPE'} = $ctpl->{'DEFAULT_DSTYPE'};
+    }
     else {
-	$ctpl->{'DSTYPE'} = $ctpl->{'SET_DSTYPE'} if defined($ctpl->{'SET_DSTYPE'});
+	print_log( "DEBUG: DSTYPE set to config default '".$ctpl->{'DEFAULT_DSTYPE'}."' for key $count",3);
+	$ctpl->{'DEFAULT_DSTYPE'} = $conf{'DEFAULT_DSTYPE'};
     }
 }
 
@@ -708,8 +718,8 @@ sub read_custom_template {
     my @dslist		  = ();
     my $dsnames		  = {};
     my @dstype_list       = ();
-    my $dstype		  = 'GAUGE'; # initial dstype
-    my $initial_dstype 	  = 'GAUGE';
+    my $dstype		  = $conf{'DEFAULT_DSTYPE'}; # initial dstype
+    my $initial_dstype 	  = $conf{'DEFAULT_DSTYPE'};
     my $use_min_on_create = 0;
     my $use_max_on_create = 0;
     my $rrd_storage_type  = $conf{'RRD_STORAGE_TYPE'};
@@ -744,13 +754,13 @@ sub read_custom_template {
 				 print_log( "Adapting RRD Datatype to \"".$dstype_list[$i]."\" as defined in $template_cfg with key $i", 2 );
 			    }
 			    else {
-				  print_log( "RRD Datatype \"".$dstype_list[$i]."\" defined in $template_cfg is invalid", 2 );
+				 print_log( "RRD Datatype \"".$dstype_list[$i]."\" defined in $template_cfg is invalid", 2 );
 			    }
 			}
 		    }
 		    else {
 			if ( $dstype =~ /^(COUNTER|GAUGE|ABSOLUTE|DERIVE)$/ ) {
-			  print_log( "Adapting RRD Datatype to \"$dstype\" as defined in $template_cfg", 2 );
+			    print_log( "Adapting RRD Datatype to \"$dstype\" as defined in $template_cfg", 2 );
 			}
 			else {
 			    print_log( "RRD Datatype \"$dstype\" defined in $template_cfg is invalid", 2 );
@@ -956,6 +966,7 @@ sub _parse {
     my $string     = shift;
     my $tmp_string = $string;
     
+    # TODO: WL - I don't think this will work properly with quoted perf name with space
     $string =~ s/^\s*([^=]+)=([^\s]+)?\s*//;
 
     if ( $tmp_string eq $string ) {
@@ -1101,6 +1112,9 @@ sub parse_perfstring {
     my %p;
     my $use_min_on_create = 0;
     my $use_max_on_create = 0;
+    my $count = 0;
+    my $dsid_count = 0;
+    my $multiblock_count = 0;
 
     #
     # check_multi
@@ -1108,8 +1122,7 @@ sub parse_perfstring {
     if ( $perfstring =~ /^[']?([a-zA-Z0-9\.\-_\s\/\#]+)::([a-zA-Z0-9\.\-_\s]+)::([^=]+)[']?=/ ) {
         $is_multi = 1;
         print_log( "check_multi Perfdata start", 3 );
-        my $count        = 0;
-        my $check_multi_blockcount = 0;
+        $multiblock_count = 0;
         my $multi_parent     = cleanup( $NAGIOS{SERVICEDESC} );
         my $auth_servicedesc = $NAGIOS{DISP_SERVICEDESC};
         while ($perfstring) {
@@ -1133,7 +1146,8 @@ sub parse_perfstring {
                     $p{multi_parent}     = $multi_parent;
                 }
                 else {
-                    print_log( "DEBUG: A new check_multi block ($count) starts", 3 );
+                    print_log( "DEBUG: A newcheck_multi block ($count) starts", 3 );
+		    $multiblock_count=0;
                     $p{servicedesc}      = cleanup( $multi[0] );    # Use the multi servicedesc.
                     $p{multi}            = 2;
                     $p{multi_parent}     = $multi_parent;
@@ -1143,49 +1157,53 @@ sub parse_perfstring {
                     data2rrd(@perfs) if ( $#perfs >= 0 );           # Process when a new block starts.
                     @perfs = ();                                    # Clear the perfs array.
                     # reset check_multi block count
-                    $check_multi_blockcount = 0;
+                    $dsid_count = 0;
                 }
                 $p{label}            = cleanup( $multi[2] );           # store the original label from check_multi header
                 $p{name}             = cleanup( $multi[2] );           # store the original label from check_multi header
                 $p{hostname}         = cleanup( $NAGIOS{HOSTNAME} );
 
-                adjust_template(\%CTPL, $multi[1], $p{uom}, $check_multi_blockcount );
+                adjust_template(\%CTPL, $multi[1], $p{uom}, $multiblock_count );
 
 		# we now check if this name has been defined in template using DS = id:name:DSTYPE:... directive
 		if (exists($CTPL{'DSNAMES'}{$p{name}})) {
 			$p{dsid} = $CTPL{'DSNAMES'}{$p{name}};
 			$CTREF = $CTPL{'DSLIST'}[$p{dsid}];
+			print_log("DEBUG: ".$p{name}." - using specified settings for named multi-block DS '".$p{name}."' and adjusting dsid to ".$p{dsid},3);
 		}
 		elsif ($CTPL{'ONLY_NAMED_DS'} != 1) {
 			# if this name was not listed, find first id that was not reserved
-			while (exists($CTPL{'DSLIST'}[$check_multi_blockcount]) && 
-				exists($CTPL{'DSLIST'}[$check_multi_blockcount]{'NAME'})) { $check_multi_blockcount++; }
-			if (exists($CTPL{'DSLIST'}[$check_multi_blockcount])) {
-			      $CTREF = $CTPL{'DSLIST'}[$check_multi_blockcount];
-			      $p{dsid} = $check_multi_blockcount;
+			while (exists($CTPL{'DSLIST'}[$dsid_count]) && 
+				exists($CTPL{'DSLIST'}[$dsid_count]{'NAME'})) { $dsid_count++; }
+			if (exists($CTPL{'DSLIST'}[$multiblock_count]) && !exists($CTPL{'DSLIST'}[$multiblock_count]{'NAME'})) {
+			      $CTREF = $CTPL{'DSLIST'}[$multiblock_count];
+			      $p{dsid} = $dsid_count;
+			      print_log("DEBUG: ".$p{name}." - using specified settings for listed multi-block DS# $multiblock_count with dsid set to ".$p{dsid},3);
 			}
 			else {
 			      $CTREF = \%CTPL;
-			      $p{dsid} = $check_multi_blockcount;
+			      $p{dsid} = $dsid_count;
+			      print_log("DEBUG: ".$p{name}." - multi-block, using default settings with dsid set to ".$p{dsid},3);
 			}
-			$check_multi_blockcount++;
+			$dsid_count++;
+			$multiblock_count++;
 		}
 
-                if ( $CTREF->{'USE_MAX_ON_CREATE'} == 1 && defined $p{max} ) {
+                if (defned($CTREF->{'USE_MAX_ON_CREATE'}) && $CTREF->{'USE_MAX_ON_CREATE'} == 1 && defined $p{max} ) {
                     $p{rrd_max} = $p{max};
                 } else {
                     $p{rrd_max} = "U";
                 }
-                if ( $CTREF->{'USE_MIN_ON_CREATE'} == 1 && defined $p{min} ) {
+                if (defined($CTREF->{'USE_MIN_ON_CREATE'}) && $CTREF->{'USE_MIN_ON_CREATE'} == 1 && defined $p{min} ) {
                     $p{rrd_min} = $p{min};
-                } elsif( $CTREF->{'DSTYPE'} eq 'DERIVE' ){
+                }
+		elsif (defined($CTREF->{'DSTYPE'}) && $CTREF->{'DSTYPE'} eq 'DERIVE' ){
                     $p{rrd_min} = 0; # Add minimum value 0 if DSTYPE = DERIVE
                 } else {
                     $p{rrd_min} = "U";
                 }
                 $p{dstype}           = $CTREF->{'DSTYPE'};
                 $p{rrd_heartbeat}    = $CTREF->{'RRD_HEARTBEAT'};
-
                 $p{template}         = $CTPL{'TEMPLATE'};
                 $p{rrd_storage_type} = $CTPL{'RRD_STORAGE_TYPE'};
                 $p{disp_hostname}    = $NAGIOS{DISP_HOSTNAME};
@@ -1196,30 +1214,34 @@ sub parse_perfstring {
                 $count++;
             }
             else { # additional check_multi data
-                print_log( "DEBUG: Next check_multi data for block $count multiblock $check_multi_blockcount", 3 );
+                print_log( "DEBUG: Next check_multi data for block $count multiblock $multiblock_count", 3 );
 
 		# WL: I think this can be safely removed here
-                adjust_template(\%CTPL, $multi[1], $p{uom}, $check_multi_blockcount );
+                adjust_template(\%CTPL, $multi[1], $p{uom}, $multiblock_count );
 
 		# WL: check, first if this name has been defined in template using DS = id:name:DSTYPE:... directive
 		if (exists($CTPL{'DSNAMES'}{$p{name}})) {
 			$p{dsid} = $CTPL{'DSNAMES'}{$p{name}};
 			$CTREF = $CTPL{'DSLIST'}[$p{dsid}];
+			print_log("DEBUG: ".$p{name}." - using specified settings for named multi-block DS '".$p{name}."' and adjusting dsid to ".$p{dsid},3);
 		}
-		elsif ($CTPL{'ONLY_NAMED_DS'} != 1) {
+		elsif (!exists($CTPL{'ONLY_NAMES_DS'}) || $CTPL{'ONLY_NAMED_DS'} != 1) {
 			# if this name was not listed, find first id that was not reserved
-			while (exists($CTPL{'DSLIST'}[$check_multi_blockcount]) && 
-				exists($CTPL{'DSLIST'}[$check_multi_blockcount]{'NAME'})) { $check_multi_blockcount++; }
+			while (exists($CTPL{'DSLIST'}[$dsid_count]) && 
+				exists($CTPL{'DSLIST'}[$dsid_count]{'NAME'})) { $dsid_count++; }
 			# check if it may have been listed with DSTYPE without a name specified
-			if (exists($CTPL{'DSLIST'}[$check_multi_blockcount])) {
-			      $CTREF = $CTPL{'DSLIST'}[$check_multi_blockcount];
-			      $p{dsid} = $check_multi_blockcount;
+			if (exists($CTPL{'DSLIST'}[$multiblock_count]) && !exists($CTPL{'DSLIST'}[$multiblock_count]{'NAME'})) {
+			      $CTREF = $CTPL{'DSLIST'}[$multiblock_count];
+			      $p{dsid} = $dsid_count;
+			      print_log("DEBUG: ".$p{name}." - using specified settings for listed multi-block DS# $multiblock_count with dsid set to ".$p{dsid},3);
 			}
 			else {
 			      $CTREF = \%CTPL;
-			      $p{dsid} = $check_multi_blockcount;
+			      $p{dsid} = $dsid_count;
+			      print_log("DEBUG: ".$p{name}." - multi-block, using default settings with dsid set to ".$p{dsid},3);
 			}
-			$check_multi_blockcount++;
+			$dsid_count++;
+			$multiblock_count++;
 		}
 
                 if ( $CTREF->{'USE_MAX_ON_CREATE'} == 1 && defined $p{max} ) {
@@ -1278,28 +1300,32 @@ sub parse_perfstring {
 	    if (exists($CTPL{'DSNAMES'}{$p{label}})) {
 		$p{dsid} = $CTPL{'DSNAMES'}{$p{label}};
 		$CTREF = $CTPL{'DSLIST'}[$p{dsid}];
+		print_log("DEBUG: ".$p{label}." - using specified settings for named DS '".$p{label}."' and adjusting dsid to ".$p{dsid},3);
 	    }
-	    elsif ($CTPL{'ONLY_NAMED_DS'} != 1) {
+	    elsif (!exists($CTPL{'ONLY_NAMED_DS'}) || $CTPL{'ONLY_NAMED_DS'} != 1) {
 		# if this name was not listed, find first id that was not reserved
-		while (exists($CTPL{'DSLIST'}[$count]) && exists($CTPL{'DSLIST'}[$count]{'NAME'})) { $count++; }
+		while (exists($CTPL{'DSLIST'}[$dsid_count]) && exists($CTPL{'DSLIST'}[$dsid_count]{'NAME'})) { $dsid_count++; }
 		# check if it may have been listed with DSTYPE without a name specified
-		if (exists($CTPL{'DSLIST'}[$count])) {
+		if (exists($CTPL{'DSLIST'}[$count]) && !exists($CTPL{'DSLIST'}[$count]{'NAME'})) {
 		    $CTREF = $CTPL{'DSLIST'}[$count];
-		    $p{dsid} = $count;
+		    $p{dsid} = $dsid_count;
+		    print_log("DEBUG: ".$p{label}." - using specified settings for listed DS# $count with dsid set to ".$p{dsid},3);
 		}
 		else {
 		    $CTREF = \%CTPL;
-		    $p{dsid} = $count;
+		    $p{dsid} = $dsid_count;
+		    print_log("DEBUG: ".$p{label}." - using default settings with dsid set to ".$p{dsid},3);
 		}
+		$dsid_count++;
 	    }
-	    if ( $CTREF->{'USE_MAX_ON_CREATE'} == 1 && defined $p{max} ) {
+	    if (defined($CTREF->{'USE_MAX_ON_CREATE'}) && $CTREF->{'USE_MAX_ON_CREATE'} == 1 && defined $p{max} ) {
                 $p{rrd_max} = $p{max};
             } else {
                 $p{rrd_max} = "U";
             }
-            if ( $CTREF->{'USE_MIN_ON_CREATE'} == 1 && defined $p{min} ) {
+            if (defined($CTREF->{'USE_MIN_ON_CREATE'}) && $CTREF->{'USE_MIN_ON_CREATE'} == 1 && defined $p{min} ) {
 		$p{rrd_min} = $p{min};
-            } elsif( $CTREF->{'DSTYPE'} eq 'DERIVE' ){
+            } elsif(defined($CTREF->{'DSTYPE'}) && $CTREF->{'DSTYPE'} eq 'DERIVE' ){
                 $p{rrd_min} = 0; # Add minimum value 0 if DSTYPE = DERIVE
             } else {
                 $p{rrd_min} = "U";

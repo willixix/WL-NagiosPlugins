@@ -64,7 +64,7 @@ my %conf = (
 
 my %const = (
     XML_STRUCTURE_VERSION => "4",
-    VERSION               => "0.6.16.w3",
+    VERSION               => "0.6.16.w4",
 );
 
 #
@@ -1075,21 +1075,22 @@ sub adjust_template {
     # We check if this name has been defined in template using DS = id:name:DSTYPE:... directive
     if (defined($name) && exists($ctpl->{'DSNAMES'}{$name})) {
 	$p->{'dsid'} = $ctpl->{'DSNAMES'}{$name};
-	$p->{'dstype'} = $ctpl->{'DLIST'}[$p->{'dsid'}]{'DSTYPE'} if defined($ctpl->{'DLIST'}[$p->{'dsid'}]{'DSTYPE'});
-	$ctref = $ctpl->{'DLIST'}[$p->{'dsid'}];
+	$p->{'dstype'} = $ctpl->{'DSLIST'}[$p->{'dsid'}]{'DSTYPE'} if defined($ctpl->{'DSLIST'}[$p->{'dsid'}]{'DSTYPE'});
+	$ctref = $ctpl->{'DSLIST'}[$p->{'dsid'}];
         $p->{'template'} = $ctpl->{'TEMPLATE'};
 	print_log("DEBUG: DSTYPE adjusted to '". $p->{'dstype'} . "' and dsid set to ".$p->{'dsid'}." for named DS $name as defined in ". $ctpl->{'TEMPLATE'}. " template", 3 );
     }
-    elsif ($ctpl->{'ONLY_NAMED_DS'} != 1) {
+    elsif (!defined($ctpl->{'ONLY_NAMED_DS'}) || $ctpl->{'ONLY_NAMED_DS'} != 1) {
 	# if this name was not listed, find first id that was not reserved by those that were named
+	$ctpl->{'dsid_count'}=0 if !exists($ctpl->{'dsid_count'});
 	while (exists($ctpl->{'DSLIST'}[$ctpl->{'dsid_count'}]) && 
 		exists($ctpl->{'DSLIST'}[$ctpl->{'dsid_count'}]{'NAME'})) { $ctpl->{'dsid_count'}++; }
 
 	# check if it may have been listed with DSTYPE without a name specified
 	if (defined($ncount) && defined($ctpl->{'DSLIST'}[$ncount]) && !exists($ctpl->{'DSLIST'}[$ncount]{'NAME'})) {
 	      $p->{'dsid'} = $ctpl->{'dsid_count'};
-	      $p->{'dstype'} = $ctpl->{'DLIST'}[$ncount]{'DSTYPE'} if defined($ctpl->{'DSLIST'}[$ncount]{'DSTYPE'});
-	      $ctref = $ctpl->{'DLIST'}[$ncount];
+	      $p->{'dstype'} = $ctpl->{'DSLIST'}[$ncount]{'DSTYPE'} if defined($ctpl->{'DSLIST'}[$ncount]{'DSTYPE'});
+	      $ctref = $ctpl->{'DSLIST'}[$ncount];
 	      $p->{'template'} = $ctpl->{'TEMPLATE'};
 	      print_log("DEBUG: DSTYPE adjusted to '". $p->{'dstype'} . "' and dsid set to ".$p->{'dsid'}." for numbered DS $ncount as defined in ". $ctpl->{'TEMPLATE'}. " template", 3 );
 	}
@@ -1097,13 +1098,13 @@ sub adjust_template {
 	      $p->{'dsid'} = $ctpl->{'dsid_count'};
 	      $p->{'dstype'} = $conf{'UOM2TYPE'}{$uom};
 	      $ctref = $ctpl;
-	      print_log( "DEBUG: DSTYPE adjusted to '". $conf{'UOM2TYPE'}{$uom}."' and dsid set to ".$p->{'dsid'}."' for key $ncount by UOM='".$uom."'", 3 );
+	      print_log( "DEBUG: DSTYPE adjusted to '". $conf{'UOM2TYPE'}{$uom}."' and dsid set to ".$p->{'dsid'}." for key $ncount by UOM='".$uom."'", 3 );
 	}
 	elsif (defined($ctpl->{'SET_DSTYPE'})) {
 	      $p->{'dsid'} = $ctpl->{'dsid_count'};
 	      $p->{'dstype'} = $ctpl->{'SET_DSTYPE'};
 	      $ctref = $ctpl;
-	      print_log( "DEBUG: DSTYPE set to '".$ctpl->{'SET_DSTYPE'}."' and dsid set to ".$p->{'dsid'}."' for key $ncount",3);
+	      print_log( "DEBUG: DSTYPE set to '".$ctpl->{'SET_DSTYPE'}."' and dsid set to ".$p->{'dsid'}." for key $ncount",3);
 	}
 	elsif (defined($ctpl->{'DEFAULT_DSTYPE'})) {
 	      $p->{'dsid'} = $ctpl->{'dsid_count'};
@@ -1114,7 +1115,7 @@ sub adjust_template {
 	else {
 	      $p->{'dsid'} = $ctpl->{'dsid_count'};
 	      $p->{'dstype'} = $conf{'DEFAULT_DSTYPE'};
-	      print_log( "DEBUG: DSTYPE set to default '".$conf{'DEFAULT_DSTYPE'}."' and dsid set to ".$p->{'dsid'}."' for key $ncount",3)
+	      print_log( "DEBUG: DSTYPE set to default '".$conf{'DEFAULT_DSTYPE'}."' and dsid set to ".$p->{'dsid'}." for key $ncount",3)
 	}
 	$ctpl->{'dsid_count'}++;
     }
@@ -1122,7 +1123,7 @@ sub adjust_template {
     # additional settings
     $p->{'rrd_heartbeat'} = $ctref->{'RRD_HEARTBEAT'} if defined($ctref) && defined($ctref->{'RRD_HEARTBEAT'});
     $p->{'rrd_storage_type'} = $ctref->{'RRD_STORAGE_TYPE'} if defined($ctref) && defined($ctref->{'RRD_STORAGE_TYPE'});
-    if (defined($ctref) && defned($ctref->{'USE_MAX_ON_CREATE'}) && $ctref->{'USE_MAX_ON_CREATE'} == 1 && defined $p->{'max'} ) {
+    if (defined($ctref) && defined($ctref->{'USE_MAX_ON_CREATE'}) && $ctref->{'USE_MAX_ON_CREATE'} == 1 && defined $p->{'max'} ) {
 	$p->{'rrd_max'} = $p->{'max'};
     } else {
         $p->{'rrd_max'} = "U";
@@ -1187,7 +1188,6 @@ sub parse_perfstring {
                 }
                 else {
                     print_log( "DEBUG: A newcheck_multi block ($count) starts", 3 );
-		    $multiblock_count=0;
                     $p{servicedesc}      = cleanup( $multi[0] );    # Use the multi servicedesc.
                     $p{multi}            = 2;
                     $p{multi_parent}     = $multi_parent;

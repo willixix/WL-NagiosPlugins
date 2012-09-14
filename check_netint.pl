@@ -3,8 +3,8 @@
 # =============================== SUMMARY =====================================
 #
 # Program : check_netint.pl or check_snmp_netint.pl
-# Version : 2.4 alpha 2 
-# Date    : Aug 15, 2012
+# Version : 2.4 alpha 3 
+# Date    : Sep 14, 2012
 # Maintainer: William Leibzon - william@leibzon.org,
 # Authors : See "CONTRIBUTORS" documentation section
 # Licence : GPL - summary below, full text at http://www.fsf.org/licenses/gpl.txt
@@ -493,7 +493,7 @@
 #		       attached that randomly power on and off but you still want
 #		       performance stats and alerts on bandwidth when in use)."
 # [2.34] 12/25/11 - Based on comments/requests on nagiosexchange, -z option has been added.
-#		    This option makes specifyng thresholds with -w and/or -c optional
+#		    This option makes specifying thresholds with -w and/or -c optional
 #		    for those who want to use plugin primarily for data collection
 #		    and graphing. This was (and still can be) accomplished before by
 #		    specifying threshold value as 0 and then its not checked. Also the
@@ -537,8 +537,18 @@
 #		    4) Many doc and code fixes and cleanups all over
 # 2.4a2 - 08/15/12 - Fixed bug with cache of previous data for SNMP queries that came
 #		     around due to change in logic and introduction of non-SNMP.
-#		     Added experimental support for future Nagios 4.0 SAVEDDATA feature
-#		     (plugin output after || after perfdata). Enaled with --nagios4 option
+#		     Added experimental support for future Nagios 4.0 or 5.0 SAVEDDATA
+#		     feature (plugin output after || after perfdata).
+#		     Enabled with --nagios_with_saveddata option
+# 2.4a3 - 09/13/12 - patch/contrib by Franky Van Liedekerke:
+#		     1) Added option --admindown_ok: when checking for operational UP
+#                       interfaces, the interfaces that are administratively down are OK
+#                    2) The '-z' option now also prevents tmp files of being written
+#                       and removes the 'no usable data' warning because of missing perf data
+#
+#		     Note: --admindown_ok will not work locally (for non-SNMP),
+#			     supporting this will have to be added to TODO list for
+#			     finishing 2.4 release
 #
 # ============================ LIST OF CONTRIBUTORS ===============================
 #
@@ -557,6 +567,7 @@
 #    Patrick Proy
 #    Sébastien PRUD'HOMME
 #    Nicholas Scott
+#    Franky Van Liedekerke
 #
 # Open source community is grateful for all your contributions.
 #
@@ -642,6 +653,7 @@ my $o_version=		undef;	# print version
 my $o_noreg=		undef;	# Do not use Regexp for name
 my $o_short=		undef;	# set maximum of n chars to be displayed
 my $o_label=		undef;	# add label before speed (in, out, etc...).
+my $o_admindown_ok=	undef;  # admin down is ok (usefull when checking operational status)
 
 # Speed/error checks
 my $o_warn_opt=         undef;  # warning options
@@ -685,9 +697,9 @@ my $o_prevtime=         undef;  # previous time plugin was run $LASTSERVICECHECK
 my @o_minsnmp=		();     # see below
 my $o_minsnmp=		undef;	# minimize number of snmp queries
 my $o_maxminsnmp=	undef;  # minimize number of snmp queries even futher (slightly less safe in case of switch config changes)
-my $o_filestore=        undef;  # path of the file to store cached data in - overrides $o_base_dir
+my $o_filestore=        "";  # path of the file to store cached data in - overrides $o_base_dir
 my $o_pcount=		2;	# how many sets of previous data should be in performance data
-my $o_nagios4=		undef;	# enaled SAVEDDATA special output after ||
+my $o_nagios_saveddata=	undef;	# enabled SAVEDDATA special output after ||
 
 # These are unrelated WL's contribs to override default description OID 1.3.6.1.2.1.2.2.1.2 and for stp and cisco m[a|y]stery
 my $o_descroid=         undef;  # description oid, overrides $descr_table
@@ -825,6 +837,9 @@ Interface Selection and Status Output options:
 -s, --short=int
    Make the output shorter : only the first <n> chars of the interface(s)
    If the number is negative, then get the <n> LAST characters.
+--admindown_ok
+   Indicate that administrative down status is OK for operational
+   interfaces that are down
 
 Note : when multiple interfaces are selected with regexp,
        all must be up (or down with -i) to get an OK result.
@@ -865,6 +880,7 @@ Threshold Checks and Performance Data options:
 -z, --zerothresholds
    if warning and/or critical thresholds are not specified, assume they are 0
    i.e. do not check thresholds, but still give input/ouput bandwidth for graphing
+   This option also prevents tmp files of being writtena.
 
 Options for saving results of previous checks to calcuate Traffic & Utilization:
 
@@ -901,7 +917,7 @@ Options for saving results of previous checks to calcuate Traffic & Utilization:
    file will be saved in this directory, otherwise /tmp is used.
    If parameter is a filename then it is used as a first part in
    how temporary file is named.
---nagios4
+--nagios_with_saveddata
    Enables experimental support for future Nagios 4.0 SAVEDATA (output after ||)
    where cached data for next plugin use goes to special buffer and not PERFDATA
    [THIS IS AN EXPERIMENTAL OPTION THAT MAY BE REMOVED IN THE FUTURE]
@@ -1038,6 +1054,7 @@ sub check_options {
 	'a'	=> \$o_admin,		'admin'		=> \$o_admin,
 	'D'     => \$o_dormant,         'dormant'       => \$o_dormant,
         'I'     => \$o_ignorestatus,    'ignorestatus'  => \$o_ignorestatus,
+	'admindown_ok' => \$o_admindown_ok,
 	'r'	=> \$o_noreg,		'noregexp'	=> \$o_noreg,
 	'V'	=> \$o_version,		'version'	=> \$o_version,
         'f'     => \$o_perf,            'perfparse'     => \$o_perf,
@@ -1068,7 +1085,7 @@ sub check_options {
 	'm'	=> \@o_minsnmp,		'minimize_queries' => \$o_minsnmp,  'minimum_queries'    => \$o_maxminsnmp,
 	'F:s'   => \$o_filestore,       'filestore:s' => \$o_filestore,
 	'cisco:s' => \$o_ciscocat,	'stp:s' =>	\$o_stp,
-	'nagios4' => \$o_nagios4
+	'nagios_with_saveddata' => \$o_nagios_saveddata
     );
     if (defined ($o_help) ) { help(); exit $ERRORS{"UNKNOWN"}};
     if (defined($o_version)) { p_version(); exit $ERRORS{"UNKNOWN"}};
@@ -1375,6 +1392,7 @@ $SIG{'ALRM'} = sub {
 my $session = undef;
 my @tindex = ();
 my @oids = undef;
+my @oids_admin = undef;
 my @oid_descr=(); # this is actually only used with '-m' to double-check that cached index is correct
 my @oid_speed=();
 my @oid_speed_high=();
@@ -1687,6 +1705,7 @@ if (!$no_snmp) {
      # put the admin or oper oid in an array
      $oids[$i]= defined ($o_admin) ? $admin_table . $tindex[$i] 
 			: $oper_table . $tindex[$i] ;
+     $oids_admin[$i]= $admin_table . $tindex[$i];
      # this is for verifying cached description index is correct
      # (just in case ifindex port map or cisco port name changes)
      if (defined($o_minsnmp) && !defined($o_maxminsnmp)) {
@@ -1750,6 +1769,9 @@ if (!$no_snmp) {
   }
   if (defined($o_ciscocat)) {
 	@oid_ciscostatus=(@oid_ciscofaultstatus,@oid_ciscooperstatus,@oid_ciscoaddoperstatus);
+  }
+  if (defined($o_admindown_ok)) {
+	push @oids, @oids_admin if scalar(@oids_admin)>0;
   }
   if (defined($o_minsnmp)) {
 	push @oids, @oid_perf if scalar(@oid_perf)>0;
@@ -1838,6 +1860,7 @@ if (!$no_snmp) {
 
 # some more global variables I should probably move further up to main vars definition
 my $num_ok=0;
+my $num_admindown=0;
 my @checkperf_out_raw=undef;
 my @checkperf_out=undef;
 my $checkval_out=undef;
@@ -1871,10 +1894,14 @@ for (my $i=0;$i < $num_int; $i++) {
 
   # Get the status of the current interface
   my $int_status = $ok_val;
+  my $admin_int_status = $ok_val;
   if (!defined($o_ignorestatus)) {
     if (!$no_snmp) {
 	$interfaces[$i]{'admin_up'} = $$result{$admin_table.$tindex[$i]} if exists($$result{$admin_table.$tindex[$i]});
 	$interfaces[$i]{'oper_up'} = $$result{$oper_table.$tindex[$i]} if exists($$result{$oper_table.$tindex[$i]});
+    }
+    if (defined($o_admindown_ok) && exists($interfaces[$i]{'admin_up'})) {
+        $admin_int_status = $interfaces[$i]{'admin_up'};
     }
     if (defined($o_admin) && exists($interfaces[$i]{'admin_up'})) {
 	$interfaces[$i]{'up_status'} = $interfaces[$i]{'admin_up'};
@@ -2249,7 +2276,8 @@ for (my $i=0;$i < $num_int; $i++) {
       }
     }
     # WL: modified to not write the file if both -P and -T options are used
-    if (defined($temp_file_name) && ($o_filestore || !$o_prevperf || !$o_prevtime)) {
+    # -z option used: don't write the tmp file
+    if (defined($temp_file_name) && !defined($o_zerothresholds) && ($o_filestore || !$o_prevperf || !$o_prevtime)) {
       if (($_=write_file($temp_file_name,$n_rows,$n_items_check,@prev_values))!=0) {
         $final_status=3;
         $print_out.= " !!Unable to write file ".$temp_file_name." !! ";
@@ -2284,7 +2312,7 @@ for (my $i=0;$i < $num_int; $i++) {
       }
       $print_out .= ")";
     } 
-    else { # Return unknown when no data
+    elsif (!defined($o_zerothresholds)) { # Return unknown when no data
       $print_out.= " (no usable data - ".$n_rows." rows) ";
       # WL: I've removed return of UNKNOWN if no data is available, only when plugin is first run that may well happen
       # $final_status=3;
@@ -2298,6 +2326,9 @@ for (my $i=0;$i < $num_int; $i++) {
   # $descr[$i] =~ s/'\/\(\)/_/g;
   if ((($int_status == $ok_val) || (defined($o_dormant) && $int_status == 5)) && $int_status_opt==0) {
     $num_ok++;
+  } elsif (defined($o_admindown_ok) && $ok_val==1 && !$o_admin && $int_status == 2 && $admin_int_status == 2) {
+    # we want to check for operational UP interfaces, so don't check those that are supposed to be down (administratively down)
+    $num_admindown++;
   }
   # WL: [TODO] I think 'int_status==1' check below and above (when doing actual bandwidth checks)
   #     should be removed and performance values processed no matter what status interface has. [DONE: removed]
@@ -2358,13 +2389,13 @@ for (my $i=0;$i < $num_int; $i++) {
 	}
     }
     # output in octet counter
-    if (defined($o_perfo) || (defined($o_prevperf) && !defined($o_nagios4))) {
+    if (defined($o_perfo) || (defined($o_prevperf) && !defined($o_nagios_saveddata))) {
         $perf_out .= " ".perf_name($descr,"in_octet")."=". $interfaces[$i]{'in_bytes'}."c";
         $perf_out .= " ".perf_name($descr,"out_octet")."=". $interfaces[$i]{'out_bytes'}."c";
         # $perf_out .= " ".perf_name($descr,"in_octet")."=". $$resultf{$oid_perf_inoct[$i]} ."c" if defined($oid_perf_inoct[$i]) && defined($$resultf{$oid_perf_inoct[$i]});
         # $perf_out .= " ".perf_name($descr,"out_octet")."=". $$resultf{$oid_perf_outoct[$i]} ."c" if defined($oid_perf_outoct[$i]) && defined($$resultf{$oid_perf_outoct[$i]});
     }
-    if (defined($o_prevperf) && defined($o_nagios4)) {
+    if (defined($o_prevperf) && defined($o_nagios_saveddata)) {
         $saved_out .= " ".perf_name($descr,"in_octet")."=". $interfaces[$i]{'in_bytes'};
         $saved_out .= " ".perf_name($descr,"out_octet")."=". $interfaces[$i]{'out_bytes'};
     }
@@ -2450,11 +2481,15 @@ alarm(0);
 # WL: partially rewritten these last steps to minimize amount of code
 # Check if all interface are OK
 my $exit_status="UNKNOWN";
-if ($num_ok == $num_int) {
+if (($num_ok == $num_int) || (defined($o_admindown_ok) && $num_ok+$num_admindown == $num_int) ) {
   $exit_status="OK" if $final_status==0;
   $exit_status="WARNING" if $final_status==1;
   $exit_status="CRITICAL" if $final_status==2;
-  print $print_out,":(", $num_ok, " UP): $exit_status";
+  if (defined($o_admindown_ok)) {
+     print $print_out," ($num_ok UP, $num_admindown ADMIN DOWN): $exit_status";
+  } else {
+     print $print_out," ($num_ok UP): $exit_status";
+  }
 }
 # print the not OK interface number and exit (return is always critical if at least one int is down)
 else {
@@ -2463,7 +2498,7 @@ else {
 }
 print " | ",$perf_out if defined($perf_out) && $perf_out;
 if (defined($saved_out) && $saved_out) {
-	print " ||" if defined($o_nagios4);
+	print " ||" if defined($o_nagios_saveddata);
 	print $saved_out;
 }
 print "\n";

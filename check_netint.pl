@@ -1483,7 +1483,7 @@ if ($no_snmp) {
    my $os = `uname`;
    chomp $os;
    if ($os eq "Linux") {
-        $shell_command = 'ifconfig -a';
+        $shell_command = '/sbin/ifconfig -a';
    }
    else {
 	printf("Only Linux is currently support for local interfaces\n");

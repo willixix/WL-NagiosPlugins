@@ -2837,11 +2837,11 @@ if (defined($o_repdelay) && defined($nlib->vardata('master_last_io_seconds_ago')
 	if (!defined($repl_delay) || $repl_delay < $nlib->vardata('master_last_io_seconds_ago')) {
 	    $repl_delay = $nlib->vardata('master_last_io_seconds_ago');
 	}
-	if (defined($repl_delay) && $repl_delay!=0) {
+	if (defined($repl_delay) && $repl_delay>=0) {
 	    $nlib->add_data('replication_delay',$repl_delay);
-	    $nlib->addto_statusdata_output('replication_delay',sprintf("replication_delay is %.2f%%", $nlib->varadata('replication_delay')));
+	    $nlib->addto_statusdata_output('replication_delay',sprintf("replication_delay is %d", $nlib->vardata('replication_delay')));
 	    if (defined($o_perf)) {
-		$nlib->set_perfdata('replication_delay',sprintf("replication_delay=%.4f%%", $nlib->vardata('replication_delay')));
+		$nlib->set_perfdata('replication_delay',sprintf("replication_delay=%d", $nlib->vardata('replication_delay')));
 	    }
 	}
     }

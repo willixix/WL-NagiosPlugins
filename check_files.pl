@@ -3,8 +3,8 @@
 # ============================== SUMMARY =====================================
 #
 # Program : check_files.pl 
-# Version : 0.35
-# Date    : Aug 21, 2012
+# Version : 0.36
+# Date    : Sep 20, 2012
 # Author  : William Leibzon - william@leibzon.org
 # Summary : This is a nagios plugin that checks directory and files
 #           file count and directory and file age
@@ -75,6 +75,9 @@
 # WARNING and CRITICAL alerts. If you want only CRITICAL specify WARNING as ~.
 # For example -a '~,60' would give CRITICAL alert if any file is older than minute
 #
+# Just '-a' will show how old found files are which was the behavior prior to 0.36
+# version even if -a was not given as an option.
+#
 # Additionally if you want performance output then use '-f' option. The plugin
 # will output number of files of each type and age of oldest and newest files.
 #
@@ -92,6 +95,8 @@
 #  [0.33] Apr 27, 2012 - Fixed bug with determining file ages
 #  [0.34] Jun 22, 2012 - Added better reporting of file age than just seconds
 #  [0.35] Aug 21, 2012 - Option '-T' was broken. Bug reported by Jeremy Mauro
+#  [0.36] Sep 20, 2012 - Made reporting of age optional only when -a option is given.
+#                        This is a suggestion by Bernhard Eisenschmid
 #
 # ========================== START OF PROGRAM CODE ============================
 
@@ -109,7 +114,7 @@ if ($@) {
  %ERRORS = ('OK'=>0,'WARNING'=>1,'CRITICAL'=>2,'UNKNOWN'=>3,'DEPENDENT'=>4);
 }
 
-my $Version='0.35';
+my $Version='0.36';
 
 my $o_help=     undef;          # help option
 my $o_timeout=  10;             # Default 10s Timeout
@@ -144,7 +149,7 @@ sub verb { my $t=shift; print $t,"\n" if defined($o_verb) ; }
 sub print_version { print "$0: $Version\n" };
 
 sub print_usage {
-	print "Usage: $0 [-v] [-t <timeout>] -D <directory> -F <files to check> -w <warn level(s)> -c <crit level(s)> [-a <warn age>,<crit age>] [-f] [-r] [-l] [-T files|dir] [-L label] [-V] [-I | -C <cmd that does 'ls -l>']\n";
+	print "Usage: $0 [-v] [-t <timeout>] -D <directory> -F <files to check> -w <warn level(s)> -c <crit level(s)> [-a [<warn age>,<crit age>]] [-f] [-r] [-l] [-T files|dir] [-L label] [-V] [-I | -C <cmd that does 'ls -l>']\n";
 }
 
 # Return true if arg is a number - in this case negative and real numbers are not allowed
@@ -292,7 +297,8 @@ sub help {
 	Critical level(s) (if more than one file spec, must have multiple values)
 	Critical values can have the same prefix modifiers as warning
 	(see above) except '^'
--a, --age=WARN[,CRIT]
+-a, --age[=WARN[,CRIT]]
+	Show file age if no WARN/CRIT threshold parameter specified.
 	Check to make sure files are not older than the specified threshold(s).
 	This number is in seconds. Though you probably will not want to use it,
 	thresnold does supports same spec format as in -w and -c
@@ -395,8 +401,8 @@ sub check_options {
     }
     if (defined($o_age)) {
 	my @agetemp = split(',',$o_age);
-	$o_age_warn = parse_threshold($agetemp[0]);
-	$o_age_crit = parse_threshold($agetemp[1]) if defined($agetemp[1]);
+	$o_age_warn = parse_threshold($agetemp[0]) if defined($agetemp[0]) && $agetemp[0] ne '';
+	$o_age_crit = parse_threshold($agetemp[1]) if defined($agetemp[1]) && $agetemp[1] ne '';
     }
     if (defined($o_filetype)) {
 	$o_filetype = lc $o_filetype;
@@ -635,7 +641,7 @@ for ($i=0;$i<scalar(@o_filesL);$i++) {
 	  $perfdata .= ';'.$o_critL[$i][5] if $o_critL[$i][5] ne '';
     }
 }
-if (defined($o_perf)) {
+if (defined($o_perf) && defined($o_age)) {
 	$oldest_secold=0 if !defined($oldest_secold);
 	$newest_secold=0 if !defined($newest_secold);
 	$perfdata .= " age_oldest=".$oldest_secold."s";

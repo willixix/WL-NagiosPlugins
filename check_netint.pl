@@ -3,8 +3,8 @@
 # =============================== SUMMARY =====================================
 #
 # Program : check_netint.pl or check_snmp_netint.pl
-# Version : 2.4 alpha 3 
-# Date    : Sep 14, 2012
+# Version : 2.4 alpha 4
+# Date    : Sep 28, 2012
 # Maintainer: William Leibzon - william@leibzon.org,
 # Authors : See "CONTRIBUTORS" documentation section
 # Licence : GPL - summary below, full text at http://www.fsf.org/licenses/gpl.txt
@@ -514,11 +514,11 @@
 #		       Due to this plugin now require Text::ParseWords perl library.
 #		    4) List of contributors created as a separate header section below.
 #
-# [2.4] alpha 	    This version will support getting data from network interfaces on
+# [2.4] alpha/beta  This version will support getting data from network interfaces on
 #		    the local machine rather than just by SNMP. It will also support
 #		    gettind data on average traffic (50-percentalile) and being able
 #		    to specify threshold based on deviation from this average. There
-#		    likely to be several alpha versions before official 2.4 release.
+#		    will be several alpha and beta versions before official 2.4 release.
 #
 # 2.4a1 - 07/07/12 - Implemented in this release:
 #		    1) The plugin has been renamed "check_netint" from "check_snmp_netint".
@@ -537,18 +537,15 @@
 #		    4) Many doc and code fixes and cleanups all over
 # 2.4a2 - 08/15/12 - Fixed bug with cache of previous data for SNMP queries that came
 #		     around due to change in logic and introduction of non-SNMP.
-#		     Added experimental support for future Nagios 4.0 or 5.0 SAVEDDATA
-#		     feature (plugin output after || after perfdata).
-#		     Enabled with --nagios_with_saveddata option
+#		     Added experimental support for future Nagios SAVEDDATA feature
+#		     (plugin output after || after perfdata) enabled with --nagios_with_saveddata
 # 2.4a3 - 09/13/12 - patch/contrib by Franky Van Liedekerke:
 #		     1) Added option --admindown_ok: when checking for operational UP
 #                       interfaces, the interfaces that are administratively down are OK
 #                    2) The '-z' option now also prevents tmp files of being written
 #                       and removes the 'no usable data' warning because of missing perf data
-#
-#		     Note: --admindown_ok will not work locally (for non-SNMP),
-#			     supporting this will have to be added to TODO list for
-#			     finishing 2.4 release
+# 2.4a4 - 09/28/12 - additional patch by FVL for --admindown_ok, option also got -K one-letter alias
+#		     added determining interface speed on linux with ethtool and iwconfig
 #
 # ============================ LIST OF CONTRIBUTORS ===============================
 #
@@ -617,12 +614,12 @@ my $out_octet_table_64 = '1.3.6.1.2.1.31.1.1.1.10.';
 my $out_error_table = '1.3.6.1.2.1.2.2.1.20.';
 my $out_discard_table = '1.3.6.1.2.1.2.2.1.19.';
 
-# WL: I reverse hash array meaning so that human-redable name can be used to assign status instead
-#     of numeric value second array is used for reversing it back when doing status line output
+# WL: I reversed hash array meaning so that human-redable name can be used to assign status instead
+#     of numeric value. Second array is used for reversing it back when doing status line output
 my %status=('UP'=>1,'DOWN'=>2,'TESTING'=>3,'UNKNOWN'=>4,'DORMANT'=>5,'NotPresent'=>6,'lowerLayerDown'=>7);
 my %status_print=(1=>'UP',2=>'DOWN',3=>'TESTING',4=>'UNKNOWN',5=>'DORMANT',6=>'NotPresent',7=>'lowerLayerDown');
 
-# WL: For use in Cisco CATOS special hacks, enable use with "--cisco"
+# WL: These are in use for Cisco CATOS special hacks, enable use with "--cisco"
 my $cisco_port_name_table='1.3.6.1.4.1.9.5.1.4.1.1.4';     # table of port names (the ones you set with 'set port name')
 my $cisco_port_ifindex_map='1.3.6.1.4.1.9.5.1.4.1.1.11';   # map from cisco port table to normal SNMP ifindex table
 my $cisco_port_linkfaultstatus_table='1.3.6.1.4.1.9.5.1.4.1.1.22.'; # see table below for possible codes
@@ -633,7 +630,7 @@ my %cisco_port_linkfaultstatus=(1=>'UP',2=>'nearEndFault',3=>'nearEndConfigFail'
 my %cisco_port_operstatus=(0=>'operstatus:unknown',1=>'operstatus:other',2=>'operstatus:ok',3=>'operstatus:minorFault',4=>'operstatus:majorFault');
 my %cisco_port_addoperstatus=(0=>'other',1=>'connected',2=>'standby',3=>'faulty',4=>'notConnected',5=>'inactive',6=>'shutdown',7=>'dripDis',8=>'disable',9=>'monitor',10=>'errdisable',11=>'linkFaulty',12=>'onHook',13=>'offHook',14=>'reflector');
 
-# STP Information (only tested with Cisco but should work with many other switches too)
+# STP Information (only tested with Cisco but should work with other vendor switches too)
 my $stp_dot1dbase_ifindex_map='1.3.6.1.2.1.17.1.4.1.2';	   # map from dot1base port table to SNMP ifindex table
 my $stp_dot1dbase_portstate='1.3.6.1.2.1.17.2.15.1.3.';	   # stp port states
 my %stp_portstate=('0'=>'unknown',1=>'disabled',2=>'blocking',3=>'listening',4=>'learning',5=>'forwarding',6=>'broken');
@@ -689,7 +686,7 @@ my $o_perfr=            undef;  # output performance data in bits/s or Bytes/s (
 my $o_perfo=            undef;  # output performance data in octets (-Z)
 
 # WL: These are for previous performance data that nagios can send data to the plugin
-# with $SERVICEPERFDATA$ macro (and starting with Nagios 4.0 $SERVICESAVEDDATA$ macro).
+# with $SERVICEPERFDATA$ macro (and $SERVICESAVEDDATA$ for future naios versions).
 # This allows to calculate traffic without temporary file and also used to cache
 # SNMP table info so as not to retreive it every time 
 my $o_prevperf=		undef;	# performance data given with $SERVICEPERFDATA$ macro
@@ -787,7 +784,7 @@ sub write_file {
 sub p_version { print "check_snmp_netint version : $Version\n"; }
 
 sub print_usage {
-    print "Usage: $0 [-v [debugfilename]] -H <host> (-C <snmp_community> [-2]) | (-l login -x passwd [-X pass -L <authp>,<privp>)  [-p <port>] [-N <desc table oid>] -n <name in desc_oid> [-O <comments table OID>] [-I] [-i | -a | -D] [-r] [-f[eSyYZ] [-P <previous perf data from nagios \$SERVICEPERFDATA\$>] [-T <previous time from nagios \$LASTSERVICECHECK\$>] [--pcount=<hist size in perf>]] [-k[qBMGu] [-S [intspeed]] -g [-w<warn levels> -c<crit levels> [-z]| -z] -d<delta>] [-o <octet_length>] [-m|-mm] [-t <timeout>] [-s] [--label] [--cisco=[oper,][addoper,][linkfault,][use_portnames|show_portnames]] [--stp[=<expected stp state>]] [-V]\n";
+    print "Usage: $0 [-v [debugfilename]] -H <host> (-C <snmp_community> [-2]) | (-l login -x passwd [-X pass -L <authp>,<privp>)  [-p <port>] [-N <desc table oid>] -n <name in desc_oid> [-O <comments table OID>] [-I] [-i | -a | -D | -K] [-r] [-f[eSyYZ] [-P <previous perf data from nagios \$SERVICEPERFDATA\$>] [-T <previous time from nagios \$LASTSERVICECHECK\$>] [--pcount=<hist size in perf>]] [-k[qBMGu] [-S [intspeed]] -g [-w<warn levels> -c<crit levels> [-z]| -z] -d<delta>] [-o <octet_length>] [-m|-mm] [-t <timeout>] [-s] [--label] [--cisco=[oper,][addoper,][linkfault,][use_portnames|show_portnames]] [--stp[=<expected stp state>]] [-V]\n";
 }
 
 sub isnnum { # Return true if arg is not a number
@@ -803,7 +800,7 @@ sub ascii_to_hex { # Convert each ASCII character to a two-digit hex number [WL]
 
 sub help {
    print "\nNetwork Interfaces Monitor Plugin for Nagios (check_netint/check_snmp_netint) v. ",$Version,"\n";
-   print "GPL 2.0/3.0 licence, (c)2004-2007 Patrick Proy, (c)2007-2012 William Leibzon\n";
+   print "GPL 2.0 or 3.0 licence, (c)2004-2007 Patrick Proy, (c)2007-2012 William Leibzon\n";
    print "Please see documentation for a full list of authors and contributors\n\n";
    print_usage();
    print <<EOT;
@@ -837,7 +834,7 @@ Interface Selection and Status Output options:
 -s, --short=int
    Make the output shorter : only the first <n> chars of the interface(s)
    If the number is negative, then get the <n> LAST characters.
---admindown_ok
+-K, --admindown_ok
    Indicate that administrative down status is OK for operational
    interfaces that are down
 
@@ -918,7 +915,7 @@ Options for saving results of previous checks to calcuate Traffic & Utilization:
    If parameter is a filename then it is used as a first part in
    how temporary file is named.
 --nagios_with_saveddata
-   Enables experimental support for future Nagios 4.0 SAVEDATA (output after ||)
+   Enables experimental support for future Nagios SAVEDATA (output after ||)
    where cached data for next plugin use goes to special buffer and not PERFDATA
    [THIS IS AN EXPERIMENTAL OPTION THAT MAY BE REMOVED IN THE FUTURE]
 
@@ -1054,7 +1051,7 @@ sub check_options {
 	'a'	=> \$o_admin,		'admin'		=> \$o_admin,
 	'D'     => \$o_dormant,         'dormant'       => \$o_dormant,
         'I'     => \$o_ignorestatus,    'ignorestatus'  => \$o_ignorestatus,
-	'admindown_ok' => \$o_admindown_ok,
+	'K'	=> \$o_admindown_ok,	'admindown_ok'	=> \$o_admindown_ok,
 	'r'	=> \$o_noreg,		'noregexp'	=> \$o_noreg,
 	'V'	=> \$o_version,		'version'	=> \$o_version,
         'f'     => \$o_perf,            'perfparse'     => \$o_perf,
@@ -1278,7 +1275,7 @@ sub check_options {
     $expected_speed = $expected_speed*1000 if $expected_speed!=0 && $o_perfs =~ /Kb/;
 }
 
-# new function from code that checks if interface name name matches name given with -n option
+# new function from code that checks if interface name matches name given with -n option
 sub int_name_match {
     my $name = shift;
 
@@ -1359,6 +1356,24 @@ sub create_snmp_session {
 	verb(" new max octets:: $oct_test");
   }
   return $session;
+}
+
+sub exec_shell_command {
+  my $shell_command = shift;
+  
+  verb("Executing: $shell_command");
+  $shell_pid=open(SHELL_DATA, "$shell_command 2>&1 |");
+  if (!$shell_pid) {
+      print "UNKNOWN ERROR - could not execute $shell_command - $!";
+      exit $ERRORS{'UNKNOWN'};
+  }
+  return \*SHELL_DATA;
+}
+
+sub finish_shell_command {
+  my $file_ref = shift;
+  close $file_ref;
+  $shell_pid = undef;
 }
 
 ########## MAIN #######
@@ -1478,23 +1493,14 @@ verb("Filter : $o_descr") if defined($o_descr);
 
 # New code to get data from local machine about its interfaces if we're not doing SNMP
 if ($no_snmp) {
+   my $linux_ifconfig = "/sbin/ifconfig";
+   my $linux_ethtool = "/sbin/ethtool";
+   my $linux_iwconfig = "/sbin/iwconfig";
    # try to get data on a local server
    my $shell_command;
    my $os = `uname`;
+   my $shell_ref = undef;
    chomp $os;
-   if ($os eq "Linux") {
-        $shell_command = '/sbin/ifconfig -a';
-   }
-   else {
-	printf("Only Linux is currently support for local interfaces\n");
-	exit $ERRORS{"UNKNOWN"};
-   }
-   verb("Executing: $shell_command");
-   $shell_pid=open(SHELL_DATA, "$shell_command 2>&1 |");
-   if (!$shell_pid) {
-	print "UNKNOWN ERROR - could not execute $shell_command - $!";
-	exit $ERRORS{'UNKNOWN'};
-   }
 
    # Linux output of "ifconfig":
    #
@@ -1517,6 +1523,17 @@ if ($no_snmp) {
    #
    # (these are packets, so should multiply by MTU but size may actually different)
    #
+   # Linux output of "ip link show" :
+   #
+   # 1: lo: <LOOPBACK,UP,LOWER_UP> mtu 16436 qdisc noqueue state UNKNOWN 
+   #    link/loopback 00:00:00:00:00:00 brd 00:00:00:00:00:00
+   # 2: eth0: <NO-CARRIER,BROADCAST,MULTICAST,UP> mtu 1500 qdisc pfifo_fast state DOWN qlen 1000
+   #    link/ether f0:de:f1:76:83:df brd ff:ff:ff:ff:ff:ff
+   # 3: wlan0: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc mq state UP qlen 1000
+   #    link/ether a0:88:b4:97:9b:d4 brd ff:ff:ff:ff:ff:ff
+   # 4: virbr0: <NO-CARRIER,BROADCAST,MULTICAST,UP> mtu 1500 qdisc noqueue state DOWN 
+   #    link/ether 86:cd:48:f1:05:ad brd ff:ff:ff:ff:ff:ff
+
    # FREEBSD output of "ifconfig" :
    #
    # plip0: flags=8810<POINTOPOINT,SIMPLEX,MULTICAST> metric 0 mtu 1500
@@ -1560,46 +1577,106 @@ if ($no_snmp) {
    #      };
    #};
    # #close(NETSTAT);
-   #
-   $num_int=0;
-   my $int_lines=0;
-   while (<SHELL_DATA>) {
-	chomp;
-	verb("got line: $_");
-	my @words = split;
-	if (!$int_lines && scalar(@words)>2 && $words[1] eq 'Link') {
+
+   # AIX ('entstat -d ent0' equivalent to ethtool
+   # San Solaris (link_speed will return 0 for 10mbit and 1 for 100mbit
+   #              link_mode will return 0 for half duplex and 1 for full duplex)
+   #              Example: if you want the speed for /dev/hme2, you issue:  
+   #                  /usr/sbin/ndd -set /dev/hme instance 2
+   #                  /usr/sbin/ndd /dev/hme link_speed
+   # Also see: https://cfengine.com/forum/read.php?3,27223
+
+   if ($os ne "Linux") {
+	printf("Only Linux is currently supported for local interfaces\n");
+	exit $ERRORS{"UNKNOWN"};
+   }
+   # This is for linux, may want to move to separate function later
+   else {
+        $shell_ref = exec_shell_command("$linux_ifconfig -a");
+
+	$num_int=0;
+	my $int_lines=0;
+	while (<$shell_ref>) {
+	    chomp;
+	    verb("got line: $_");
+	    my @words = split;
+	    if (!$int_lines && scalar(@words)>2 && $words[1] eq 'Link') {
 		if (int_name_match($words[0])) {
 		    $interfaces[$num_int] = { 
-			  'descr' => $words[0], 'admin_up'=> $status{'DOWN'}, 'oper_up'=> $status{'DOWN'}, # considered common
+			  'descr' => $words[0], 'admin_up'=> $status{'DOWN'}, 'oper_up'=> $status{'DOWN'}, # considered common between SNMP and local checks
 			  'in_bytes' => 0, 'out_bytes' => 0, 'in_packets' => 0, 'out_packets' => 0,  # considered common, but packets are not used
 			  'in_errors' => 0, 'out_errors' => 0, 					     # considered common
-			  'in_dropped' => 0, 'out_dropped' => 0,				     # common, same as discards
+			  'in_dropped' => 0, 'out_dropped' => 0,				     # common, same as discards for SNMP
 			  'in_overruns' => 0, 'out_overruns' => 0,  				     # added to errors if not 0
 			  'collisions' => 0, 'txqueuelen' => 0, 'metric' => 0, 'MTU'=>0		     # linux-specific names, not really used
 		    };
 		    $int_lines=1;
 		}
-	}
-	elsif ($int_lines && scalar(@words)<2) {
+	    }
+	    elsif ($int_lines && scalar(@words)<2) {
 		$int_lines=0;
 		$num_int++;
-	}
-	elsif ($int_lines) {
-	    my $prefix="";
-	    foreach(@words) {
-		if ($_ eq "RX") { $prefix = "in_"; }
-		elsif ($_ eq "TX") { $prefix = "out_"; }
-		elsif ($_ eq "UP") { $interfaces[$num_int]{'admin_up'} = $status{'UP'}; }
-		elsif ($_ eq "RUNNING") { $interfaces[$num_int]{'oper_up'} = $status{'UP'}; }
-		elsif ($_ =~ /^(.*):(\d+)/) { 
+	    }
+	    elsif ($int_lines) {
+		my $prefix="";
+		foreach(@words) {
+		    if ($_ eq "RX") { $prefix = "in_"; }
+		    elsif ($_ eq "TX") { $prefix = "out_"; }
+		    elsif ($_ eq "UP") { $interfaces[$num_int]{'admin_up'} = $status{'UP'}; }
+		    elsif ($_ eq "RUNNING") { $interfaces[$num_int]{'oper_up'} = $status{'UP'}; }
+		    elsif ($_ =~ /^(.*):(\d+)/) { 
 			verb("   interface #".$num_int." (".$interfaces[$num_int]{'descr'}.") : ".$prefix.$1." = ".$2);
 			$interfaces[$num_int]{$prefix.$1} = $2;
 			$interfaces[$num_int]{$prefix.'errors'} += $2 if ($1 eq 'overruns');
+		    }
+		}
+	    }
+	}
+	finish_shell_command($shell_ref);
+	if (-f $linux_iwconfig) {
+	    my %wint = ();
+	    my $cint = undef;
+	    $shell_ref = exec_shell_command($linux_iwconfig);
+	    while (<$shell_ref>) {
+		chomp;
+		verb("got line: $_");
+		if ($_ eq "") {
+		    verb("   end interface $cint") if defined($cint);
+		    $cint = undef if defined($cint);
+		}
+		elsif (/^(\w+)\s+IEEE/) {
+		    verb("   start interface $1");
+		    $cint = $1;
+		}
+		elsif (/\s+Bit\sRate\=(\d+)\s+Mb/) {
+		    verb("   speed of ".$cint." is ".$1." Mb/s") if defined($cint);
+		    $wint{$cint} = $1 if defined($cint);
+		}
+	    }
+	    finish_shell_command($shell_ref);
+	    if (scalar(keys %wint)>0) {
+		for (my $i=0;$i<$num_int;$i++) {
+		   if (exists($wint{$interfaces[$i]{'descr'}})) {
+		      $interfaces[$i]{'portspeed'} = $wint{$interfaces[$i]{'descr'}} *1024*1024;
+		      verb("   speed of interface ".$interfaces[$i]{'descr'}." is ".$interfaces[$i]{'portspeed'}." bps");
+		   }
+		}
+	    }
+	}
+	if (-f $linux_ethtool) {
+	    for (my $i=0;$i < $num_int; $i++) {
+		if ($interfaces[$i]{'admin_up'} == $status{'UP'} && $interfaces[$i]{'oper_up'} == $status{'UP'}) {
+		   $shell_ref = exec_shell_command("$linux_ethtool ".$interfaces[$i]{'descr'});
+		   while(<$shell_ref>) {
+		      if (/Speed:\s(\d+)Mb/) {
+			  $interfaces[$i]{'portspeed'} = $1 *1024*1024;
+			  verb("   speed of interface ".$interfaces[$i]{'descr'}." is ".$interfaces[$i]{'portspeed'}." bps");
+		      }
+		   }
 		}
 	    }
 	}
    }
-   close(SHELL_DATA);
 }
 elsif (scalar(@tindex)==0) {
    # WL: Get cisco port->ifindex map table
@@ -1744,7 +1821,7 @@ if (!$no_snmp) {
 	 $oid_perf_outerr[$i]= $out_error_table . $tindex[$i];
        }
      }
-     if ($check_speed && (!defined($interfaces[$i]{'portspeeed'}) || !defined($o_maxminsnmp))) {
+     if ($check_speed && (!defined($interfaces[$i]{'portspeed'}) || !defined($o_maxminsnmp))) {
          $oid_speed[$i]=$speed_table . $tindex[$i];
          $oid_speed_high[$i]=$speed_table_64 . $tindex[$i];
      }
@@ -2091,7 +2168,7 @@ for (my $i=0;$i < $num_int; $i++) {
       $int_status_opt=2;
       $final_status=2;
   }
-  verb ("Interface speed : ".$interfaces[$i]{'portspeed'}) if defined($interfaces[$i]{'portspeed'});
+  verb ("Interface $i speed : ".$interfaces[$i]{'portspeed'}) if defined($interfaces[$i]{'portspeed'});
 
   # Make the bandwith & error checks if necessary 
   if (defined ($o_checkperf) && $int_status==1) {
@@ -2314,7 +2391,7 @@ for (my $i=0;$i < $num_int; $i++) {
     } 
     elsif (!defined($o_zerothresholds)) { # Return unknown when no data
       $print_out.= " (no usable data - ".$n_rows." rows) ";
-      # WL: I've removed return of UNKNOWN if no data is available, only when plugin is first run that may well happen
+      # WL: I've removed return of UNKNOWN if no data is available, when plugin is first run that may still happen
       # $final_status=3;
     }
   } 
@@ -2324,15 +2401,14 @@ for (my $i=0;$i < $num_int; $i++) {
   }
   # Get rid of special characters for performance in description
   # $descr[$i] =~ s/'\/\(\)/_/g;
-  if ((($int_status == $ok_val) || (defined($o_dormant) && $int_status == 5)) && $int_status_opt==0) {
+  if ((($int_status == $ok_val) || (defined($o_dormant) && $int_status == $status{'DORMANT'})) && $int_status_opt==0) {
     $num_ok++;
-  } elsif (defined($o_admindown_ok) && $ok_val==1 && !$o_admin && $int_status == 2 && $admin_int_status == 2) {
+  } elsif (defined($o_admindown_ok) && $ok_val==1 && !$o_admin && $int_status == $status{'DOWN'} && $admin_int_status == $status{'DOWN'}) {
     # we want to check for operational UP interfaces, so don't check those that are supposed to be down (administratively down)
     $num_admindown++;
   }
-  # WL: [TODO] I think 'int_status==1' check below and above (when doing actual bandwidth checks)
-  #     should be removed and performance values processed no matter what status interface has. [DONE: removed]
-  if (defined($interfaces[$i]{'descr'}) && (defined($o_perf) || defined($o_perfs) || defined($o_perfr) || defined($o_perfp) || defined($o_checkperf))) {
+  # Don't return performance data for interfaces that are down and are supposed to be down
+  if (!(defined($o_admindown_ok) && $ok_val==1 && $int_status == $status{'DOWN'} && $admin_int_status == $status{'DOWN'}) && defined($interfaces[$i]{'descr'}) && (defined($o_perf) || defined($o_perfs) || defined($o_perfr) || defined($o_perfp) || defined($o_checkperf))) {
     if (defined ($o_perfp)) { # output in % of speed
 	if ($usable_data==0) {
 	    $perf_out .= " ".perf_name($descr,"in_prct")."=";
@@ -2341,10 +2417,8 @@ for (my $i=0;$i < $num_int; $i++) {
 	    $perf_out .= (defined($o_crit_max[0]) && $o_crit_max[0]) ? $o_crit_max[0] . ";" : ";"; 
 	    $perf_out .= "0;100 ";
 	    $perf_out .= " ".perf_name($descr,"out_prct")."=";
-	    # [WL: 01/09/11]
-	    # This is what it was, I think this is left from before o_metric
-	    # and corresponding calculations were all reprogrammed
-	    # $perf_out .= sprintf("%.0f",$checkperf_out[1] * 800 / $portspeed[$i]) ."%;" if defined($checkperf_out[1]) && $portspeed[$i]!=0;
+	    # [WL: 01/09/11] This is what it was, I think this is left from before o_metric and corresponding calculations were all reprogrammed:
+	    #   $perf_out .= sprintf("%.0f",$checkperf_out[1] * 800 / $portspeed[$i]) ."%;" if defined($checkperf_out[1]) && $portspeed[$i]!=0;
 	    $perf_out .= sprintf("%.0f",$checkperf_out[1]) . '%;' if defined($checkperf_out[1]);
 	    $perf_out .= (defined($o_warn_max[1]) && $o_warn_max[1]) ? $o_warn_max[1] . ";" : ";";
 	    $perf_out .= (defined($o_crit_max[1]) && $o_crit_max[1]) ? $o_crit_max[1] . ";" : ";"; 
@@ -2402,8 +2476,8 @@ for (my $i=0;$i < $num_int; $i++) {
     if (defined ($o_perfe) && defined($o_ext_checkperf)) {
         $perf_out .= " ".perf_name($descr,"in_error")."=". $interfaces[$i]{'in_errors'};
         $perf_out .= " ".perf_name($descr,"out_error")."=". $interfaces[$i]{'out_errors'};
-        $perf_out .= " ".perf_name($descr,"in_discard")."=". $interfaces[$i]{'in_dropped'};
-        $perf_out .= " ".perf_name($descr,"out_discard")."=". $interfaces[$i]{'out_dropped'};
+        $perf_out .= " ".perf_name($descr,"in_discard")."=". $interfaces[$i]{'in_dropped'} if defined ($interfaces[$i]{'in_dropped'});
+        $perf_out .= " ".perf_name($descr,"out_discard")."=". $interfaces[$i]{'out_dropped'} if defined ($interfaces[$i]{'out_dropped'});
         # $perf_out .= " ".perf_name($descr,"in_error")."=". $$resultf{$oid_perf_inerr[$i]} ."c" if defined $$resultf{$oid_perf_inerr[$i]};
         # $perf_out .= " ".perf_name($descr,"in_discard")."=". $$resultf{$oid_perf_indisc[$i]} ."c" if defined $$resultf{$oid_perf_indisc[$i]};
         # $perf_out .= " ".perf_name($descr,"out_error")."=". $$resultf{$oid_perf_outerr[$i]} ."c" if defined $$resultf{$oid_perf_outerr[$i]};

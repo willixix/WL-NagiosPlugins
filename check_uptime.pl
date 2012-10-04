@@ -3,8 +3,8 @@
 # ============================== SUMMARY =====================================
 #
 # Program : check_uptime.pl
-# Version : 0.52
-# Date    : June 19, 2012
+# Version : 0.521
+# Date    : Oct 4, 2012
 # Authors : William Leibzon - william@leibzon.org
 # Licence : GPL - summary below, full text at http://www.fsf.org/licenses/gpl.txt
 #
@@ -144,6 +144,7 @@
 #			support to specify filename to '-v' option for debug
 #		        output to go to instead of console and for '--debug'
 #			option as an alias to '--verbose'.
+# 0.521 - Oct 4, 2012 : Small bug in one of regex, see issue #11 on github
 # 
 # TODO:
 #   0) Add '--extra-opts' to allow to read options from a file as specified
@@ -539,7 +540,7 @@ if ($check_type==1) {  # local
   elsif ($uptime_output =~ /up\s+(\d+)\s+min/) {
      ($days, $hrs, $mins) = (0,0,$1);
   }
-  elsif ($uptime_output =~ /up\s+(d+)s+days?,s+(d+)s+min/) {
+  elsif ($uptime_output =~ /up\s+(\d+)s+days?,s+(d+)s+min/) {
      ($days, $hrs, $mins) = ($1,0,$2);
   }
   else {

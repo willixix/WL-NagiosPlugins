@@ -2818,7 +2818,7 @@ my $hitrate_all=0;
 if (defined($o_hitrate) && defined($nlib->vardata('keyspace_hits')) && defined($nlib->vardata('keyspace_misses'))) {
     for $avar ('keyspace_hits', 'keyspace_misses') {
         if (defined($o_prevperf) && defined($o_perf)) {
-                $nlib->set_perfdata($avar,$avar."=".$nlib->vardata($avar));
+                $nlib->set_perfdata($avar,$avar."=".$nlib->vardata($avar),'c');
         }
         $hits_hits = $nlib->vardata('keyspace_hits') if $avar eq 'keyspace_hits';
         $hits_total += $nlib->vardata($avar);
@@ -2840,7 +2840,7 @@ if (defined($o_hitrate) && defined($nlib->vardata('keyspace_hits')) && defined($
 	$sdata .= sprintf(" (%.2f%% from launch)", $hitrate_all) if ($hitrate_all!=0);
 	$nlib->addto_statusdata_output('hitrate',$sdata);
 	if (defined($o_perf)) {
-		$nlib->set_perfdata('hitrate',"hitrate=$hitrate");
+		$nlib->set_perfdata('hitrate',"hitrate=$hitrate",'%');
 	}
      }
 }
@@ -2851,7 +2851,7 @@ if (defined($o_repdelay) && defined($nlib->vardata('master_last_io_seconds_ago')
     if ($nlib->vardata('role') eq 'slave') {
 	$repl_delay = $nlib->vardata('master_link_down_since_seconds');
 	if (!defined($repl_delay) || $repl_delay < $nlib->vardata('master_last_io_seconds_ago')) {
-	    $repl_delay = $nlib->vardata('master_last_io_seconds_ago');
+	    $repl_delay = $nlib->vardata('master_last_io_seconds_ago','s');
 	}
 	if (defined($repl_delay) && $repl_delay>=0) {
 	    $nlib->add_data('replication_delay',$repl_delay);
@@ -2875,7 +2875,7 @@ if (defined($o_memutilization) && defined($nlib->vardata('used_memory_rss'))) {
 	exit $ERRORS{"UNKNOWN"};
     }
     if (defined($o_perf) && defined($nlib->vardata('memory_utilization'))) {
-	$nlib->set_perfdata('memory_utilization',sprintf(" memory_utilization=%.4f", $nlib->vardata('memory_utilization')));
+	$nlib->set_perfdata('memory_utilization',sprintf(" memory_utilization=%.4f", $nlib->vardata('memory_utilization')),'%');
     }
     if (defined($nlib->vardata('used_memory_human')) && defined($nlib->vardata('used_memory_peak_human'))) {
 	my $sdata="memory use is ".$nlib->vardata('used_memory_human')." (";

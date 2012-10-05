@@ -3,8 +3,8 @@
 # ============================== SUMMARY =====================================
 #
 # Program : check_redis.pl
-# Version : 0.71
-# Date    : Sep 03, 2012
+# Version : 0.72
+# Date    : Oct 05, 2012
 # Author  : William Leibzon - william@leibzon.org
 # Licence : GPL - summary below, full text at http://www.fsf.org/licenses/gpl.txt
 #
@@ -361,6 +361,10 @@
 #		         Also added checkin 'master_last_io_seconds_ago' (when link is down)
 #			 for when replication_delay info is requested.
 #  [0.71 - Sep 03, 2012] Fixed bug in a new library related to when data is missing
+#  [0.72 - Oct 05, 2012] Fixed bug reported by Matt McMillan in specified memory size
+#			 when KB are used. Fixed bugs in adding performance data that
+# 			 results in keyspace_hits, keyspace_misses, memory_utilization
+#			 having double 'c' or '%' in perfdata. Added contributors section.
 #
 # TODO or consider for future:
 #
@@ -392,6 +396,17 @@
 #  and on Nagios conferences. More info on my nagios work is at:
 #         http://william.leibzon.org/nagios/
 #  Above site should also have PNP4Nagios template for this and other plugins.
+#
+# ============================ LIST OF CONTRIBUTORS ===============================
+#
+# The following individuals have contributed code, patches, bug fixes and ideas to
+# this plugin (listed in last-name alphabetical order):
+#
+#   William Leibzon
+#   Matthew Litwin
+#   Matt McMillan
+#   Jon Schulz
+#   M Spiegle
 #
 # ============================ START OF PROGRAM CODE =============================
 
@@ -430,6 +445,7 @@ my %KNOWN_STATUS_VARS = (
 	 'memory_utilization' => [ 'status', 'GAUGE', '%' ],      					# calculated by plugin
 	 'redis_version' => [ 'status', 'VERSION', '' ],						# version string variable
 	 'response_time' => [ 'status','GAUGE', 's' ],							# measured by plugin
+	 'hitrate' => [ 'status', 'GAUGE', '%' ],							# calculated by plugin
 	 'total_keys' => [ 'status','GAUGE', '', 'Total Number of Keys on the Server' ],
 	 'total_expires' => [ 'status','GAUGE', '', 'Number of Expired Keys for All DBs' ],
 	 'last_save_time' => [ 'status', 'GAUGE', 's' ],
@@ -2541,10 +2557,10 @@ sub check_options {
 	if ($o_totalmemory =~ /^(\d+)B/) {
 	   $o_totalmemory = $1;
 	}
-	elsif ($o_totalmemory =~ /^(\d+K)/) {
+	elsif ($o_totalmemory =~ /^(\d+)K/) {
 	   $o_totalmemory = $1*1024;
 	}
-	elsif ($o_totalmemory =~ /^(\d+M)/) {
+	elsif ($o_totalmemory =~ /^(\d+)M/) {
 	   $o_totalmemory = $1*1024*1024;
 	}
 	elsif ($o_totalmemory =~ /^(\d+)G/) {
@@ -2802,7 +2818,7 @@ my $hitrate_all=0;
 if (defined($o_hitrate) && defined($nlib->vardata('keyspace_hits')) && defined($nlib->vardata('keyspace_misses'))) {
     for $avar ('keyspace_hits', 'keyspace_misses') {
         if (defined($o_prevperf) && defined($o_perf)) {
-                $nlib->set_perfdata($avar,$avar."=".$nlib->vardata($avar).'c');
+                $nlib->set_perfdata($avar,$avar."=".$nlib->vardata($avar));
         }
         $hits_hits = $nlib->vardata('keyspace_hits') if $avar eq 'keyspace_hits';
         $hits_total += $nlib->vardata($avar);
@@ -2824,7 +2840,7 @@ if (defined($o_hitrate) && defined($nlib->vardata('keyspace_hits')) && defined($
 	$sdata .= sprintf(" (%.2f%% from launch)", $hitrate_all) if ($hitrate_all!=0);
 	$nlib->addto_statusdata_output('hitrate',$sdata);
 	if (defined($o_perf)) {
-		$nlib->set_perfdata('hitrate',"hitrate=$hitrate",'%');
+		$nlib->set_perfdata('hitrate',"hitrate=$hitrate");
 	}
      }
 }
@@ -2859,7 +2875,7 @@ if (defined($o_memutilization) && defined($nlib->vardata('used_memory_rss'))) {
 	exit $ERRORS{"UNKNOWN"};
     }
     if (defined($o_perf) && defined($nlib->vardata('memory_utilization'))) {
-	$nlib->set_perfdata('memory_utilization',sprintf(" memory_utilization=%.4f%%", $nlib->vardata('memory_utilization')));
+	$nlib->set_perfdata('memory_utilization',sprintf(" memory_utilization=%.4f", $nlib->vardata('memory_utilization')));
     }
     if (defined($nlib->vardata('used_memory_human')) && defined($nlib->vardata('used_memory_peak_human'))) {
 	my $sdata="memory use is ".$nlib->vardata('used_memory_human')." (";

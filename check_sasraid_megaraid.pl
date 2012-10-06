@@ -3,8 +3,8 @@
 # ============================== SUMMARY =====================================
 #
 # Program : check_sasraid_megaraid.pl (also known as check_megaraid.pl)
-# Version : 1.92
-# Date    : June 15, 2012
+# Version : 1.95alpha1 (this code is in development, it is not for production use)
+# Date    : Oct 5, 2012
 # Author  : William Leibzon - william@leibzon.org
 # Copyright: (C) 2002 ibiblio (C) 2006-2012 William Leibzon
 # Summary : This is a nagios plugin to monitor LSI MegaRAID and attached disks
@@ -168,10 +168,17 @@
 #   19. [1.92 - Jun 15, 2012] Bug fixes when no SNNP version is specified
 #	                      Verb function & option updated to allow debug info go to file
 #			      specified as a parameter to -v rather than just stdout
-#
+#   20. [1.95 - Oct ??, 2012] Patches and Additions
+#      merged pool request from goochjj: Added good_drives threshold check and ability to pull and show make and model of physical drives
+#      applied patch from Robert Wickman: Added BBU (battery) data
+#      TODO: 1) cleanup combined code
+#            2) add options to enable what they added (battery, model info)
+#	     3) add text header with list of all contributors
+#	     4) test and release as 1.95
+#		   
 # ========================== START OF PROGRAM CODE ===========================
 
-my $version = "1.92";
+my $version = "1.95";
 
 use strict;
 use Getopt::Long;
@@ -223,6 +230,7 @@ $alert,
 $code,			# code value returned by snmp
 $logdrv_id,		# drive id
 $phydrv_id,
+$battery_id,
 $nagios_status,		# nagios return status code, starts with "OK"
 $opt_H,
 $opt_p,
@@ -260,12 +268,14 @@ $phydrv_count,
 $phydrv_goodcount,
 $phydrv_badcount,
 $phydrv_bad2count,
+$battery_status_tableoid,
 $readfail_oid,
 $writefail_oid,
 $adpt_readfail_oid,
 $adpt_writefail_oid,
 %LOGDRV_CODES,
-%PHYDRV_CODES
+%PHYDRV_CODES,
+%BATTERY_CODES
 );
 
 # Functions
@@ -319,6 +329,12 @@ sub set_oids {
     $phydrv_mediumerrors_tableoid = $baseoid . ".5.1.4.2.1.2.1.7"; # mptfusion medium errors
     $phydrv_othererrors_tableoid = $baseoid . ".5.1.4.2.1.2.1.8";  # mptfusion other errors
 
+    %LOGDRV_CODES = ( 
+        0 => ['offline', 'volume is offline', 'NONE' ],
+        1 => ['degraded', 'parially degraded', 'CRITICAL' ],
+        2 => ['degraded', 'fully degraded', 'CRITICAL' ],
+        3 => ['optimal', 'functioning properly', 'OK' ]
+    );
     ## Status codes for phyisical drives - these are specifically for MPTFUSION
     %PHYDRV_CODES = (
         0 => ['unconfigured_good'],
@@ -328,12 +344,6 @@ sub set_oids {
         17 => ['failed'],
         20 => ['rebuild'],
         24 => ['online'],
-    );
-    %LOGDRV_CODES = ( 
-        0 => ['offline', 'volume is offline', 'NONE' ],
-        1 => ['degraded', 'parially degraded', 'CRITICAL' ],
-        2 => ['degraded', 'fully degraded', 'CRITICAL' ],
-        3 => ['optimal', 'functioning properly', 'OK' ]
     );
   }
   else { # $cardtype eq sasraid'
@@ -349,6 +359,14 @@ sub set_oids {
     $phydrv_goodcount = $baseoid . ".4.1.4.1.2.1.22"; #pdDiskPresentCount
     $phydrv_badcount = $baseoid . ".4.1.4.1.2.1.23"; #pdDiskPredFailureCount
     $phydrv_bad2count = $baseoid . ".4.1.4.1.2.1.24"; #pdDiskFailureCount
+    $battery_status_tableoid = $baseoid . ".4.1.4.1.6.2.1.27"; # battery replacement status
+
+    %LOGDRV_CODES = ( 
+        0 => ['offline', 'volume is offline', 'NONE' ],
+        1 => ['degraded', 'parially degraded', 'CRITICAL' ],
+        2 => ['degraded', 'fully degraded', 'CRITICAL' ],
+        3 => ['optimal', 'functioning properly', 'OK' ]
+    );
     ## Status codes for phyisical drives - these are specifically for SASRAID
     %PHYDRV_CODES = (
         0 => ['unconfigured_good'],
@@ -359,11 +377,10 @@ sub set_oids {
         20 => ['rebuild'],
         24 => ['online'],
     );
-    %LOGDRV_CODES = ( 
-        0 => ['offline', 'volume is offline', 'NONE' ],
-        1 => ['degraded', 'parially degraded', 'CRITICAL' ],
-        2 => ['degraded', 'fully degraded', 'CRITICAL' ],
-        3 => ['optimal', 'functioning properly', 'OK' ]
+    ## Status codes for battery replacement - these are specifically for SARAID
+    %BATTERY_CODES = (
+	1 => ['Battery OK'],
+	0 => ['Battery needs replacement']
     );
   }
 }
@@ -598,7 +615,7 @@ $SIG{'ALRM'} = sub {
 };
 alarm($timeout);
 
-my ($snmp_result,$logdrv_data_in,$phydrv_data_in,$phydrv_merr_in,$phydrv_oerr_in,$phydrv_vendor_in,$phydrv_product_in);
+my ($snmp_result,$logdrv_data_in,$phydrv_data_in,$phydrv_merr_in,$phydrv_oerr_in,$phydrv_vendor_in,$phydrv_product_in,$battery_data_in);
 
 $session = create_snmp_session();
 
@@ -643,6 +660,14 @@ if($phydrv_vendor_tableoid) {
 	$debug_time{snmpgettable_phydrvvendor}=time()-$debug_time{snmpgettable_phydrvvendor} if $opt_debugtime;
 	$error.= "could not retrieve snmp table $phydrv_vendor_tableoid" if !$phydrv_vendor_in && !$error;
 }
+
+
+# 4th are battery checks (only for sasraid right now)
+$debug_time{snmpgettable_batterystatus}=time() if $opt_debugtime;
+$battery_data_in = $session->get_table(-baseoid => $battery_status_tableoid) if !$error;
+$debug_time{snmpgettable_batterystatus}=time()-$debug_time{snmpgettable_batterytatus} if $opt_debugtime;
+$error.= "could not retrieve snmp table $phydrv_status_tableoid" if !$battery_data_in && !$error;
+
 
 # last are medium and "other" errors reported for physical drives
 if (defined($opt_drverrors) && defined($opt_perfdata) && !defined($opt_optimize)) {
@@ -870,6 +895,34 @@ foreach $line (Net::SNMP::oid_lex_sort(keys(%{$phydrv_data_in}))) {
 	}
 }
 
+# check battery replacement status
+foreach $line (Net::SNMP::oid_lex_sort(keys(%{$battery_data_in}))) {
+        $code = $battery_data_in->{$line};
+        if ($DEBUG) {
+                print "battery_status: $line = $code";
+        }
+        $line = substr($line,length($battery_status_tableoid)+1);
+        ($foo,$battery_id) = split(/\./,$line,2);
+	$battery_id=$foo if !$battery_id;
+        if ($DEBUG) {
+                print " | battery_id = $battery_id\n";
+        }
+
+        if (!defined($BATTERY_CODES{$code})) {
+                $output_data.=", " if $output_data;
+                $output_data.= "battery status($battery_id) unknown code $code";
+                $nagios_status = $alert; # maybe this should not be an alert???
+        }
+        elsif ($BATTERY_CODES{$code}[0] ne 'Battery OK') {
+                $output_data.= ", " if $output_data;
+                $output_data .= "battery status($battery_id) ".$BATTERY_CODES{$code}[0];
+                if ($BATTERY_CODES{$code}[0] eq 'Battery needs replacement') {
+                        $nagios_status = "WARNING" if $nagios_status eq "OK";
+                }
+       	}
+}
+
+
 # check logical drive status
 foreach $line (Net::SNMP::oid_lex_sort(keys(%{$logdrv_data_in}))) {
         $code = $logdrv_data_in->{$line};
@@ -966,7 +1019,7 @@ $debug_time{plugin_totaltime}=$debug_time{plugin_finish}-$debug_time{plugin_star
 
 # output text results
 $output_data.= " - " if $output_data;
-$output_data.= sprintf("%d logical disks, %d physical drives, %d controllers found, %s", scalar(keys %{$logdrv_data_in}), $phydrv_total, $num_controllers, $models);
+$output_data.= sprintf("%d logical disks, %d physical drives, %d controllers found (%s), %d batteries found", scalar(keys %{$logdrv_data_in}), $phydrv_total, $num_controllers, $models, scalar(keys %{$battery_data_in}));
 $output_data.= " - ". $output_data_end if $output_data_end;
 
 # netsaint doesn't like output strings larger than 256 chars

@@ -3,8 +3,8 @@
 # ============================== SUMMARY =====================================
 #
 # Program : check_sasraid_megaraid.pl (also known as check_megaraid.pl)
-# Version : 1.95alpha1 (this code is in development, it is not for production use)
-# Date    : Oct 5, 2012
+# Version : 1.95alpha2 (this code is in development, it is not for production use)
+# Date    : Oct 7, 2012
 # Author  : William Leibzon - william@leibzon.org
 # Copyright: (C) 2002 ibiblio (C) 2006-2012 William Leibzon
 # Summary : This is a nagios plugin to monitor LSI MegaRAID and attached disks
@@ -12,7 +12,7 @@
 #           Newer cards are called MTPFusion and many of these cards are
 #           sold by Dell under their own brand name 'PERC' (PERC3 - PERC6)
 #           Some are SCSI RAID cards and newer ones are SAS RAID cards.
-# Licence : GPL - summary below, full text at http://www.fsf.org/licenses/gpl.txt
+# Licence : GPL 3 - summary below, full text at http://www.fsf.org/licenses/gpl.txt
 # =========================== PROGRAM LICENSE ================================
 #
 # This program is free software; you can redistribute it and/or modify
@@ -40,10 +40,8 @@
 # Requires that Net::SNMP be installed on the machine performing the monitoring
 # and that the megaraid snmp agent be set up on the machine to be monitored.
 #
-# All latest versions are maintained by William Leibzon and released at:
+# This plugin is maintained by William Leibzon and released at:
 #    http://william.leibzon.org/nagios/
-# Original 0.8 version (last changed 2004) is by John Reuning, find it at:
-#    http://www.ibiblio.org/john/megaraid/
 #
 # =============================== SETUP NOTES ================================
 # 
@@ -169,13 +167,27 @@
 #	                      Verb function & option updated to allow debug info go to file
 #			      specified as a parameter to -v rather than just stdout
 #   20. [1.95 - Oct ??, 2012] Patches and Additions
-#      merged pool request from goochjj: Added good_drives threshold check and ability to pull and show make and model of physical drives
-#      applied patch from Robert Wickman: Added BBU (battery) data
-#      TODO: 1) cleanup combined code
-#            2) add options to enable what they added (battery, model info)
-#	     3) add text header with list of all contributors
+#      a. merged pool request from goochjj (John Gooch):
+#         Added good_drives threshold check and ability to pull and show make and model of physical drives
+#      b. applied patch from Robert Wickman (sent by email) that adds checking of BBU (battery) data
+#      TODO: 1) cleanup combined code [mostly done]
+#            2) add options to enable new data and not include by default (for battery, model info) [done]
+#	     3) add text header with list of all contributors [done]
 #	     4) test and release as 1.95
 #		   
+# ========================== LIST OF CONTRIBUTORS =============================
+#
+# The following individuals have contributed code, patches, bug fixes and ideas to
+# this plugin (listed in last-name alphabetical order):
+#
+#    Joe Gooch
+#    William Leibzon
+#    Vitaly Percharsky
+#    John Reuning
+#    Robert Wickman
+#
+# Open source community is grateful for all your contributions.
+#
 # ========================== START OF PROGRAM CODE ===========================
 
 my $version = "1.95";
@@ -232,11 +244,10 @@ $logdrv_id,		# drive id
 $phydrv_id,
 $battery_id,
 $nagios_status,		# nagios return status code, starts with "OK"
-$opt_H,
-$opt_p,
-$opt_t,
-$opt_a,
-$opt_P,
+$o_host,
+$o_port,
+$o_timeout,
+$opt_alert,
 $opt_gooddrives,
 $opt_snmpversion,
 $opt_debug,
@@ -255,6 +266,7 @@ $opt_optimize,
 $opt_extrainfo,
 $opt_baseoid,
 $opt_cardtype,
+$opt_battery,
 $o_help,
 $o_version,
 $logdrv_status_tableoid,
@@ -300,7 +312,7 @@ sub set_oids {
     $phydrv_mediumerrors_tableoid = $baseoid . ".1.1.3.1.12";    # megaraid medium errors
     $phydrv_othererrors_tableoid = $baseoid . ".1.1.3.1.15";     # megaraid other errors
     $phydrv_rebuildstats_tableoid = $baseoid . ".1.1.3.1.11";
-    $phydrv_product_tableoid = $baseoid . ".1.1.3.1.8";  # megaraid drive vendor+model
+    $phydrv_product_tableoid = $baseoid . ".1.1.3.1.8";  	 # megaraid drive vendor+model
     $readfail_oid = $baseoid . ".1.1.1.1.13";
     $writefail_oid = $baseoid . ".1.1.1.1.14";
     $adpt_readfail_oid = $baseoid . ".1.1.1.1.15";
@@ -328,6 +340,8 @@ sub set_oids {
     $phydrv_status_tableoid = $baseoid . ".5.1.4.2.1.2.1.10";      # mptfusion physical
     $phydrv_mediumerrors_tableoid = $baseoid . ".5.1.4.2.1.2.1.7"; # mptfusion medium errors
     $phydrv_othererrors_tableoid = $baseoid . ".5.1.4.2.1.2.1.8";  # mptfusion other errors
+    $phydrv_vendor_tableoid = $baseoid . ".5.1.4.2.1.2.1.24";      # mptfusion drive vendor (this needs to be verified)
+    $phydrv_product_tableoid = $baseoid . ".5.1.4.2.1.2.1.25";     # mptfusion drive model (this needs to be verified)
 
     %LOGDRV_CODES = ( 
         0 => ['offline', 'volume is offline', 'NONE' ],
@@ -352,8 +366,8 @@ sub set_oids {
     $phydrv_status_tableoid = $baseoid . ".4.1.4.2.1.2.1.10";      # sasraid physical
     $phydrv_mediumerrors_tableoid = $baseoid . ".4.1.4.2.1.2.1.7"; # sasraid medium errors
     $phydrv_othererrors_tableoid = $baseoid . ".4.1.4.2.1.2.1.8";  # sasraid other errors
-    $phydrv_vendor_tableoid = $baseoid . ".4.1.4.2.1.2.1.24";  # sasraid drive vendor
-    $phydrv_product_tableoid = $baseoid . ".4.1.4.2.1.2.1.25";  # sasraid drive model
+    $phydrv_vendor_tableoid = $baseoid . ".4.1.4.2.1.2.1.24";      # sasraid drive vendor
+    $phydrv_product_tableoid = $baseoid . ".4.1.4.2.1.2.1.25";     # sasraid drive model
     $phydrv_status_tableoid = $baseoid . ".4.1.4.2.1.2.1.10";      # sasraid physical
     $phydrv_count = $baseoid . ".4.1.4.1.2.1.21"; #pdPresentCount
     $phydrv_goodcount = $baseoid . ".4.1.4.1.2.1.22"; #pdDiskPresentCount
@@ -377,7 +391,7 @@ sub set_oids {
         20 => ['rebuild'],
         24 => ['online'],
     );
-    ## Status codes for battery replacement - these are specifically for SARAID
+    ## Status codes for battery replacement - these are specifically for SASRAID
     %BATTERY_CODES = (
 	1 => ['Battery OK'],
 	0 => ['Battery needs replacement']
@@ -404,16 +418,120 @@ sub verb {
     }
 }
 
+# version flag function
+sub print_version {
+	print "$0 version $version\n";
+}
+
+# display usage information
+sub print_usage {
+        print "Usage:\n";
+        print "$0 [-s <snmp_version>] -H <host> (-C <snmp_community>) | (-l login -x passwd [-X pass -L <authp>,<privp>) [-p <port>] [-t <timeout>] [-O <base oid>] [-a <alert level>] [--extra_info] [--check_battery] [--drive_errors -P <previous performance data> -S <previous state>] [-v [DebugLogFile] || -d [DebugLogFile]] [--debug_time] [--snmp_optimize] [-T megaraid|sasraid|perc3|perc4|perc5|perc6|mptfusion|sas6ir|sas6]\n";
+        print "$0 --version | $0 --help (use this to see better documentation of above options)\n";
+}
+
+sub usage {
+	print $_."\n" foreach @_;
+	print_usage();
+	exit $ERRORS{'UNKNOWN'};
+}
+
+# display help information
+sub help {
+        print_version();
+        print "GPL licence, (c)2002 iBiblio, (c) 2006-2012 William Leibzon\n";
+        print "This plugin uses SNMP to check logical and physical drive status of a RAID controllers\n";
+	print "sold under LSI, MPTFusion, Dell PERC Megaraid, Dell PERC SASRaid brands.\n";
+	print "\n";
+        print_usage();
+        print "\n";
+	print "Options:\n";
+	print "  -h, --help\n";
+	print "    Display help\n";
+	print "  -V, --version\n";
+	print "    Display version\n";
+	print "  -T, --controller_type <type>\n";
+	print "    Type of controller - can be: megaraid|sasraid|perc3|perc4|perc5|perc6|perch700|mptfusion|sas6ir|sas6\n";
+	print "    (megaraid=perc3,perc4; sasraid=perc5,perc6,perch700; mptfusion=sas6ir,sas6)\n";
+	print "  -a, --alert <alert level>\n";
+	print "    Alert status to use if an error condition is found\n";
+	print "    Accepted values are: \"crit\" and \"warn\" (defaults to crit)\n";
+	print "  -b, --check_battery\n";
+	print "    Check and print information on hard drive batteries (BBU). Only for sasraid card types\n"; 
+	print "  -i, --extra_info\n";
+	print "    Extra additional information in output. This includes rebuild rate, product & drive vendor names, etc\n";
+	print "  -o, --snmp_optimize\n";
+	print "	   Try to minimize number of SNMP queries replacing snmp_walk with retrieval of specific OIDs at once\n";
+	print "    !! EXPERIMENTAL, USE AT YOUR OWN RISK (and use --debug_time to make sure it is actually faster) !!!\n";
+	print "  -e, --drive_errors\n";
+	print "    Do additonal checks for medium and other errors on each drive.\n";
+	print "    This is about 2x as many SNMP check and so can slow plugin down.\n";
+	print "    !!! You will need to use pass to plugin previous PERF and STATE data with -P and -S options !!!\n";
+	print "  -P, --perf <performance data>\n";
+	print '    The results of previous check performance data ($SERVICEPERFDATA$ macro)'."\n";
+	print "    which contains number of medium and other errors that were before\n";
+	print "    if this is not the same now then ALERT is sent\n";
+	print "  -S, --state <STATE,STATETYPE>\n";
+	print "    If you use -P and you have notifications sent to be sent at > 1 alerts\n";
+	print "    then you need to send previous state and type (HARD or SOFT) and then\n";
+	print "    this plugin would continue to report non-OK state until STATETYPE changes\n";
+	print "    to HARD thereby making sure user receives NOTIFICATION\n";
+	print "    Proper use of this is have '-S ".'"$SERVICESTATE$,$SERVICESTATETYPE$"'."' in your commands.cfg\n";
+	print "\nSNMP Access Options:\n";
+        print "  -H, --hostname <host>\n";
+        print "    Hostname or IP address of target to check\n";
+	print "  -O, --oid <base oid>\n";
+	print "    Base OID for megaraid is .1.3.6.1.4.1.3582 and you almost never need to change it\n";
+	print "    (the only case is when you might is when you have both percsnmp and sassnmp cards)\n";
+        print "  -s, --snmp_version 1 | 2 | 2c | 3\n";
+        print "    Version of SNMP protocol to use (default is 1 if -C and 3 if -l specified)";
+        print "  -p, --port <port>\n";
+        print "    SNMP port (defaults to 161)\n";
+        print "  -C, --community <community>\n";
+        print "    SNMP community string (for SNMP v1 and v2 only)\n";
+        print "  -l, --login=LOGIN ; -x, --passwd=PASSWD\n";
+        print "    Login and auth password for snmpv3 authentication\n";
+        print "    If no priv password exists, implies AuthNoPriv\n";
+        print "  -X, --privpass=PASSWD\n";
+        print "    Priv password for snmpv3 (AuthPriv protocol)\n";
+        print "  -L, --protocols=<authproto>,<privproto>\n";
+        print "    <authproto> : Authentication protocol (md5|sha : default md5)\n";
+        print "    <privproto> : Priv protocols (des|aes : default des)\n";
+        print "  -t, --timeout <timeout>\n";
+        print "    Seconds before timing out (defaults to Nagios timeout value)\n";
+	print "\nDebug Options:\n";
+	print "  --debug[=FILENAME] || --verbose[=FILENAME]\n";
+	print "    Enables verbose debug output printing exactly what data was retrieved from SNMP\n";
+	print "    This is mainly for manual checks when testing this plugin on the console\n";
+	print "	   If filename is specified instead of STDOUT the debug data is written to that file\n";
+	print "  --debug_time \n";
+	print "    This must be used with '-P' option and provides data on how long each SNMP data retrieval operation took\n";
+	print "    The data is output together with 'performance' data so this can be used when calling from nagios\n";
+	print "    (although I'd not expect it to be graphed, you can look at it from nagios status cgi)\n";
+	print "\n";
+}
+
+# process previous performance data - William
+sub process_perf {
+ my %pdh;
+ foreach (split(' ',$_[0])) {
+   if (/(.*)=(\d+)/) {
+	print "prev_perf: $1 = $2\n" if $DEBUG;
+	$pdh{$1}=$2 if $1 !~ /^time_/;
+   }
+ }
+ return %pdh;
+}
+
 # Function to parse command line arguments
 sub check_options {
   Getopt::Long::Configure('bundling', 'no_ignore_case');
   GetOptions (
 	'h'	=> \$o_help,		'help'		=> \$o_help,
 	'V'	=> \$o_version,		'version'	=> \$o_version,
-	'H:s'	=> \$opt_H,		'hostname:s'	=> \$opt_H,
+	't:s'   => \$o_timeout,		'timeout:s'	=> \$o_timeout,
         'O:s'   => \$opt_baseoid,	'oid:s'         => \$opt_baseoid,
-	't:s'   => \$opt_t,		'timeout:s'	=> \$opt_t,
-	'a:s'	=> \$opt_a,		'alert:s'	=> \$opt_a,
+	'a:s'	=> \$opt_alert,		'alert:s'	=> \$opt_alert,
 	'v:s'	=> \$opt_debug,		'verbose:s'	=> \$opt_debug,
 	'd:s'	=> \$opt_debug,		'debug:s'	=> \$opt_debug,
 					'debug_time'	=> \$opt_debugtime,
@@ -423,10 +541,12 @@ sub check_options {
 	'g:i'	=> \$opt_gooddrives,	'good_drives'	=> \$opt_gooddrives,
 	'o'	=> \$opt_optimize,	'snmp_optimize'	=> \$opt_optimize,
 	'i'	=> \$opt_extrainfo,	'extra_info'	=> \$opt_extrainfo,
+	'b'	=> \$opt_battery,	'check_battery'	=> \$opt_battery,
 	'T:s'	=> \$opt_cardtype,	'controller_type:s' => \$opt_cardtype,
         'C:s'   => \$o_community,       'community:s'   => \$o_community,
         's:s'   => \$opt_snmpversion,   'snmp_version:s' => \$opt_snmpversion,
-	'p:s'	=> \$opt_p,		'port:s'	=> \$opt_p,
+	'H:s'	=> \$o_host,		'hostname:s'	=> \$o_host,
+	'p:s'	=> \$o_port,		'port:s'	=> \$o_port,
         'l:s'   => \$o_login,           'login:s'       => \$o_login,
         'x:s'   => \$o_passwd,          'passwd:s'      => \$o_passwd,
         'X:s'   => \$o_privpass,        'privpass:s'    => \$o_privpass,
@@ -437,9 +557,9 @@ sub check_options {
   if (defined($o_version)) { print_version(); exit $ERRORS{"UNKNOWN"}; };
 
   # hostname
-  if ($opt_H) {
-  	$host = $1 if ($opt_H =~ m/^([0-9]+\.[0-9]+\.[0-9]+\.[0-9]+|[a-zA-Z][-a-zA-Z0-9]*(\.[a-zA-Z][-a-zA-Z0-9]*)*)$/);
-  	usage("Invalid hostname: $opt_H\n") if !$host;
+  if ($o_host) {
+  	$host = $1 if ($o_host =~ m/^([0-9]+\.[0-9]+\.[0-9]+\.[0-9]+|[a-zA-Z][-a-zA-Z0-9]*(\.[a-zA-Z][-a-zA-Z0-9]*)*)$/);
+  	usage("Invalid hostname: $o_host\n") if !$host;
   }
   else {
      usage("Hostname or IP address not specified\n");
@@ -450,9 +570,9 @@ sub check_options {
   }
 
   # port number - defaults to 161
-  if ($opt_p) {
-        ($opt_p =~ m/^[0-9]+$/) || usage("Invalid port number: $opt_p\n");
-        $port = $opt_p;
+  if ($o_port) {
+        ($o_port =~ m/^[0-9]+$/) || usage("Invalid port number: $o_port\n");
+        $port = $o_port;
   }
   # snmp version parameter, default auto-detect with version 1 if community is specified
   if (!defined($opt_snmpversion)) {
@@ -509,20 +629,20 @@ sub check_options {
   set_oids();
 
   # timeout - defaults to nagios timeout
-  if ($opt_t) {
-  	($opt_t =~ m/^[0-9]+$/) || usage("Invalid timeout value: $opt_t\n");
-  	$timeout = $opt_t;
+  if ($o_timeout) {
+  	($o_timeout =~ m/^[0-9]+$/) || usage("Invalid timeout value: $o_timeout\n");
+  	$timeout = $o_timeout;
   }
 
   # alert - defaults to "crit"
-  if (!$opt_a) {
+  if (!$opt_alert) {
  	$alert="CRITICAL";
-  } elsif ($opt_a =~ /warn/) {
+  } elsif ($opt_alert =~ /warn/) {
 	$alert = "WARNING";
-  } elsif ($opt_a =~ /crit/) {
+  } elsif ($opt_alert =~ /crit/) {
 	$alert = "CRITICAL";
   } else {
-	usage("Invalid alert: $opt_a\n");
+	usage("Invalid alert: $opt_alert\n");
   }
 
   # previos performance data string and previous state
@@ -607,9 +727,7 @@ check_options();
 
 # set the timeout
 $SIG{'ALRM'} = sub {
-	if(defined($session)) {
-		$session->close;
-	}
+	$session->close if defined($session);
 	print_output("UNKNOWN","snmp query timed out");
 	exit $ERRORS{"UNKNOWN"};
 };
@@ -640,34 +758,38 @@ $debug_time{snmpgettable_logdrvstatus}=time()-$debug_time{snmpgettable_logdrvsta
 
 # allow this to not be found for mptfusion cards, as they may have drives which aren't part of any array
 if ($cardtype ne 'mptfusion') {
-	$error.= "could not retrieve snmp table $logdrv_status_tableoid" if !$logdrv_data_in && !$error;
+	$error.= "could not retrieve logdrv_status snmp table $logdrv_status_tableoid" if !$logdrv_data_in && !$error;
 }
 
 # 3rd are physical disk drive status
-	$debug_time{snmpgettable_phydrvstatus}=time() if $opt_debugtime;
-	$phydrv_data_in = $session->get_table(-baseoid => $phydrv_status_tableoid) if !$error;
-	$debug_time{snmpgettable_phydrvstatus}=time()-$debug_time{snmpgettable_phydrvstatus} if $opt_debugtime;
-	$error.= "could not retrieve snmp table $phydrv_status_tableoid" if !$phydrv_data_in && !$error;
+$debug_time{snmpgettable_phydrvstatus}=time() if $opt_debugtime;
+$phydrv_data_in = $session->get_table(-baseoid => $phydrv_status_tableoid) if !$error;
+$debug_time{snmpgettable_phydrvstatus}=time()-$debug_time{snmpgettable_phydrvstatus} if $opt_debugtime;
+$error.= "could not retrieve phydrv_status snmp table $phydrv_status_tableoid" if !$phydrv_data_in && !$error;
+
 # Drive models
+if (defined($opt_extrainfo)) {
+    if (defined($phydrv_product_tableoid) && $phydrv_product_tableoid) {
 	$debug_time{snmpgettable_phydrvproduct}=time() if $opt_debugtime;
 	$phydrv_product_in = $session->get_table(-baseoid => $phydrv_product_tableoid) if !$error;
 	$debug_time{snmpgettable_phydrvproduct}=time()-$debug_time{snmpgettable_phydrvproduct} if $opt_debugtime;
-	$error.= "could not retrieve snmp table $phydrv_product_tableoid" if !$phydrv_product_in && !$error;
-# Drive models
-if($phydrv_vendor_tableoid) {
+	$error.= "could not retrieve phydrv_product snmp table $phydrv_product_tableoid" if !$phydrv_product_in && !$error;
+    }
+    if(defined($phydrv_vendor_tableoid) && $phydrv_vendor_tableoid) {
 	$debug_time{snmpgettable_phydrvvendor}=time() if $opt_debugtime;
 	$phydrv_vendor_in = $session->get_table(-baseoid => $phydrv_vendor_tableoid) if !$error;
 	$debug_time{snmpgettable_phydrvvendor}=time()-$debug_time{snmpgettable_phydrvvendor} if $opt_debugtime;
-	$error.= "could not retrieve snmp table $phydrv_vendor_tableoid" if !$phydrv_vendor_in && !$error;
+	$error.= "could not retrieve phydrv_vendor snmp table $phydrv_vendor_tableoid" if !$phydrv_vendor_in && !$error;
+    }
 }
 
-
 # 4th are battery checks (only for sasraid right now)
-$debug_time{snmpgettable_batterystatus}=time() if $opt_debugtime;
-$battery_data_in = $session->get_table(-baseoid => $battery_status_tableoid) if !$error;
-$debug_time{snmpgettable_batterystatus}=time()-$debug_time{snmpgettable_batterytatus} if $opt_debugtime;
-$error.= "could not retrieve snmp table $phydrv_status_tableoid" if !$battery_data_in && !$error;
-
+if (defined($opt_battery) && defined($battery_status_tableoid) && $battery_status_tableoid) {
+	$debug_time{snmpgettable_batterystatus}=time() if $opt_debugtime;
+	$battery_data_in = $session->get_table(-baseoid => $battery_status_tableoid) if !$error;
+	$debug_time{snmpgettable_batterystatus}=time()-$debug_time{snmpgettable_batterytatus} if $opt_debugtime;
+	$error.= "could not retrieve snmp table $battery_status_tableoid" if !$battery_data_in && !$error;
+}
 
 # last are medium and "other" errors reported for physical drives
 if (defined($opt_drverrors) && defined($opt_perfdata) && !defined($opt_optimize)) {
@@ -710,28 +832,28 @@ if ($DEBUG && $cardtype eq 'sasraid') {
 	print "phydrv_bad2count: ".$phydrv_bad2count." = ". $snmp_result->{$phydrv_bad2count} ."\n" if exists($snmp_result->{$phydrv_bad2count});
 }
 if (defined($opt_drverrors) && $cardtype ne 'sasraid' && $cardtype ne 'mptfusion') {
-  if (exists($snmp_result->{$adpt_readfail_oid}) && $snmp_result->{$adpt_readfail_oid}>0) {
+    if (exists($snmp_result->{$adpt_readfail_oid}) && $snmp_result->{$adpt_readfail_oid}>0) {
 	$output_data=$snmp_result->{$adpt_readfail_oid}." adapter read failures";
 	$nagios_status=$alert;
-  }
-  if (exists($snmp_result->{$adpt_writefail_oid}) && $snmp_result->{$adpt_writefail_oid}>0) {
+    }
+    if (exists($snmp_result->{$adpt_writefail_oid}) && $snmp_result->{$adpt_writefail_oid}>0) {
 	$output_data.= ", " if $output_data;
         $output_data=$snmp_result->{$adpt_writefail_oid}." adapter write failures";
         $nagios_status=$alert;
-  }
-  if (exists($snmp_result->{$writefail_oid}) && $snmp_result->{$writefail_oid}>0) {
+    }
+    if (exists($snmp_result->{$writefail_oid}) && $snmp_result->{$writefail_oid}>0) {
         $output_data.= ", " if $output_data;
         $output_data=$snmp_result->{$writefail_oid}." write failures";
         $nagios_status=$alert;
-  }
-  if (exists($snmp_result->{$readfail_oid}) && $snmp_result->{$readfail_oid}>0) {
+    }
+    if (exists($snmp_result->{$readfail_oid}) && $snmp_result->{$readfail_oid}>0) {
         $output_data.= ", " if $output_data;
         $output_data=$snmp_result->{$readfail_oid}." read failures";
         $nagios_status=$alert;
-  }
+    }
 }
 if ($cardtype eq 'sasraid') {
-  if (exists($snmp_result->{$phydrv_count}) && $snmp_result->{$phydrv_count}>0) {
+    if (exists($snmp_result->{$phydrv_count}) && $snmp_result->{$phydrv_count}>0) {
 	my $total = $snmp_result->{$phydrv_count};
 	my $good = $snmp_result->{$phydrv_goodcount}||0;
 	my $bad = ($snmp_result->{$phydrv_badcount}||0)+($snmp_result->{$phydrv_bad2count}||0);
@@ -746,7 +868,7 @@ if ($cardtype eq 'sasraid') {
 	   $output_data = "$good good drives";
 	  }
 	}
-  }
+    }
 }
 
 # physical drive states
@@ -807,7 +929,8 @@ my $num_controllers = scalar(keys %h_controllers);
 my $num_channels = scalar(keys %h_channels);
 my $models="";
 # This brings in the drive vendor/product information
-foreach $line (Net::SNMP::oid_lex_sort(keys(%{$phydrv_product_in}))) {
+if (defined($opt_extrainfo)) {
+    foreach $line (Net::SNMP::oid_lex_sort(keys(%{$phydrv_product_in}))) {
 	$code = $phydrv_product_in->{$line};
 	  print "phydrv_product: $line = $code\n" if $DEBUG;
 	my $index = substr($line,length($phydrv_product_tableoid)+1);
@@ -818,25 +941,26 @@ foreach $line (Net::SNMP::oid_lex_sort(keys(%{$phydrv_product_in}))) {
 	$pdrv_status{$index}->{drivetype} = ($vendor." "||"").$code;
 	$models .= ", " if ($models);
         $models .= ($vendor." "||"").$code;
+    }
+    $models = " [" . $models . "]" if $models;
 }
-$models = "[" . $models . "]";
 
 # Now we can do additional SNMP query (for now its here as currently all additional queries are related to physical drives)
 if (defined($opt_optimize) && scalar(@extra_oids)>0) {
-  $error="";
-  $debug_time{snmpretrieve_extraoids}=time() if $opt_debugtime;
-  $snmp_result=$session->get_request(-Varbindlist => \@extra_oids);
-  $debug_time{snmpretrieve_extraoids}=time()-$debug_time{snmpretrieve_extraoids} if $opt_debugtime;
-  if (!$snmp_result) {
+    $error="";
+    $debug_time{snmpretrieve_extraoids}=time() if $opt_debugtime;
+    $snmp_result=$session->get_request(-Varbindlist => \@extra_oids);
+    $debug_time{snmpretrieve_extraoids}=time()-$debug_time{snmpretrieve_extraoids} if $opt_debugtime;
+    if (!$snmp_result) {
 	$error.=sprintf("could not retrieve extra data snmp OIDs: %s\n", $session->error());
 	$session->close;
 	print_output('UNKNOWN',$error);
 	exit $ERRORS{'UNKNOWN'};
-  }
-  if (defined($opt_drverrors)) {
-      $phydrv_merr_in = $snmp_result;
-      $phydrv_oerr_in = $snmp_result;
-  }
+    }
+    if (defined($opt_drverrors)) {
+	$phydrv_merr_in = $snmp_result;
+	$phydrv_oerr_in = $snmp_result;
+    }
 }
 
 # 2nd loop as we now can find what physical id to use
@@ -896,7 +1020,8 @@ foreach $line (Net::SNMP::oid_lex_sort(keys(%{$phydrv_data_in}))) {
 }
 
 # check battery replacement status
-foreach $line (Net::SNMP::oid_lex_sort(keys(%{$battery_data_in}))) {
+if (defined($opt_battery)) {
+    foreach $line (Net::SNMP::oid_lex_sort(keys(%{$battery_data_in}))) {
         $code = $battery_data_in->{$line};
         if ($DEBUG) {
                 print "battery_status: $line = $code";
@@ -920,8 +1045,8 @@ foreach $line (Net::SNMP::oid_lex_sort(keys(%{$battery_data_in}))) {
                         $nagios_status = "WARNING" if $nagios_status eq "OK";
                 }
        	}
+    }
 }
-
 
 # check logical drive status
 foreach $line (Net::SNMP::oid_lex_sort(keys(%{$logdrv_data_in}))) {
@@ -1019,131 +1144,32 @@ $debug_time{plugin_totaltime}=$debug_time{plugin_finish}-$debug_time{plugin_star
 
 # output text results
 $output_data.= " - " if $output_data;
-$output_data.= sprintf("%d logical disks, %d physical drives, %d controllers found (%s), %d batteries found", scalar(keys %{$logdrv_data_in}), $phydrv_total, $num_controllers, $models, scalar(keys %{$battery_data_in}));
+$output_data.= sprintf("%d logical disks, %d physical drives, %d controllers found", scalar(keys %{$logdrv_data_in}), $phydrv_total, $num_controllers);
+$output_data.=$models if defined($opt_extrainfo);
+$output_data.= sprintf(", %d batteries found", scalar(keys %{$battery_data_in})) if defined($opt_battery);
 $output_data.= " - ". $output_data_end if $output_data_end;
-
-# netsaint doesn't like output strings larger than 256 chars
-# [William: modified it so that number of characters is now $MAX_OUTPUTSTR
-#           defined top of the file, if you set it to undef this is not checked]
-$output_data = substr($output_data,0,$MAX_OUTPUTSTR) if defined($MAX_OUTPUTSTR) && length($output_data) > $MAX_OUTPUTSTR;
 
 # combine status from checking physical and logical drives and print everything
 $nagios_status = $phd_nagios_status if $ERRORS{$nagios_status}<$ERRORS{$phd_nagios_status};
 print_output($nagios_status,$output_data);
-exit $ERRORS{"$nagios_status"};
+exit $ERRORS{$nagios_status};
 
 ################## END OF MAIN CODE ######################################
-
-# version flag function
-sub print_version {
-	print "$0 version $version\n";
-}
-
-# display help information
-sub help {
-        print_version();
-        print "GPL licence, (c)2002 iBiblio, (c) 2006-2012 William Leibzon\n";
-        print "code by William Leibzon, John Reuning, Vitaly Pecharsky\n\n";
-        print "This plugin uses SNMP to check logical and physical drive status of a RAID controllers\n";
-	print "sold under LSI, MPTFusion, Dell PERC Megaraid, Dell PERC SASRaid brands.\n";
-	print "\n";
-        print_usage();
-        print "\n";
-	print "Options:\n";
-	print "  -h, --help\n";
-	print "    Display help\n";
-	print "  -V, --version\n";
-	print "    Display version\n";
-	print "  -T, --controller_type <type>\n";
-	print "    Type of controller - can be: megaraid|sasraid|perc3|perc4|perc5|perc6|perch700|mptfusion|sas6ir|sas6\n";
-	print "    (megaraid=perc3,perc4; sasraid=perc5,perc6,perch700; mptfusion=sas6ir,sas6)\n";
-	print "  -O, --oid <base oid>\n";
-	print "    Base OID for megaraid is .1.3.6.1.4.1.3582 and you almost never need to change it\n";
-	print "    (the only case is when you might is when you have both percsnmp and sassnmp cards)\n";
-	print "  -a, --alert <alert level>\n";
-	print "    Alert status to use if an error condition is found\n";
-	print "    Accepted values are: \"crit\" and \"warn\" (defaults to crit)\n";
-	print "  -i, --extra_info\n";
-	print "    Extra additional information in output (such as rebuild rate)\n";
-	print "  -o, --snmp_optimize\n";
-	print "	   Try to minimize number of SNMP queries replacing snmp_walk with retrieval of specific OIDs at once\n";
-	print "    !! EXPERIMENTAL, USE AT YOUR OWN RISK (and use --debug_time to make sure it is actually faster) !!!\n";
-	print "  -e, --drive_errors\n";
-	print "    Do additonal checks for medium and other errors on each drive.\n";
-	print "    This is about 2x as many SNMP check and so can slow plugin down.\n";
-	print "    !!! You will need to use pass to plugin previous PERF and STATE data with -P and -S options !!!\n";
-	print "  -P, --perf <performance data>\n";
-	print '    The results of previous check performance data ($SERVICEPERFDATA$ macro)'."\n";
-	print "    which contains number of medium and other errors that were before\n";
-	print "    if this is not the same now then ALERT is sent\n";
-	print "  -S, --state <STATE,STATETYPE>\n";
-	print "    If you use -P and you have notifications sent to be sent at > 1 alerts\n";
-	print "    then you need to send previous state and type (HARD or SOFT) and then\n";
-	print "    this plugin would continue to report non-OK state until STATETYPE changes\n";
-	print "    to HARD thereby making sure user receives NOTIFICATION\n";
-	print "    Proper use of this is have '-S ".'"$SERVICESTATE$,$SERVICESTATETYPE$"'."' in your commands.cfg\n";
-	print "\nSNMP Access Options:\n";
-        print "  -H, --hostname <host>\n";
-        print "    Hostname or IP address of target to check\n";
-        print "  -C, --community <community>\n";
-        print "    SNMP community string\n";
-        print "  -s, --snmp_version 1 | 2 | 2c | 3\n";
-        print "    Version of SNMP protocol to use (default is 1 if -C and 3 if -l specified)";
-        print "  -p, --port <port>\n";
-        print "    SNMP port (defaults to 161)\n";
-        print "  -l, --login=LOGIN ; -x, --passwd=PASSWD\n";
-        print "    Login and auth password for snmpv3 authentication\n";
-        print "    If no priv password exists, implies AuthNoPriv\n";
-        print "  -X, --privpass=PASSWD\n";
-        print "    Priv password for snmpv3 (AuthPriv protocol)\n";
-        print "  -L, --protocols=<authproto>,<privproto>\n";
-        print "    <authproto> : Authentication protocol (md5|sha : default md5)\n";
-        print "    <privproto> : Priv protocols (des|aes : default des)\n";
-        print "  -t, --timeout <timeout>\n";
-        print "    Seconds before timing out (defaults to Nagios timeout value)\n";
-	print "\nDebug Options:\n";
-	print "  --debug[=FILENAME] || --verbose[=FILENAME]\n";
-	print "    Enables verbose debug output printing exactly what data was retrieved from SNMP\n";
-	print "    This is mainly for manual checks when testing this plugin on the console\n";
-	print "	   If filename is specified instead of STDOUT the debug data is written to that file\n";
-	print "  --debug_time \n";
-	print "    This must be used with '-P' option and provides data on how long each SNMP data retrieval operation took\n";
-	print "    The data is output together with 'performance' data so this can be used when calling from nagios\n";
-	print "    (although I'd not expect it to be graphed, you can look at it from nagios status cgi)\n";
-	print "\n";
-}
-
-sub usage {
-	print $_."\n" foreach @_;
-	print_usage();
-	exit $ERRORS{'UNKNOWN'};
-}
-
-# display usage information
-sub print_usage {
-        print "Usage:\n";
-        print "$0 [-s <snmp_version>] -H <host> (-C <snmp_community>) | (-l login -x passwd [-X pass -L <authp>,<privp>) [-p <port>] [-t <timeout>] [-O <base oid>] [-a <alert level>] [--extra_info] [--drive_errors -P <previous performance data> -S <previous state>] [-v [DebugLogFile] || -d [DebugLogFile]] [--debug_time] [--snmp_optimize] [-T megaraid|sasraid|perc3|perc4|perc5|perc6|mptfusion|sas6ir|sas6]\n";
-        print "$0 --version | $0 --help (use this to see better documentation of above options)\n";
-}
-
-# process previous performance data - William
-sub process_perf {
- my %pdh;
- foreach (split(' ',$_[0])) {
-   if (/(.*)=(\d+)/) {
-	print "prev_perf: $1 = $2\n" if $DEBUG;
-	$pdh{$1}=$2 if $1 !~ /^time_/;
-   }
- }
- return %pdh;
-}
 
 # print output and performance data
 sub print_output {
    my ($out_status,$out_str)=@_;
 
    print "Megaraid $out_status";
-   print " - $out_str" if $out_str;
+
+   # netsaint doesn't like output strings larger than 256 chars
+   # [William: modified it so that number of characters is now $MAX_OUTPUTSTR
+   #           defined top of the file, if you set it to undef this is not checked]
+   if (defined($out_str) && $out_str) {
+	$out_str = substr($out_str,0,$MAX_OUTPUTSTR) if defined($MAX_OUTPUTSTR) && length($out_str) > $MAX_OUTPUTSTR;
+	print " - $out_str";
+   }
+
    if (defined($opt_perfdata)) {
 	print " |";
 	# below is done to force notification on alert condition when you have notifications after 2 or more alerts
@@ -1159,5 +1185,6 @@ sub print_output {
 		print " time_".$_ ."=". $debug_time{$_} foreach keys %debug_time;
 	}
    }
+
    print "\n";
 }

@@ -592,7 +592,7 @@ if ($@) {
 our $do_snmp=1;
 eval 'use Net::SNMP';
 if ($@) {
-  $do_snmp=1;
+  $do_snmp=0;
 }
 
 # Version 

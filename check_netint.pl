@@ -530,27 +530,27 @@
 #		       are not valid, and optimization options -m and -mm also do not
 #		       work same way since plugin will always get all data locally.
 #		    2) The plugin no longer requires -n (interface name) option
-#		       though its still recommended you use it. When interface
+#		       though it is still recommended you use it. When interface
 #		       name is not specified, all interfaces will be checked.
 #		    3) If with -F option directory is given instead of a file this
-#		       will became base directory to write temporary file to.
+#		       will become base directory to write temporary file to.
 #		    4) Many doc and code fixes and cleanups all over
 # 2.4a2 - 08/15/12 - Fixed bug with cache of previous data for SNMP queries that came
 #		     around due to change in logic and introduction of non-SNMP.
 #		     Added experimental support for future Nagios SAVEDDATA feature
 #		     (plugin output after || after perfdata) enabled with --nagios_with_saveddata
-# 2.4a3 - 09/13/12 - patch/contrib by Franky Van Liedekerke:
+# 2.4a3 - 09/13/12 - Patch/contrib by Franky Van Liedekerke:
 #		     1) Added option --admindown_ok: when checking for operational UP
 #                       interfaces, the interfaces that are administratively down are OK
 #                    2) The '-z' option now also prevents tmp files of being written
 #                       and removes the 'no usable data' warning because of missing perf data
-# 2.4a4 - 09/28/12 - additional patch by FVL for --admindown_ok, option also got -K one-letter alias
-#		     added determining interface speed on linux with ethtool and iwconfig
-# 2.4a5 - 10/10/12 - interface speed can now be specified with -S/--intspeed option for use when
-#                    plugin can not find speed by itsef of what it finds is wrong, previously
-#		     this option was used to warn if found speed is not what is expected,
-#                    to do this now requires specified WARNING<> or CRITICAL<> before actual speed
-#                    which changes previous option format and thus an incompatible change
+# 2.4a4 - 09/28/12 - Additional patch by FVL for --admindown_ok. Option also got -K one-letter alias.
+#		     Also added determining interface speed on linux with ethtool and iwconfig..
+# 2.4a5 - 10/10/12 - Interface speed can now be specified with -S/--intspeed option for use when
+#                    plugin can not find speed by itsef or when what it finds is wrong. Previously
+#		     this option was used to warn if speed is not what is expected, To do this now
+#                    requires using prefix WARNING<> or CRITICAL<> before actual speed which is
+#		     an incompatible change to preious format of this option.
 #
 # ============================ LIST OF CONTRIBUTORS ===============================
 #
@@ -2305,47 +2305,48 @@ for (my $i=0;$i < $num_int; $i++) {
       $checkval_out=undef;
       $checkval_tdiff=undef;
 
+      # check if the counter is back to 0 after 2^32 / 2^64.
+      # First set the modulus depending on highperf counters or not
+      my $overfl_mod = defined ($o_highperf) ? 18446744073709551616 : 4294967296;
+
+      # Define the speed metric ( K | M | G ) (Bits|Bytes) or %
+      if (defined($o_prct)) { # in % of speed
+	# Speed is in bits/s, calculated speed is in Bytes/s
+	if (defined($interfaces[$i]{'portspeed'})) {
+	    $speed_metric=$interfaces[$i]{'portspeed'}/800;
+	    $speed_unit='%';
+	}
+      } else {
+	if (defined($o_kbits)) { # metric in bits
+	    if (defined($o_meg)) { # in Mbit/s = 1000000 bit/s
+		$speed_metric=125000; #  (1000/8) * 1000
+		$speed_unit="Mbps";
+	    } elsif (defined($o_gig)) { # in Gbit/s = 1000000000 bit/s
+		$speed_metric=125000000; #  (1000/8) * 1000 * 1000
+		$speed_unit="Gbps";
+	    } else { # in Kbits
+		$speed_metric=125; #  ( 1000/8 )
+		$speed_unit="Kbps";
+	    }
+	} else { # metric in byte
+	    if (defined($o_meg)) { # in Mbits
+		$speed_metric=1048576; # 1024^2
+		$speed_unit="MBps";
+	    } elsif (defined($o_gig)) { # in Mbits
+		$speed_metric=1073741824; # 1024^3
+		$speed_unit="GBps";
+	    } else {
+		$speed_metric=1024; # 1024^1
+		$speed_unit="KBps";
+	    }		    
+	}
+      }
+
       # Calculate averages & metrics
       $j=$n_rows-1;
       do {
 	if ($prev_values[$j][0] < $trigger) {
 	  if ($prev_values[$j][0] > $trigger_low) {
-	     # Define the speed metric ( K | M | G ) (Bits|Bytes) or %
-	     if (defined($o_prct)) { # in % of speed
-		    # Speed is in bits/s, calculated speed is in Bytes/s
-		    if (defined($interfaces[$i]{'portspeed'})) {
-			  $speed_metric=$interfaces[$i]{'portspeed'}/800;
-			  $speed_unit='%';
-		    }
-	     } else {
-		if (defined($o_kbits)) { # metric in bits
-		    if (defined($o_meg)) { # in Mbit/s = 1000000 bit/s
-			  $speed_metric=125000; #  (1000/8) * 1000
-			  $speed_unit="Mbps";
-		    } elsif (defined($o_gig)) { # in Gbit/s = 1000000000 bit/s
-			  $speed_metric=125000000; #  (1000/8) * 1000 * 1000
-			  $speed_unit="Gbps";
-		    } else { # in Kbits
-			  $speed_metric=125; #  ( 1000/8 )
-			  $speed_unit="Kbps";
-		    }
-		} else { # metric in byte
-		    if (defined($o_meg)) { # in Mbits
-			  $speed_metric=1048576; # 1024^2
-			  $speed_unit="MBps";
-		    } elsif (defined($o_gig)) { # in Mbits
-			  $speed_metric=1073741824; # 1024^3
-			  $speed_unit="GBps";
-		    } else {
-			  $speed_metric=1024; # 1024^1
-			  $speed_unit="KBps";
-		    }		    
-		}
-	    }
-	    # check if the counter is back to 0 after 2^32 / 2^64.
-	    # First set the modulus depending on highperf counters or not
-	    my $overfl_mod = defined ($o_highperf) ? 18446744073709551616 : 4294967296;
-
 	    if (($checkval_tdiff=$prev_values[$j+1][0]-$prev_values[$j][0])!=0) {
               # check_perf_out_raw is array used to store calculations from multiple counts
               $checkperf_out_raw[$jj] = [ 0,0,0,0,0 ];
@@ -2393,6 +2394,7 @@ for (my $i=0;$i < $num_int; $i++) {
         $usable_data=1;
       }
     }
+
     # WL: modified to not write the file if both -P and -T options are used
     # -z option used: don't write the tmp file
     if (defined($temp_file_name) && !defined($o_zerothresholds) && ($o_filestore || !$o_prevperf || !$o_prevtime)) {

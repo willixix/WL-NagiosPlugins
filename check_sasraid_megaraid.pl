@@ -3,7 +3,7 @@
 # ============================== SUMMARY =====================================
 #
 # Program : check_sasraid_megaraid.pl (also known as check_megaraid.pl)
-# Version : 1.95alpha4 (this code is in development, it is not for production use)
+# Version : 1.95
 # Date    : Oct 21, 2012
 # Author  : William Leibzon - william@leibzon.org
 # Copyright: (C) 2006-2012 William Leibzon
@@ -168,7 +168,7 @@
 #   19. [1.92 - Jun 15, 2012] Bug fixes when no SNNP version is specified
 #	                      Verb function & option updated to allow debug info go to file
 #			      specified as a parameter to -v rather than just stdout
-#   20. [1.95 - Oct ??, 2012] Patches and Additions
+#   20. [1.95 - Oct 22, 2012] Patches and Additions
 #      a. merged pool request from goochjj (John Gooch):
 #         Added good_drives threshold check (-g option) and code pull and show make and model of
 #         physical drives which is activated with "-i" option
@@ -218,7 +218,7 @@ my $cardtype="sasraid";   # default card type, can be "megaraid", "mptfusion" or
 my $baseoid=".1.3.6.1.4.1.3582";
 my $timeout=$TIMEOUT;      # default is nagios exported $TIMEOUT variable
 my $DEBUG = 0;             # to print debug messages, set this to 1
-my $MAX_OUTPUTSTR = 512;   # maximum number of characters in otput
+my $MAX_OUTPUTSTR = 2048;  # maximum number of characters in otput
 my $alert = "CRITICAL";	   # default alert type if error condition is found
 
 # SNMP authentication options and their derfault values
@@ -264,7 +264,7 @@ my $session=		undef;	# SNMP session
 # Declare any functions defined at the end
 sub print_output;
 
-# These varibles are set by set_oids() function based on $cardtype
+# These variables are set by set_oids() function based on $cardtype
 my(
     $logdrv_status_tableoid,
     $phydrv_status_tableoid,
@@ -422,7 +422,7 @@ sub usage {
 # display help information
 sub help {
         print_version();
-        print "GPL licence, (c)2002 iBiblio, (c) 2006-2012 William Leibzon\n";
+        print "GPL 2.0 licence (c) 2006-2012 William Leibzon\n";
         print "This plugin uses SNMP to check logical and physical drive status of a RAID controllers\n";
 	print "sold under LSI, MPTFusion, Dell PERC Megaraid, Dell PERC SASRaid brands.\n";
 	print "\n";

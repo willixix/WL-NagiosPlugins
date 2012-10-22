@@ -3,8 +3,8 @@
 # ============================== SUMMARY =====================================
 #
 # Program : check_sasraid_megaraid.pl (also known as check_megaraid.pl)
-# Version : 1.95
-# Date    : Oct 21, 2012
+# Version : 2.0
+# Date    : Oct 22, 2012
 # Author  : William Leibzon - william@leibzon.org
 # Copyright: (C) 2006-2012 William Leibzon
 # Summary : This is a nagios plugin to monitor LSI MegaRAID and attached disks
@@ -168,15 +168,15 @@
 #   19. [1.92 - Jun 15, 2012] Bug fixes when no SNNP version is specified
 #	                      Verb function & option updated to allow debug info go to file
 #			      specified as a parameter to -v rather than just stdout
-#   20. [1.95 - Oct 22, 2012] Patches and Additions.
-#      The number of changes is enough that plugin should have been moved one minor version up
-#      but its already at 1.9x and I don't think this yet qualifies for 2.0 but this is a big update
+#   20. [2.0 - Oct 22, 2012] New version. Patches and Additions that went here:
 #        a. merged pool request from goochjj (John Gooch):
 #           Added good_drives threshold check (-g option) and show make and model of
 #           physical drives which is activated with "-i" option
 #        b. applied patch from Robert Wikman (sent by email) that adds checks of battery (BBU) data
 #        c. code cleanup and refactoring - functions moved to top and option variables renamed and properly commented
 #        d. list of contributors section added
+#      This version was originaly 1.95 but with two patches and all code cleanup, the number of
+#      of changes is more than sub-minor or even minor version upddate. So this is now released as 2.0
 #		   
 # ========================== LIST OF CONTRIBUTORS =============================
 #
@@ -193,7 +193,7 @@
 #
 # ========================== START OF PROGRAM CODE ===========================
 
-my $version = "1.95";
+my $version = "2.0";
 
 use strict;
 use Getopt::Long;

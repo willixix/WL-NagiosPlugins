@@ -2473,12 +2473,12 @@ my $maxbytes = $nlib->vardata('limit_maxbytes');
 my $utilization = 0;
 if (defined($o_utilsize) && defined($bytes) && defined($maxbytes)) {
     if (defined($maxbytes) && $maxbytes!=0) {
-	$utilization = $bytes / $maxbytes;
+	$utilization = $bytes / $maxbytes * 100;
     }
     $nlib->add_data('utilization',$utilization);
     $nlib->addto_statusdata_output('utilization',sprintf(" in use %.2f%% of space", $utilization));
     if (defined($o_perf)) {
-	$nlib->set_perfdata('utilization',sprintf(" utilization=%.5f%%", $utilization));
+	$nlib->set_perfdata('utilization',sprintf(" utilization=%.5f", $utilization, '%'));
    }
 }
 

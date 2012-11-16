@@ -498,7 +498,7 @@ Variables and Thresholds Set as List:
  -a, --variables=STRING[,STRING[,STRING...]]
    List of variables from memcache statistics data to do threshold checks on.
    The default (if option is not used) is not to monitor any variable.
-   The variable name should be prefixed with '&' to chec its rate of
+   The variable name should be prefixed with '&' to check its rate of
    change over time rather than actual value.
  -w, --warn=STR[,STR[,STR[..]]]
    This option can only be used if '--variables' (or '-a') option above

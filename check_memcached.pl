@@ -3,8 +3,8 @@
 # ============================== SUMMARY =====================================
 #
 # Program : check_memcached.pl
-# Version : 0.81
-# Date    : Sep 04, 2012
+# Version : 0.82
+# Date    : Nov 16, 2012
 # Author  : William Leibzon - william@leibzon.org
 # Licence : GPL  (main code) summary below and full text at http://www.fsf.org/licenses/gpl.txt
 #	    LGPL (library functions) full text at http://www.fsf.org/licenses/lgpl.txt
@@ -321,6 +321,7 @@
 #                       --check option that can be used where specific long option is
 #			not available. For use with that option also added UOM specifier.
 # [0.81 - Sep 04, 2012] Fix bug in the library on handling absent data
+# [0.82 - Nov 16, 2012] Bug fix in memory utilization, noticed and fixed by Herman van Rink
 #
 #  1. Library Enhancements (will apply to multiple plugins that share common code)
 #     (a) Add '--extra-opts' to allow to read options from a file as specified
@@ -374,7 +375,7 @@ if ($@) {
  %ERRORS = ('OK'=>0,'WARNING'=>1,'CRITICAL'=>2,'UNKNOWN'=>3,'DEPENDENT'=>4);
 }
 
-my $Version='0.81';
+my $Version='0.82';
 
 # This is a list of known statistics variables (plus few variables added by plugin),
 # used in order to designate COUNTER variables with 'c' in perfout for graphing programs
@@ -2478,7 +2479,7 @@ if (defined($o_utilsize) && defined($bytes) && defined($maxbytes)) {
     $nlib->add_data('utilization',$utilization);
     $nlib->addto_statusdata_output('utilization',sprintf(" in use %.2f%% of space", $utilization));
     if (defined($o_perf)) {
-	$nlib->set_perfdata('utilization',sprintf(" utilization=%.5f", $utilization, '%'));
+	$nlib->set_perfdata('utilization',sprintf("utilization=%.5f", $utilization), '%');
    }
 }
 

@@ -498,7 +498,7 @@ Variables and Thresholds Set as List:
  -a, --variables=STRING[,STRING[,STRING...]]
    List of variables from memcache statistics data to do threshold checks on.
    The default (if option is not used) is not to monitor any variable.
-   The variable name should be prefixed with '&' to chec its rate of
+   The variable name should be prefixed with '&' to check its rate of
    change over time rather than actual value.
  -w, --warn=STR[,STR[,STR[..]]]
    This option can only be used if '--variables' (or '-a') option above
@@ -2473,12 +2473,12 @@ my $maxbytes = $nlib->vardata('limit_maxbytes');
 my $utilization = 0;
 if (defined($o_utilsize) && defined($bytes) && defined($maxbytes)) {
     if (defined($maxbytes) && $maxbytes!=0) {
-	$utilization = $bytes / $maxbytes;
+	$utilization = $bytes / $maxbytes * 100;
     }
     $nlib->add_data('utilization',$utilization);
     $nlib->addto_statusdata_output('utilization',sprintf(" in use %.2f%% of space", $utilization));
     if (defined($o_perf)) {
-	$nlib->set_perfdata('utilization',sprintf(" utilization=%.5f%%", $utilization));
+	$nlib->set_perfdata('utilization',sprintf(" utilization=%.5f", $utilization, '%'));
    }
 }
 

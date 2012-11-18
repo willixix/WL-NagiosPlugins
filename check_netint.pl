@@ -3,8 +3,8 @@
 # =============================== SUMMARY =====================================
 #
 # Program : check_netint.pl or check_snmp_netint.pl
-# Version : 2.4 alpha 6
-# Date    : Nov 17, 2012
+# Version : 2.4 alpha 7
+# Date    : Nov 18, 2012
 # Maintainer: William Leibzon - william@leibzon.org,
 # Authors : See "CONTRIBUTORS" documentation section
 # Licence : GPL - summary below, full text at http://www.fsf.org/licenses/gpl.txt
@@ -555,6 +555,7 @@
 #		     Fixed bug that would not put output interface speed percent data
 #                    in perf unless both -y and -u were used together. This bug was introduced
 #		     somewhere around 2.2 and apparently 2.31 did not entirely fix it
+# 2.4a7 - 11/18/12 - Added support for SNMP bulk requests and --bulk_snmp_queries option
 #
 # ============================ LIST OF CONTRIBUTORS ===============================
 #
@@ -703,6 +704,7 @@ my $o_prevtime=         undef;  # previous time plugin was run $LASTSERVICECHECK
 my @o_minsnmp=		();     # see below
 my $o_minsnmp=		undef;	# minimize number of snmp queries
 my $o_maxminsnmp=	undef;  # minimize number of snmp queries even futher (slightly less safe in case of switch config changes)
+my $o_bulksnmp=		undef;	# do snmp bulk request
 my $o_filestore=        "";  # path of the file to store cached data in - overrides $o_base_dir
 my $o_pcount=		2;	# how many sets of previous data should be in performance data
 my $o_nagios_saveddata=	undef;	# enabled SAVEDDATA special output after ||
@@ -742,6 +744,7 @@ my $check_speed=0;      # If '-Y', '-u' or '-S' options are given this is set to
 my $specified_speed=0;	# if -S has interface speed specified, this is set to speed specified there
 my $speed_alert=undef; 	# if -S has alert specified, this is alert to issue if interface speed is not what is expected
 my $shell_pid=undef;	# defined only if run locally
+my $snmp_session_v=0;   # if no snmp session, its 0, otherwise 1 2 or 3 depending on version of SNMP session opened
 
 # Functions
 sub read_file { 
@@ -932,7 +935,7 @@ Options for saving results of previous checks to calcuate Traffic & Utilization:
 --nagios_with_saveddata
    Enables experimental support for future Nagios SAVEDATA (output after ||)
    where cached data for next plugin use goes to special buffer and not PERFDATA
-   [THIS IS AN EXPERIMENTAL OPTION THAT MAY BE REMOVED IN THE FUTURE]
+   [THIS IS AN EXPERIMENTAL OPTION THAT MAY BE REMOVED OR RENAMED IN THE FUTURE]
 
 SNMP Authentication options and options valid only with SNMP:
 
@@ -965,12 +968,14 @@ SNMP Authentication options and options valid only with SNMP:
    Use 64 bits counters instead of the standard counters when checking
    bandwidth & performance data for interface >= 1Gbps.
    You must use snmp v2c or v3 to get 64 bits counters.
--m, --minimize_queries | -mm, --minimum_queries
+-m, --minimize_queries | -mm, --minimum_queries | --bulk_snmp_queries
    Optimization options to minimize number of SNMP queries. 
    This is done by saving table ids in performance data (see -P above) and doing
    all SNMP checks together. When "-mm" or "--minimum_queries" option is used
    the number of queries is even smaller but there are no checks done to make
    sure ifindex description is still the same (not safe only if you add vlans)
+   "--bulk_snmp_queries" enables using GET_BULK_REQUEST, new from 2.4 plugin version,
+   this is automatically enabled with --minimum_queries but not --minimize_queries
 --cisco=[oper,][addoper,][linkfault,][use_portnames|show_portnames]
    This enables special cisco snmp additions which:
    1) Provide extra detail on operational and fault status for physical ports.
@@ -1094,7 +1099,8 @@ sub check_options {
 	'P:s'	=> \$o_prevperf,	'prev_perfdata:s' => \$o_prevperf,
 	'T:s'   => \$o_prevtime,        'prev_checktime:s'=> \$o_prevtime,
 	'pcount:i' => \$o_pcount,
-	'm'	=> \@o_minsnmp,		'minimize_queries' => \$o_minsnmp,  'minimum_queries'    => \$o_maxminsnmp,
+	'm'	=> \@o_minsnmp,		'minimize_queries' => \$o_minsnmp, 
+	'minimum_queries' => \$o_maxminsnmp, 'bulk_snmp_queries' => \$o_bulksnmp,
 	'F:s'   => \$o_filestore,       'filestore:s' => \$o_filestore,
 	'cisco:s' => \$o_ciscocat,	'stp:s' =>	\$o_stp,
 	'nagios_with_saveddata' => \$o_nagios_saveddata
@@ -1119,12 +1125,19 @@ sub check_options {
 	    if ((defined ($v3proto[1])) && (!defined($o_privpass)))
 	      { print "Put snmp V3 priv login info with priv protocols!\n"; print_usage(); exit $ERRORS{"UNKNOWN"}}
 	}
+        if (defined($o_minsnmp[1])) {
+	    $o_maxminsnmp=1;
+        }
+	elsif (defined($o_minsnmp[0])) {
+	    $o_minsnmp=1;
+	}
 	if (defined($o_maxminsnmp)) { 
 	    if (defined($o_minsnmp)) {
 		print "You dont need to use -m when you already specified -mm."; print_usage(); exit $ERRORS{"UNKNOWN"};
 	    }
 	    else {
 		$o_minsnmp=1;
+		$o_bulksnmp=1;
 	    }
 	}
 	# Check snmpv2c or v3 with 64 bit counters
@@ -1135,8 +1148,6 @@ sub check_options {
 	    use bigint;
 	  } else  { print "Need bigint module for 64 bit counters\n"; print_usage(); exit $ERRORS{"UNKNOWN"}}
 	}
-	$o_minsnmp=1 if defined($o_minsnmp[0]);
-	$o_maxminsnmp=1 if defined($o_minsnmp[1]);
 	$perfcache_recache_trigger=$perfcache_recache_max if defined($o_maxminsnmp);
 	if (defined($o_commentoid)) {
 	    if ($o_commentoid !~ /\./) {
@@ -1349,6 +1360,7 @@ sub create_snmp_session {
 	-timeout          => $o_timeout
       );
     }
+    $snmp_session_v = 3;
   } else {
     if (defined ($o_version2)) {
       # SNMPv2c Login
@@ -1360,6 +1372,7 @@ sub create_snmp_session {
 	-port      => $o_port,
 	-timeout   => $o_timeout
       );
+      $snmp_session_v = 2;
     } else {
       # SNMPV1 login
       verb("SNMP v1 login");
@@ -1369,6 +1382,7 @@ sub create_snmp_session {
 	-port      => $o_port,
 	-timeout   => $o_timeout
       );
+      $snmp_session_v = 1;
     }
   }
   if (!defined($session)) {
@@ -1389,6 +1403,29 @@ sub create_snmp_session {
 	verb(" new max octets:: $oct_test");
   }
   return $session;
+}
+
+sub snmp_get_request {
+  my ($session, $oids_ref, $table_name) = @_;
+  my $result = undef;
+
+  verb("Retrieving ".$table_name." OIDs: ".join(' ',@{$oids_ref}));
+  if (defined($o_bulksnmp) && $snmp_session_v > 1) {
+    $result = $session->get_bulk_request(
+      Varbindlist => $oids_ref
+    );
+  }
+  else {
+    $result = $session->get_request(
+      Varbindlist => $oids_ref
+    );
+  }
+  if (!defined($result)) {
+    printf("SNMP ERROR getting %s : %s.\n", $table_name, $session->error); 
+    $session->close;
+    exit $ERRORS{"UNKNOWN"};
+  }
+  return $result;
 }
 
 sub exec_shell_command {
@@ -1892,29 +1929,14 @@ if ($do_snmp) {
 	push @oids, @oid_commentlabel if defined($o_commentoid) && scalar(@oid_commentlabel)>0;
 	push @oids, @oid_ciscostatus if defined($o_ciscocat) && scalar(@oid_ciscostatus)>0;
 	push @oids, @oid_stpstate if defined($o_stp) && scalar(@oid_stpstate)>0;
-	verb("Retrieving OIDs: ".join(' ',@oids));
   }
   # Get the requested oid values
-  $result = $session->get_request(
-    Varbindlist => \@oids
-  );
-  if (!defined($result)) {
-    printf("ERROR: Status table : %s.\n", $session->error); 
-    $session->close;
-    exit $ERRORS{"UNKNOWN"};
-  }
+  $result = snmp_get_request($session, \@oids, "status table");
+
   # Get the perf value if -f (performance) option defined or -k (check bandwidth)
   if (defined($o_perf) || defined($o_checkperf) || defined($o_intspeed)) {
     if (!defined($o_minsnmp)) {
-	verb("Retrieving OIDs: ".join(' ',@oid_perf));
-  	$resultf = $session->get_request(
-   	    Varbindlist => \@oid_perf
-  	);
-        if (!defined($resultf)) {
-	    printf("ERROR: Statistics table : %s.\n", $session->error);
-	    $session->close;
-            exit $ERRORS{"UNKNOWN"};
-	}
+  	$resultf = snmp_get_request($session, \@oid_perf, "statistics table");
     }
     else {
         $resultf = $result;
@@ -1923,14 +1945,7 @@ if ($do_snmp) {
   # Additional cisco status tables
   if (defined($o_ciscocat)) {
     if (!defined($o_minsnmp) && scalar(@oid_ciscostatus)>0) {
-        $resultc = $session->get_request(
-                Varbindlist => \@oid_ciscostatus
-        );
-        if (!defined($resultc)) {
-            printf("ERROR: Can not retrieve cisco status tables : %s.\n", $session->error);
-            $session->close;
-            exit $ERRORS{"UNKNOWN"};
-        }
+	$resultc = snmp_get_request($session, \@oid_ciscostatus, "cisco status tables");
     }
     else {
         $resultc = $result;
@@ -1939,14 +1954,7 @@ if ($do_snmp) {
   # Addditional stp state table
   if (defined($o_stp)) {
     if (!defined($o_minsnmp) && scalar(@oid_stpstate)>0) {
-	$results = $session->get_request(
-		Varbindlist => \@oid_stpstate
-	);
-        if (!defined($results)) {
-            printf("ERROR: Can not retrieve stp state table : %s.\n", $session->error);
-            $session->close;
-            exit $ERRORS{"UNKNOWN"};
-        }
+	$results = snmp_get_request($session, \@oid_stpstate, "stp state table");
     }
     else {
         $results = $result;
@@ -1955,14 +1963,7 @@ if ($do_snmp) {
   # Suport for comments/description table (WL)
   if (defined($o_commentoid)) {
     if  (!defined($o_minsnmp) && scalar(@oid_commentlabel)>0) {
-	$resulto = $session->get_request(
-	    Varbindlist => \@oid_commentlabel
-	);
-	if (!defined($resulto)) {
-	    printf("ERROR: Can not retrieve comment table %s: %s.\n", $o_commentoid,$session->error);
-	    $session->close;
-	    exit $ERRORS{"UNKNOWN"};
-	}
+	$resulto = snmp_get_request($session, \@oid_stpstate, "comments table");
     }
     else {
 	$resulto = $result;
@@ -2482,7 +2483,7 @@ for (my $i=0;$i < $num_int; $i++) {
 		$perf_out .= sprintf("%.0f", $checkperf_out[1]*$speed_metric/$interfaces[$i]{'portspeed'}*800). '%';
 	    }
 	    else {
-		verb("we do not have infrmation on speed of interface $i (".$interfaces[$i]{'descr'}).")";
+		verb("we do not have information on speed of interface $i (".$interfaces[$i]{'descr'}.")");
 	    }
 	}
     } elsif (defined ($o_perfr)) { # output in bites or Bytes /s

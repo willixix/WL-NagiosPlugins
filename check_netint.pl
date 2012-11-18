@@ -968,14 +968,15 @@ SNMP Authentication options and options valid only with SNMP:
    Use 64 bits counters instead of the standard counters when checking
    bandwidth & performance data for interface >= 1Gbps.
    You must use snmp v2c or v3 to get 64 bits counters.
--m, --minimize_queries | -mm, --minimum_queries | --bulk_snmp_queries
+-m, --minimize_queries | -mm, --minimum_queries 
    Optimization options to minimize number of SNMP queries. 
    This is done by saving table ids in performance data (see -P above) and doing
    all SNMP checks together. When "-mm" or "--minimum_queries" option is used
    the number of queries is even smaller but there are no checks done to make
    sure ifindex description is still the same (not safe only if you add vlans)
-   "--bulk_snmp_queries" enables using GET_BULK_REQUEST, new from 2.4 plugin version,
-   this is automatically enabled with --minimum_queries but not --minimize_queries
+--bulk_snmp_queries
+   Enables using GET_BULK_REQUEST (SNMP v2 and v3 only) to get data
+   While this may work and be faster on some systems, it fails on others 
 --cisco=[oper,][addoper,][linkfault,][use_portnames|show_portnames]
    This enables special cisco snmp additions which:
    1) Provide extra detail on operational and fault status for physical ports.
@@ -1137,7 +1138,7 @@ sub check_options {
 	    }
 	    else {
 		$o_minsnmp=1;
-		$o_bulksnmp=1;
+		# $o_bulksnmp=1;
 	    }
 	}
 	# Check snmpv2c or v3 with 64 bit counters
@@ -1415,6 +1416,7 @@ sub snmp_get_request {
     verb("Doing bulk request on ".$table_name." OIDs: ".join(' ',@{$oids_ref}));
     $result = $session->get_bulk_request(
       -nonrepeaters => scalar(@{$oids_ref}),
+      -maxrepetitions => 0,
       -varbindlist => $oids_ref
     );
   }
@@ -1429,6 +1431,10 @@ sub snmp_get_request {
     $session->close;
     exit $ERRORS{"UNKNOWN"};
   }
+
+  verb("Finished SNMP request. Result contains ".scalar(keys %$result)." entries:");
+  foreach(keys %$result) { verb(" ".$_." = ".$result->{$_}); }
+
   return $result;
 }
 
@@ -1787,6 +1793,7 @@ elsif (scalar(@tindex)==0) {
         }
    }
    $perfcache_time = $timenow;
+   verb("Getting Interfaces Description Table ($descr_table):");
    # Get description table
    $result = $session->get_table(
         Baseoid => $descr_table
@@ -1798,11 +1805,11 @@ elsif (scalar(@tindex)==0) {
    }
    # Select interface by regexp of exact match and put the oid to query in an array
    foreach my $key (keys %$result) {
-      verb("OID : $key, Desc : $$result{$key}");
+      verb(" OID : $key, Desc : $$result{$key}");
 
-      # below chop line is based on code by Y. Charton to Remove ^@ (NULL ?) and other
+      # below chop line is based on code by Y. Charton to remove ^@ (NULL ?) and other
       # non-ASCII characters at the end of the interface description, this allows to
-      # correctly match interface for those checking Windows servers with buggy snmp
+      # correctly match interfaces for Windows servers, since they have buggy snmp
       chop($$result{$key}) if (ord(substr($$result{$key},-1,1)) > 127 || ord(substr($$result{$key},-1,1)) == 0 );
 
       if (int_name_match($$result{$key}) && $key =~ /$descr_table\.(.*)/) {
@@ -2051,7 +2058,12 @@ for (my $i=0;$i < $num_int; $i++) {
       $dsc =~ s/[[:cntrl:]]//g if $dsc;
       if (!defined($dsc) || $dsc ne $interfaces[$i]{'descr'}) {
 	    # WL: Perhaps this is not quite right and there should be "goto" here forcing to retrieve all tables again
-            printf("ERROR: Cached port description ".$interfaces[$i]{'descr'}." is different then retrieved port name ".$dsc);
+	    if (!defined($dsc)) {
+		printf("ERROR: Cached port description is %s while retrieved port name is not available\n", $interfaces[$i]{'descr'});
+	    }
+	    else {
+            	printf("ERROR: Cached port description %s is different then retrieved port name %s\n", $interfaces[$i]{'descr'}, $dsc);
+	    }
             exit $ERRORS{"UNKNOWN"};
       }
       verb("Name : $dsc [confirmed cached name for port $i]");

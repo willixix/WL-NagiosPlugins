@@ -3,8 +3,8 @@
 # =============================== SUMMARY =====================================
 #
 # Program : check_netint.pl or check_snmp_netint.pl
-# Version : 2.4 alpha 5
-# Date    : Oct 10, 2012
+# Version : 2.4 alpha 6
+# Date    : Nov 17, 2012
 # Maintainer: William Leibzon - william@leibzon.org,
 # Authors : See "CONTRIBUTORS" documentation section
 # Licence : GPL - summary below, full text at http://www.fsf.org/licenses/gpl.txt
@@ -551,6 +551,10 @@
 #		     this option was used to warn if speed is not what is expected, To do this now
 #                    requires using prefix WARNING<> or CRITICAL<> before actual speed which is
 #		     an incompatible change to preious format of this option.
+# 2.4a6 - 11/17/12 - Changed ok interval from 0.9*delta - 4*delta to 0.75*delta - 4*delta.
+#		     Fixed bug that would not put output interface speed percent data
+#                    in perf unless both -y and -u were used together. This bug was introduced
+#		     somewhere around 2.2 and apparently 2.31 did not entirely fix it
 #
 # ============================ LIST OF CONTRIBUTORS ===============================
 #
@@ -912,8 +916,8 @@ Options for saving results of previous checks to calcuate Traffic & Utilization:
    Default: 300 seconds = 5 minutes
    Expected time between checks in seconds. Used for making sure traffic
    can be calculated properly. If plugin receives is run more often than
-   0.9 of specified value, it'll not use results but keep previous data
-   for later check. If it is run and receives results more than 3 times
+   0.75 of specified value, it'll not use results but keep previous data
+   for later check. If it is run and receives results more than 4 times
    later then this value, it'll discard all previous performance data
    and start calculation again next time it is run.
 -F, --filestore[=<filename>|<directory>]
@@ -1134,8 +1138,11 @@ sub check_options {
 	$o_minsnmp=1 if defined($o_minsnmp[0]);
 	$o_maxminsnmp=1 if defined($o_minsnmp[1]);
 	$perfcache_recache_trigger=$perfcache_recache_max if defined($o_maxminsnmp);
-	if (defined($o_commentoid) && $o_commentoid!~/\.$/) {
-	    $o_commentoid.='.';
+	if (defined($o_commentoid)) {
+	    if ($o_commentoid !~ /\./) {
+		print "Comment OID is not specified or is not valid\n"; print_usage(); exit $ERRORS{"UNKNOWN"};
+	    }
+	    $o_commentoid.='.' if $o_commentoid !~ /\.$/;
 	}
 	#### octet length checks
 	if (defined ($o_octetlength) && (isnnum($o_octetlength) || $o_octetlength > 65535 || $o_octetlength < 484 )) {
@@ -1146,7 +1153,7 @@ sub check_options {
 	$do_snmp=0;
 	if (defined($o_octetlength) || defined($o_highperf) || defined($o_maxminsnmp) || defined($o_minsnmp) ||
 	    defined($v3protocols) || defined($o_login) || defined($o_passwd) || defined($o_version2) || defined($o_community) ||
-	    defined($o_ciscocat) || defined($o_stp)) {
+	    defined($o_ciscocat) || defined($o_stp) || defined($o_commentoid)) {
 	   print "Option you specified is only valid with SNMP. Maybe you forgot to specify hostname with -h?\n";print_usage(); exit $ERRORS{"UNKNOWN"};
 	}
     }
@@ -1675,7 +1682,7 @@ if ($do_snmp==0) {
 			verb("   start interface $1");
 			$cint = $1;
 		    }
-		    elsif (/\s+Bit\sRate\=(\d+)\s+Mb/) {
+		    elsif (/\s+Bit\sRate\=(\d+\.?\d?)\s+Mb/) {
 			verb("   speed of ".$cint." is ".$1." Mb/s") if defined($cint);
 			$wint{$cint} = $1 if defined($cint);
 		    }
@@ -1978,8 +1985,8 @@ my @prev_values=();
 my $usable_data=0;
 my $n_rows=0;
 my $n_items_check=(defined($o_ext_checkperf))?7:3;
-my $trigger=$timenow - ($o_delta - ($o_delta/10));
-my $trigger_low=$timenow - 3*$o_delta;
+my $trigger=$timenow - ($o_delta - ($o_delta/4));
+my $trigger_low=$timenow - 4*$o_delta;
 my $old_value=undef;
 my $old_time=undef;
 my $speed_unit=undef;
@@ -2454,19 +2461,29 @@ for (my $i=0;$i < $num_int; $i++) {
   # Don't return performance data for interfaces that are down and are supposed to be down
   if (!(defined($o_admindown_ok) && $ok_val==1 && $int_status == $status{'DOWN'} && $admin_int_status == $status{'DOWN'}) && defined($interfaces[$i]{'descr'}) && (defined($o_perf) || defined($o_intspeed) || defined($o_perfr) || defined($o_perfp) || defined($o_checkperf))) {
     if (defined ($o_perfp)) { # output in % of speed
-	if ($usable_data==0) {
+	if ($usable_data==0 && defined($checkperf_out[0]) && defined($checkperf_out[1])) {
 	    $perf_out .= " ".perf_name($descr,"in_prct")."=";
-	    $perf_out .= sprintf("%.0f",$checkperf_out[0]) . '%;' if defined($checkperf_out[0]);
-	    $perf_out .= (defined($o_warn_max[0]) && $o_warn_max[0]) ? $o_warn_max[0] . ";" : ";";
-	    $perf_out .= (defined($o_crit_max[0]) && $o_crit_max[0]) ? $o_crit_max[0] . ";" : ";"; 
-	    $perf_out .= "0;100 ";
-	    $perf_out .= " ".perf_name($descr,"out_prct")."=";
-	    # [WL: 01/09/11] This is what it was, I think this is left from before o_metric and corresponding calculations were all reprogrammed:
-	    #   $perf_out .= sprintf("%.0f",$checkperf_out[1] * 800 / $portspeed[$i]) ."%;" if defined($checkperf_out[1]) && $portspeed[$i]!=0;
-	    $perf_out .= sprintf("%.0f",$checkperf_out[1]) . '%;' if defined($checkperf_out[1]);
-	    $perf_out .= (defined($o_warn_max[1]) && $o_warn_max[1]) ? $o_warn_max[1] . ";" : ";";
-	    $perf_out .= (defined($o_crit_max[1]) && $o_crit_max[1]) ? $o_crit_max[1] . ";" : ";"; 
-	    $perf_out .= "0;100 ";
+	    if (defined($o_prct)) {
+		$perf_out .= " ".perf_name($descr,"in_prct")."=";
+		$perf_out .= sprintf("%.0f",$checkperf_out[0]) . '%;';
+		$perf_out .= (defined($o_warn_max[0]) && $o_warn_max[0]) ? $o_warn_max[0] . ";" : ";";
+		$perf_out .= (defined($o_crit_max[0]) && $o_crit_max[0]) ? $o_crit_max[0] . ";" : ";"; 
+		$perf_out .= "0;100 ";
+		$perf_out .= " ".perf_name($descr,"out_prct")."=";
+		$perf_out .= sprintf("%.0f",$checkperf_out[1]) . '%;';
+		$perf_out .= (defined($o_warn_max[1]) && $o_warn_max[1]) ? $o_warn_max[1] . ";" : ";";
+		$perf_out .= (defined($o_crit_max[1]) && $o_crit_max[1]) ? $o_crit_max[1] . ";" : ";"; 
+		$perf_out .= "0;100 ";
+	    }
+	    elsif (defined($interfaces[$i]{'portspeed'}) && $interfaces[$i]{'portspeed'} != 0) {
+		$perf_out .= " ".perf_name($descr,"in_prct")."=";
+		$perf_out .= sprintf("%.0f", $checkperf_out[0]*$speed_metric/$interfaces[$i]{'portspeed'}*800). '%';
+		$perf_out .= " ".perf_name($descr,"out_prct")."=";
+		$perf_out .= sprintf("%.0f", $checkperf_out[1]*$speed_metric/$interfaces[$i]{'portspeed'}*800). '%';
+	    }
+	    else {
+		verb("we do not have infrmation on speed of interface $i (".$interfaces[$i]{'descr'}).")";
+	    }
 	}
     } elsif (defined ($o_perfr)) { # output in bites or Bytes /s
 	if ($usable_data==0) {

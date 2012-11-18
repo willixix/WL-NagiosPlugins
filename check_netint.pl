@@ -1405,19 +1405,23 @@ sub create_snmp_session {
   return $session;
 }
 
+# function that does snmp get request for a list of OIDs
+# 1st argument is session, 2nd is ref to list, 3rd is text for error & debug info
 sub snmp_get_request {
   my ($session, $oids_ref, $table_name) = @_;
   my $result = undef;
 
-  verb("Retrieving ".$table_name." OIDs: ".join(' ',@{$oids_ref}));
   if (defined($o_bulksnmp) && $snmp_session_v > 1) {
+    verb("Doing bulk request on ".$table_name." OIDs: ".join(' ',@{$oids_ref}));
     $result = $session->get_bulk_request(
-      Varbindlist => $oids_ref
+      -nonrepeaters => scalar(@{$oids_ref}),
+      -varbindlist => $oids_ref
     );
   }
   else {
+    verb("Doing snmp request on ".$table_name." OIDs: ".join(' ',@{$oids_ref}));
     $result = $session->get_request(
-      Varbindlist => $oids_ref
+      -varbindlist => $oids_ref
     );
   }
   if (!defined($result)) {
@@ -1428,6 +1432,7 @@ sub snmp_get_request {
   return $result;
 }
 
+# executes shell command, returns results blob file pointer
 sub exec_shell_command {
   my $shell_command = shift;
   
@@ -1440,6 +1445,7 @@ sub exec_shell_command {
   return \*SHELL_DATA;
 }
 
+# closes blob/file pointer, end of shell command execution
 sub finish_shell_command {
   my $file_ref = shift;
   close $file_ref;

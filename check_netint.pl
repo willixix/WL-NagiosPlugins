@@ -4,7 +4,7 @@
 #
 # Program : check_netint.pl or check_snmp_netint.pl
 # Version : 2.4 alpha 7
-# Date    : Nov 18, 2012
+# Date    : Nov 25, 2012
 # Maintainer: William Leibzon - william@leibzon.org,
 # Authors : See "CONTRIBUTORS" documentation section
 # Licence : GPL - summary below, full text at http://www.fsf.org/licenses/gpl.txt
@@ -556,6 +556,9 @@
 #                    in perf unless both -y and -u were used together. This bug was introduced
 #		     somewhere around 2.2 and apparently 2.31 did not entirely fix it
 # 2.4a7 - 11/18/12 - Added support for SNMP bulk requests and --bulk_snmp_queries option
+# 2.4a8 - 11/25/12 - Another major code refactoring work to separate snmp-specific query
+#                    code into its own function (as well as new ifconfig processing
+#                    for linux local checks into its own function).
 #
 # ============================ LIST OF CONTRIBUTORS ===============================
 #
@@ -745,6 +748,13 @@ my $specified_speed=0;	# if -S has interface speed specified, this is set to spe
 my $speed_alert=undef; 	# if -S has alert specified, this is alert to issue if interface speed is not what is expected
 my $shell_pid=undef;	# defined only if run locally
 my $snmp_session_v=0;   # if no snmp session, its 0, otherwise 1 2 or 3 depending on version of SNMP session opened
+my $num_int = 0;	# number of interfaces that have matched
+my @interfaces=();	# main array for interfaces data
+# separated arrays that existed before that were replaced by above common array of structure/hash
+# my @descr = (); --> $descr[$i] is now $interfaces[$i]{'descr'}
+# my @portspeed=(); --> $portspeed[$i] is now $interfaces[$i]{'portspeed'}
+my $perf_out='';	# performance data accumulator
+my $saved_out='';	# saved data accumulator (added to perf)
 
 # Functions
 sub read_file { 
@@ -1330,6 +1340,20 @@ sub int_name_match {
     return ($name =~ /$o_descr/);
 }
 
+# new function that cleans interface name as it may appear in SNMP into what we use
+sub clean_int_name {
+    my $name = shift;
+
+    # below chop line is based on code by Y. Charton to remove ^@ (NULL ?) and other
+    # non-ASCII characters at the end of the interface description, this allows to
+    # correctly match interfaces for Windows servers, since they have buggy snmp
+    chop($name) if (ord(substr($name,-1,1)) > 127 || ord(substr($name,-1,1)) == 0 );
+
+    $name =~ s/[[:cntrl:]]//g;
+    chomp $name;
+    return $name;
+}
+
 # function that opens proper session for SNMP v1/2/3
 sub create_snmp_session {
   my ($session,$error);
@@ -1407,9 +1431,11 @@ sub create_snmp_session {
 }
 
 # function that does snmp get request for a list of OIDs
-# 1st argument is session, 2nd is ref to list, 3rd is text for error & debug info
+# 1st argument is session, 2nd is ref to list of OIDs,
+# 3rd is optional text for error & debug info
+# 4th argument is optional hash of array to be filled with results
 sub snmp_get_request {
-  my ($session, $oids_ref, $table_name) = @_;
+  my ($session, $oids_ref, $table_name, $results) = @_;
   my $result = undef;
 
   verb("Doing snmp request on ".$table_name." OIDs: ".join(' ',@{$oids_ref}));
@@ -1444,7 +1470,10 @@ sub snmp_get_request {
   }
 
   verb("Finished SNMP request. Result contains ".scalar(keys %$result)." entries:");
-  foreach(keys %$result) { verb(" ".$_." = ".$result->{$_}); }
+  foreach(keys %$result) { 
+      $results->{$_} = $result->{$_} if defined($results);
+      verb(" ".$_." = ".$result->{$_});
+  }
 
   return $result;
 }
@@ -1469,130 +1498,18 @@ sub finish_shell_command {
   $shell_pid = undef;
 }
 
-########## MAIN #######
-
-check_options();
-
-# Check gobal timeout if snmp screws up
-if (defined($TIMEOUT)) {
-  verb("Alarm at $TIMEOUT + 5");
-  alarm($TIMEOUT+5);
-} else {
-  verb("no timeout defined : $o_timeout + 10");
-  alarm ($o_timeout+10);
-}
-
-$SIG{'ALRM'} = sub {
- if (defined($o_host)) {
-      print "ERROR: alarm timeout. No answer from host $o_host\n";
- }
- else {
-      print "ERROR: alarm timeout\n";
-      kill 9, $shell_pid if defined($shell_pid);
- }
- exit $ERRORS{"UNKNOWN"};
-};
-
-
-# global arrays of interface data used used for snmp retrieval
-# these should go into below defined @interfaces array too for cleaner code,
-# but I probably will not bother changing now (or it may take a while before I do)
-my $session = undef;
-my @tindex = ();
-my @oids = undef;
-my @oids_admin = undef;
-my @oid_descr=(); # this is actually only used with '-m' to double-check that cached index is correct
-my @oid_speed=();
-my @oid_speed_high=();
-my @oid_commentlabel=();
-my @oid_ciscostatus=();
-my @oid_ciscofaultstatus=();
-my @oid_ciscooperstatus=();
-my @oid_ciscoaddoperstatus=();
-my @oid_stpstate=();
-my %cisco_timap=();
-my %stp_ifmap=();
-my @stpport=();
-my @cport=();
-my %copt=();
-my %copt_next=();
-my (@oid_perf,@oid_perf_outoct,@oid_perf_inoct,@oid_perf_inerr,@oid_perf_outerr,@oid_perf_indisc,@oid_perf_outdisc)= (undef,undef,undef,undef,undef,undef,undef);
-my ($result,$resultp,$resultf,$resulto,$resultc,$results) = (undef,undef,undef,undef,undef,undef);
-
-# global variables and new array used for both snmp and locally retrieved data
-my $num_int = 0;
-my @interfaces=();
-# Separated arrays that existed before that were replaced by above common array of structure/hash
-# my @descr = (); --> $descr[$i] is now $interfaces[$i]{'descr'}
-# my @portspeed=(); --> $portspeed[$i] is now $interfaces[$i]{'portspeed'}
-
-# Create SNMP session
-if ($do_snmp) {
-    $session = create_snmp_session();
-}
-
-# WL: check if '-m' option is passed and previous description ids & names are available from
-#     previous performance data (caching to minimize SNMP lookups and only get specific data
-#     instead of getting description table every time)
-$perfcache_time = $prev_perf{cache_descr_time} if exists($prev_perf{cache_descr_time});
-
-if ($do_snmp && defined($o_minsnmp) && %prev_perf) {
-   # load old-style arrays
-   @tindex = split(',', $prev_perf{cache_descr_ids}) if exists($prev_perf{cache_descr_ids});
-   @cport = split(',', $prev_perf{cache_descr_cport}) if exists($prev_perf{cache_descr_cport});
-   @stpport = split(',', $prev_perf{cache_descr_stpport}) if exists($prev_perf{cache_descr_stpport});
-   my @portspeed = split(',', $prev_perf{cache_int_speed}) if exists($prev_perf{cache_int_speed}) && $specified_speed==0;
-   my @descr = split(',', $prev_perf{cache_descr_names}) if exists($prev_perf{cache_descr_names});
-
-   # clear old index if anything seems wrong with cached data
-   my %tindex_hash = map { $_ => 1 } @tindex;
-   @tindex = () if (scalar(@tindex) != scalar(keys %tindex_hash)) || # make sure no duplicates
-		   (scalar(@tindex) != scalar(@descr)) ||
-		   (defined($o_ciscocat) && (!exists($prev_perf{cache_descr_cport}) || scalar(@tindex) != scalar(@cport))) ||
-		   (defined($o_stp) && (!exists($prev_perf{cache_descr_stpport}) || scalar(@tindex) != scalar(@stpport))) ||
-		   (exists($prev_perf{cache_int_speed}) && scalar(@tindex) != scalar(@portspeed)) ||
-		   # this checks that time of last saved indeces is not way too long ago, in which case we check them again
-		   (!defined($perfcache_time) || $timenow < $perfcache_time || ($timenow - $perfcache_time) > $perfcache_recache_trigger);
-
-   # load into our new array
-   for (my $i=0;$i<scalar(@tindex);$i++) {
-	 $interfaces[$i]={'descr' => $descr[$i]};
-	 $interfaces[$i]{'speed'} = $portspeed[$i] if exists($prev_perf{cache_int_speed});
-   }
-   if (exists($prev_perf{cache_cisco_opt})) {
-   	$copt{$_}=$_ foreach(split ',',$prev_perf{cache_cisco_opt});
-   }
-
-   if (scalar(@tindex)>0) {
-      $num_int = scalar(@tindex);
-      verb("Using cached data:");
-      verb("  tindex=".join(',',@tindex));
-      verb("  descr=".join(',',@descr));
-      verb("  speed=".join(',',@portspeed)) if scalar(@portspeed)>0;
-      verb("  copt=".join(',',keys %copt)) if scalar(keys %copt)>0;
-      if (scalar(@cport)>0) {
-	verb("  cport=".join(',',@cport));
-	@cport=() if $cport[0]==-1; # perf data with previous check done with --cisco but no cisco data was found
-      }
-      if (scalar(@stpport)>0) {
-	verb("  stpport=".join(',',@stpport));
-	@stpport=() if $stpport[0]==-1; # perf data with previous check done with --stp but no stp data was found
-      }
-   }
-}
-
-#Select interface by regexp of exact match
-verb("Filter : $o_descr") if defined($o_descr);
-
-# New code to get data from local machine about its interfaces if we're not doing SNMP
-if ($do_snmp==0) {
+# this function gets all interface data on localhost
+# by executing ifconfig and other commands as necessary
+# for the machine and architecture its being run on
+sub getdata_localhost {
    my $linux_ifconfig = "/sbin/ifconfig";
    my $linux_ethtool = "/sbin/ethtool";
    my $linux_iwconfig = "/sbin/iwconfig";
-   # try to get data on a local server
+
+   # first find architecture we're running on
    my $shell_command;
-   my $os = `uname`;
    my $shell_ref = undef;
+   my $os = `uname`;
    chomp $os;
 
    # Linux output of "ifconfig":
@@ -1774,63 +1691,138 @@ if ($do_snmp==0) {
 	}
    }
 }
-elsif (scalar(@tindex)==0) {
-   # WL: Get cisco port->ifindex map table
-   if (defined($o_ciscocat)) {
-	$resultp = $session->get_table(
+
+# code that retrieves data by SNMP and populates interfaces array is now in this function
+# instead of directly directly part of non-function main code below
+sub getdata_snmp {
+   # global arrays of interface data used used for snmp retrieval
+   my $session = undef;
+   my @tindex = ();
+   my @oids = undef;
+   my @oids_admin = undef;
+   my @oid_descr=(); # this is actually only used with '-m' to double-check that cached index is correct
+   my @oid_speed=();
+   my @oid_speed_high=();
+   my @oid_commentlabel=();
+   my @oid_ciscostatus=();
+   my @oid_ciscofaultstatus=();
+   my @oid_ciscooperstatus=();
+   my @oid_ciscoaddoperstatus=();
+   my @oid_stpstate=();
+   my %cisco_timap=();
+   my %stp_ifmap=();
+   my @stpport=();
+   my @cport=();
+   my @portspeed=();
+   my @descr=();
+   my %copt=();
+   my %copt_next=();
+   my $results = {};
+   my (@oid_perf,@oid_perf_outoct,@oid_perf_inoct,@oid_perf_inerr,@oid_perf_outerr,@oid_perf_indisc,@oid_perf_outdisc)= (undef,undef,undef,undef,undef,undef,undef);
+   my ($result1,$result2,$data1) = (undef,undef,undef);
+   my $int_status_extratext="";
+
+   # Create SNMP session
+   $session = create_snmp_session();
+
+   if (defined($o_minsnmp) && %prev_perf) {
+      # load old-style arrays
+      @tindex = split(',', $prev_perf{cache_descr_ids}) if exists($prev_perf{cache_descr_ids});
+      @cport = split(',', $prev_perf{cache_descr_cport}) if exists($prev_perf{cache_descr_cport});
+      @stpport = split(',', $prev_perf{cache_descr_stpport}) if exists($prev_perf{cache_descr_stpport});
+      @portspeed = split(',', $prev_perf{cache_int_speed}) if exists($prev_perf{cache_int_speed}) && $specified_speed==0;
+      @descr = split(',', $prev_perf{cache_descr_names}) if exists($prev_perf{cache_descr_names});
+
+      # clear old index if anything seems wrong with cached data
+      my %tindex_hash = map { $_ => 1 } @tindex;
+      @tindex = () if (scalar(@tindex) != scalar(keys %tindex_hash)) || # make sure no duplicates
+		   (scalar(@tindex) != scalar(@descr)) ||
+		   (defined($o_ciscocat) && (!exists($prev_perf{cache_descr_cport}) || scalar(@tindex) != scalar(@cport))) ||
+		   (defined($o_stp) && (!exists($prev_perf{cache_descr_stpport}) || scalar(@tindex) != scalar(@stpport))) ||
+		   (exists($prev_perf{cache_int_speed}) && scalar(@tindex) != scalar(@portspeed)) ||
+		   # this checks that time of last saved indeces is not way too long ago, in which case we check them again
+		   (!defined($perfcache_time) || $timenow < $perfcache_time || ($timenow - $perfcache_time) > $perfcache_recache_trigger);
+
+      # load into our new array
+      for (my $i=0;$i<scalar(@tindex);$i++) {
+	 $interfaces[$i]={'descr' => $descr[$i]};
+	 $interfaces[$i]{'speed'} = $portspeed[$i] if exists($prev_perf{cache_int_speed});
+      }
+      if (exists($prev_perf{cache_cisco_opt})) {
+	 $copt{$_}=$_ foreach(split ',',$prev_perf{cache_cisco_opt});
+      }
+
+      if (scalar(@tindex)>0) {
+	  $num_int = scalar(@tindex);
+	  verb("Using cached data:");
+	  verb("  tindex=".join(',',@tindex));
+	  verb("  descr=".join(',',@descr));
+	  verb("  speed=".join(',',@portspeed)) if scalar(@portspeed)>0;
+	  verb("  copt=".join(',',keys %copt)) if scalar(keys %copt)>0;
+	  if (scalar(@cport)>0) {
+	     verb("  cport=".join(',',@cport));
+	     @cport=() if $cport[0]==-1; # perf data with previous check done with --cisco but no cisco data was found
+	  }
+	  if (scalar(@stpport)>0) {
+	     verb("  stpport=".join(',',@stpport));
+	     @stpport=() if $stpport[0]==-1; # perf data with previous check done with --stp but no stp data was found
+	  }
+      }
+   }
+
+   if (scalar(@tindex)==0) {
+      # WL: Get cisco port->ifindex map table
+      if (defined($o_ciscocat)) {
+	 $result2 = $session->get_table(
 		Baseoid => $cisco_port_ifindex_map 
-	);
-	if (!defined($resultp)) {
+	 );
+	 if (!defined($result2)) {
 		printf("ERROR: Cisco port-index map table : %s.\n", $session->error);
 		$session->close;
 		exit $ERRORS{"UNKNOWN"};
-	}
-	foreach (keys %$resultp) {
-		$cisco_timap{$$resultp{$_}}=$1 if /$cisco_port_ifindex_map\.(.*)/;
-	}
-   }
-   # WL: Get stp port->ifindex map table
-   if (defined($o_stp)) {
-        $results = $session->get_table(
+	 }
+	 foreach (keys %$result2) {
+		$cisco_timap{$result2->{$_}}=$1 if /$cisco_port_ifindex_map\.(.*)/;
+	 }
+      }
+      # WL: Get stp port->ifindex map table
+      if (defined($o_stp)) {
+         $result1 = $session->get_table(
                 Baseoid => $stp_dot1dbase_ifindex_map
-        );
-        if (!defined($results)) {
+         );
+         if (!defined($result1)) {
                 printf("ERROR: STP port-index map table : %s.\n", $session->error);
                 $session->close;
                 exit $ERRORS{"UNKNOWN"};
-        }
-        foreach (keys %$results) {
-                $stp_ifmap{$$results{$_}}=$1 if /$stp_dot1dbase_ifindex_map\.(.*)/;
-        }
-   }
-   $perfcache_time = $timenow;
-   verb("Getting Interfaces Description Table ($descr_table):");
-   # Get description table
-   $result = $session->get_table(
-        Baseoid => $descr_table
-   );
-   if (!defined($result)) {
-      printf("ERROR: Description table : %s.\n", $session->error);
-      $session->close;
-      exit $ERRORS{"UNKNOWN"};
-   }
-   # Select interface by regexp of exact match and put the oid to query in an array
-   foreach my $key (keys %$result) {
-      verb(" OID : $key, Desc : $$result{$key}");
+         }
+         foreach (keys %$result1) {
+                $stp_ifmap{$result1->{$_}}=$1 if /$stp_dot1dbase_ifindex_map\.(.*)/;
+         }
+      }
+      $perfcache_time = $timenow;
+      verb("Getting Interfaces Description Table ($descr_table):");
+      # Get description table
+      $result1 = $session->get_table(
+	 Baseoid => $descr_table
+      );
+      if (!defined($result1)) {
+	 printf("ERROR: Description table : %s.\n", $session->error);
+	 $session->close;
+	 exit $ERRORS{"UNKNOWN"};
+      }
+      # Select interface by regexp of exact match and put the oid to query in an array
+      foreach my $key (keys %$result1) {
+	 $data1 = clean_int_name($result1->{$key});
+	 verb(" OID : $key, Clean Desc : $data1, Raw Desc: ".$result1->{$key});
 
-      # below chop line is based on code by Y. Charton to remove ^@ (NULL ?) and other
-      # non-ASCII characters at the end of the interface description, this allows to
-      # correctly match interfaces for Windows servers, since they have buggy snmp
-      chop($$result{$key}) if (ord(substr($$result{$key},-1,1)) > 127 || ord(substr($$result{$key},-1,1)) == 0 );
-
-      if (int_name_match($$result{$key}) && $key =~ /$descr_table\.(.*)/) {
-	 $interfaces[$num_int] = { 'descr' => '', 'admin_up' => 0, 'oper_up' => 0, 'in_bytes' => 0, 'out_bytes' => 0, 
+	 if (int_name_match($data1) && $key =~ /$descr_table\.(.*)/) {
+	    $interfaces[$num_int] = { 'descr' => '', 'admin_up' => 0, 'oper_up' => 0, 'in_bytes' => 0, 'out_bytes' => 0, 
 				   'in_packets' => 0, 'out_packets' => 0, 'in_errors' => 0, 'out_errors' => 0 };
-	 # WL: get the index number of the interface (using additional map in case of cisco) 
-	 if (defined($o_ciscocat)) {
-		if (defined($o_cisco{use_portnames}) && defined($$resultp{$cisco_port_ifindex_map.'.'.$1})) {
+	    # WL: get the index number of the interface (using additional map in case of cisco) 
+	    if (defined($o_ciscocat)) {
+		if (defined($o_cisco{'use_portnames'}) && defined($result2->{$cisco_port_ifindex_map.'.'.$1})) {
 			$cport[$num_int] = $1;
-			$tindex[$num_int] = $$resultp{$cisco_port_ifindex_map.'.'.$1};
+			$tindex[$num_int] = $result2->{$cisco_port_ifindex_map.'.'.$1};
 		}
 		elsif (defined($cisco_timap{$1})) {
 			$cport[$num_int] = $cisco_timap{$1};
@@ -1839,174 +1831,425 @@ elsif (scalar(@tindex)==0) {
 		else {
 			$tindex[$num_int] = $1;
 		}
-	 }
-	 else {
+	    }
+	    else {
 		$tindex[$num_int] = $1;
-	 }
-	 # WL: find which STP port to retrieve data for that corresponds to this ifindex port
-	 if (defined($o_stp)) {
+	    }
+	    # WL: find which STP port to retrieve data for that corresponds to this ifindex port
+	    if (defined($o_stp)) {
 		$stpport[$num_int] = $stp_ifmap{$tindex[$num_int]} if exists($stp_ifmap{$tindex[$num_int]});
+	    }
+	    # get the full description and get rid of special characters (specially for Windows)
+	    $interfaces[$num_int]{'descr'}=$data1;
+	    $num_int++;
 	 }
-         # get the full description and get rid of special characters (specially for Windows)
-	 $interfaces[$num_int]{'descr'}=$$result{$key};
-         $interfaces[$num_int]{'descr'}=~ s/[[:cntrl:]]//g;
-	 chomp $interfaces[$num_int]{'descr'};
-	 $num_int++;
-       }
+      }
    }
+
+   if ($num_int == 0) {
+      $session->close;
+   }
+   else {
+      # Change to 64 bit counters if option is set : 
+      if (defined($o_highperf)) {
+	 $out_octet_table=$out_octet_table_64;
+	 $in_octet_table=$in_octet_table_64;
+      }
+
+      # WL: Prepare list of all OIDs to be retrieved for interfaces we want to check
+      for (my $i=0;$i<$num_int;$i++) {
+	 verb("Name : $interfaces[$i]{'descr'}, Index : $tindex[$i]");
+
+	 # put the admin or oper oid in an array
+	 $oids[$i]= defined ($o_admin) ? $admin_table . $tindex[$i] : $oper_table . $tindex[$i] ;
+	 $oids_admin[$i]= $admin_table . $tindex[$i];
+	 # this is for verifying cached description index is correct
+	 # (just in case ifindex port map or cisco port name changes)
+	 if (defined($o_minsnmp) && !defined($o_maxminsnmp)) {
+	    if (defined($o_cisco{'use_portnames'})) {
+	       $oid_descr[$i] = $descr_table .'.'.$cport[$i];
+	    }
+	    else {
+	       $oid_descr[$i] = $descr_table .'.'.$tindex[$i];
+	    }
+	 }
+	 if (defined($o_ciscocat) && $cport[$i]) {
+	    if (exists($o_cisco{'oper'}) || exists($copt{'oper'}) || 
+		(scalar(keys %copt)==0 && exists($o_cisco{'auto'}))) {
+		    $oid_ciscooperstatus[$i] = $cisco_port_operstatus_table . $cport[$i];
+	    }
+	    if (exists($o_cisco{'addoper'}) || exists($copt{'addoper'}) ||
+		(scalar(keys %copt)==0 && exists($o_cisco{'auto'}))) {
+		    $oid_ciscoaddoperstatus[$i] = $cisco_port_addoperstatus_table . $cport[$i];
+	    }
+	    if (exists($o_cisco{'linkfault'}) || exists($copt{'linkfault'}) ||
+		(scalar(keys %copt)==0 && exists($o_cisco{'auto'}))) {
+		    $oid_ciscofaultstatus[$i] = $cisco_port_linkfaultstatus_table . $cport[$i];
+	    }
+	 }
+	 if (defined($o_stp)) {
+	    $oid_stpstate[$i] = $stp_dot1dbase_portstate . $stpport[$i] if $stpport[$i];
+	 }
+	 # Put the performance oid 
+	 if (defined($o_perf) || defined($o_checkperf)) {
+	    $oid_perf_inoct[$i]= $in_octet_table . $tindex[$i];
+	    $oid_perf_outoct[$i]= $out_octet_table . $tindex[$i];
+	    if (defined($o_ext_checkperf) || defined($o_perfe)) {
+	       $oid_perf_indisc[$i]= $in_discard_table . $tindex[$i];
+	       $oid_perf_outdisc[$i]= $out_discard_table . $tindex[$i];
+	       $oid_perf_inerr[$i]= $in_error_table . $tindex[$i];
+	       $oid_perf_outerr[$i]= $out_error_table . $tindex[$i];
+	    }
+	 }
+	 if ($check_speed && (!defined($interfaces[$i]{'portspeed'}) || !defined($o_maxminsnmp))) {
+	    $oid_speed[$i]=$speed_table . $tindex[$i];
+	    $oid_speed_high[$i]=$speed_table_64 . $tindex[$i];
+	 }
+	 if (defined($o_commentoid)) {
+	    if (defined($o_ciscocat) && defined($o_cisco{'show_portnames'})) {
+	       $oid_commentlabel[$i]=$o_commentoid .'.'. $cport[$i] if $cport[$i]; 
+	    }
+	    else {
+	       $oid_commentlabel[$i]=$o_commentoid . $tindex[$i];
+	    }
+	 }
+      }
+
+      # put them all together and do as one query when -m option is used 
+      if (defined($o_perf) || defined($o_checkperf) || defined($o_intspeed)) {
+	 @oid_perf=(@oid_perf_outoct,@oid_perf_inoct,@oid_speed);
+	 if (defined($o_highperf)) {
+	    @oid_perf=(@oid_perf,@oid_speed_high);
+	 }
+	 if (defined ($o_ext_checkperf) || defined($o_perfe)) {
+	    @oid_perf=(@oid_perf,@oid_perf_inerr,@oid_perf_outerr,@oid_perf_indisc,@oid_perf_outdisc);
+	 }
+      }
+      if (defined($o_ciscocat)) {
+	 @oid_ciscostatus=(@oid_ciscofaultstatus,@oid_ciscooperstatus,@oid_ciscoaddoperstatus);
+      }
+      if (defined($o_admindown_ok)) {
+	 push @oids, @oids_admin if scalar(@oids_admin)>0;
+      }
+      if (defined($o_minsnmp)) {
+	 push @oids, @oid_perf if scalar(@oid_perf)>0;
+	 push @oids, @oid_descr if scalar(@oid_descr)>0;
+	 push @oids, @oid_commentlabel if defined($o_commentoid) && scalar(@oid_commentlabel)>0;
+	 push @oids, @oid_ciscostatus if defined($o_ciscocat) && scalar(@oid_ciscostatus)>0;
+	 push @oids, @oid_stpstate if defined($o_stp) && scalar(@oid_stpstate)>0;
+      }
+
+      # Get the requested oid values
+      snmp_get_request($session, \@oids, "status table", $results);
+
+      # If not doing it as one query, do additional queries
+      # to get the perf value if -f (performance) option defined or -k (check bandwidth)
+      if ((defined($o_perf) || defined($o_checkperf) || defined($o_intspeed)) && !defined($o_minsnmp)) {
+	 snmp_get_request($session, \@oid_perf, "statistics table", $results);
+      }
+      # and additional cisco status tables
+      if (defined($o_ciscocat) && !defined($o_minsnmp) && scalar(@oid_ciscostatus)>0) {
+	 snmp_get_request($session, \@oid_ciscostatus, "cisco status tables", $results);
+      }
+      # and stp state table if --stp option is given
+      if (defined($o_stp) && !defined($o_minsnmp) && scalar(@oid_stpstate)>0) {
+	 snmp_get_request($session, \@oid_stpstate, "stp state table", $results);
+      }
+      # and additional comments / port description table
+      if (defined($o_commentoid) && !defined($o_minsnmp) && scalar(@oid_commentlabel)>0) {
+	 snmp_get_request($session, \@oid_commentlabel, "comments table", $results);
+      }
+
+      $session->close;
+
+      # Now go through the results and populate our interfaces array
+      for (my $i=0;$i<$num_int;$i++) {
+	 $int_status_extratext="";
+
+	 # Admin and Oper Status
+	 $interfaces[$i]{'admin_up'} = $results->{$admin_table.$tindex[$i]} if exists($results->{$admin_table.$tindex[$i]});
+	 $interfaces[$i]{'oper_up'} = $results->{$oper_table.$tindex[$i]} if exists($results->{$oper_table.$tindex[$i]});
+
+	 # Verify description is correct when -m option (but not --mm) is used
+	 if (defined($o_minsnmp) && !defined($o_maxminsnmp)) {
+	    my $dsc=undef;
+	    if (defined($o_cisco{'use_portnames'})) {
+		$dsc=$results->{$descr_table.'.'. $cport[$i]} if $cport[$i];
+	    }
+	    else {
+		$dsc=$results->{$descr_table.'.'. $tindex[$i]};
+	    }
+	    $dsc = clean_int_name($dsc) if defined($dsc);
+	    if (!defined($dsc) || $dsc ne $interfaces[$i]{'descr'}) {
+		# WL: Perhaps this is not quite right and there should be "goto" here forcing to retrieve all tables again
+		if (!defined($dsc)) {
+		    printf("ERROR: Cached port description is %s while retrieved port name is not available\n", $interfaces[$i]{'descr'});
+		}
+		else {
+		    printf("ERROR: Cached port description %s is different then retrieved port name %s\n", $interfaces[$i]{'descr'}, $dsc);
+		}
+		exit $ERRORS{"UNKNOWN"};
+	    }
+	    verb("Name : $dsc [confirmed cached name for port $i]");
+	 }
+
+	 # WL: comment/additional description data
+	 if (defined($o_commentoid)) {
+	    if (defined($o_cisco{'show_portnames'})) {
+                $interfaces[$i]{'descr_extra'} ='('.$results->{$o_commentoid.'.'.$cport[$i]}.')' if $cport[$i] && $results->{$o_commentoid.'.'.$cport[$i]};
+	    }
+	    else {
+                $interfaces[$i]{'descr_extra'} ='('.$results->{$o_commentoid.$tindex[$i]}.')' if $results->{$o_commentoid.$tindex[$i]};
+	    }
+	 }
+
+	 # WL: Additional cisco status data
+	 if (defined($o_ciscocat) && $cport[$i]) {
+	    my ($int_status_cisco,$operstat,$addoperstat)=(undef,undef,undef);
+	    my $cisco_status_extratext="";
+
+	    if (exists($o_cisco{'linkfault'}) || exists($copt{'linkfault'}) ||
+	       (scalar(keys %copt)==0 && exists($o_cisco{'auto'}))) {
+		 if (defined($results->{$cisco_port_linkfaultstatus_table.$cport[$i]})) {
+		    $int_status_cisco=$results->{$cisco_port_linkfaultstatus_table.$cport[$i]};
+		    if (defined($int_status_cisco) && $int_status_cisco !~ /\d+/) {
+                	verb("Received non-integer value for cisco linkfault status when checking port $i: $int_status_cisco");
+               		 $int_status_cisco=undef;
+		    }
+		    if (defined($int_status_cisco) && $int_status_cisco!=1) {
+			$cisco_status_extratext.=',' if $cisco_status_extratext;
+			$cisco_status_extratext.=$cisco_port_linkfaultstatus{$int_status_cisco};
+		    }
+		 }
+		 if (defined($int_status_cisco) && (
+                        (!defined($o_inverse) && $int_status_cisco!=1) || (defined($o_inverse) && $int_status_cisco==1))) {
+		    $interfaces[$i]{'nagios_status'}=$ERRORS{'CRITICAL'};
+		 }
+	    }
+	    if (exists($o_cisco{'oper'}) || exists($copt{'oper'}) ||
+		(scalar(keys %copt)==0 && exists($o_cisco{'auto'}))) {
+		if (defined($results->{$cisco_port_operstatus_table.$cport[$i]})) {
+		    $operstat=$results->{$cisco_port_operstatus_table.$cport[$i]};
+		    if (defined($operstat) && $operstat !~ /\d+/) {
+                        verb("Received non-integer value for cisco operport status when checking port $i: $operstat");
+                         $operstat=undef;
+		    }
+		    if (defined($operstat) && $operstat!=2) {
+			$cisco_status_extratext.=',' if $cisco_status_extratext;
+                        $cisco_status_extratext.=$cisco_port_operstatus{$operstat};
+		    }
+		}
+		if (defined($operstat) && (
+                        (!defined($o_inverse) && $operstat!=2) || (defined($o_inverse) && $operstat==2))) {
+		    $interfaces[$i]{'nagios_status'}=$ERRORS{'CRITICAL'};
+		}
+	    }
+	    if (exists($o_cisco{'addoper'}) || exists($copt{'addoper'}) ||
+	      (scalar(keys %copt)==0 && exists($o_cisco{'auto'}))) {
+		if (defined($results->{$cisco_port_addoperstatus_table.$cport[$i]})) {
+		    $addoperstat=$results->{$cisco_port_addoperstatus_table.$cport[$i]};
+		}
+		if (defined($addoperstat) && ($addoperstat eq 'noSuchInstance' || $addoperstat eq 'noSuchObject')) {
+		    verb("Received invalid value for cisco addoper status when checking port $i: $addoperstat");
+		    $addoperstat=undef;
+		}
+		if (defined($addoperstat)) {
+		    if ($addoperstat !~ /0x.*/) {$addoperstat = hex ascii_to_hex($addoperstat);} else {$addoperstat = hex $addoperstat;}
+		    for (my $j=0; $j<=15;$j++) { # WL: SNMP BITS type - yak!
+			if ($addoperstat & (1<<(15-$j))) {
+			   $cisco_status_extratext.=',' if $cisco_status_extratext;
+			   $cisco_status_extratext.=$cisco_port_addoperstatus{$j} if $cisco_port_addoperstatus{$j} ne 'connected';
+			}
+		    }
+		}
+	    }
+	    if (scalar(keys %copt)==0 && exists($o_cisco{'auto'})) {
+		$copt_next{'linkfault'}=1 if defined($int_status_cisco);
+		$copt_next{'oper'}=1 if defined($operstat);
+		$copt_next{'addoper'}=1 if defined($addoperstat);
+	    }
+	    if ($cisco_status_extratext) {
+		$int_status_extratext.=", " if $int_status_extratext;
+		$int_status_extratext.="CISCO: ".$cisco_status_extratext;
+	    }
+	 }
+
+	 # WL: Additional STP state data
+	 if (defined($o_stp) && $stpport[$i]) {
+	    my ($int_stp_state,$prev_stp_state,$prev_stp_changetime)=(undef,undef,undef);
+	    $int_stp_state=$results->{$stp_dot1dbase_portstate.$stpport[$i]};
+	    if ($int_stp_state !~ /\d+/) {
+		verb("Received non-numeric status for STP for port $i: $int_stp_state");
+		$int_stp_state=undef;
+	    }
+	    $prev_stp_state=$prev_perf{perf_name($interfaces[$i]{'descr'},"stp_state")};
+	    $prev_stp_changetime=$prev_perf{perf_name($interfaces[$i]{'descr'},"stp_changetime")};
+	    if (defined($int_stp_state)) {
+		$int_status_extratext.=',' if $int_status_extratext;
+		$int_status_extratext.='STP:'.$stp_portstate{$int_stp_state};
+		$perf_out .= " ".perf_name($interfaces[$i]{'descr'},"stp_state")."=".$int_stp_state;
+		$perf_out .= " ".perf_name($interfaces[$i]{'descr'},"prev_stp_state")."=".$prev_stp_state if defined($prev_stp_state);
+		if (defined($prev_stp_changetime) && defined($prev_stp_state) && $prev_stp_state == $int_stp_state) {
+			$perf_out .= " ".perf_name($interfaces[$i]{'descr'},'stp_changetime').'='.$prev_stp_changetime;
+		}
+		elsif (!defined($prev_stp_state) || !defined($prev_stp_changetime)) {
+			$perf_out .= " ".perf_name($interfaces[$i]{'descr'},'stp_changetime').'='.($timenow-$stp_warntime);
+		}
+		else {
+			$perf_out .= " ".perf_name($interfaces[$i]{'descr'},'stp_changetime').'='.$timenow;
+		}
+		if ($o_stp ne '' && $int_stp_state != $stp_portstate_reverse{$o_stp}) {
+			$int_status_extratext.=":CRIT";
+			$interfaces[$i]{'nagios_status'} = $ERRORS{'CRITICAL'};
+		}
+		elsif ((defined($prev_stp_changetime) && ($timenow-$prev_stp_changetime)<$stp_warntime) ||
+		       (defined($prev_stp_state) && $prev_stp_state != $int_stp_state)) {
+			$int_status_extratext.=":WARN(change from ".
+			         $stp_portstate{$prev_stp_state}.")";
+		        $interfaces[$i]{'nagios_status'} = $ERRORS{'WARNING'};
+		}
+	    }
+	 }
+
+	 # WL: portspeed data now put in separate array
+	 # Get the speed in normal or highperf speed counters
+	 if (defined($oid_speed[$i]) && defined($results->{$oid_speed[$i]})) {
+	     if ($results->{$oid_speed[$i]} == 4294967295) { # Too high for this counter (cf IF-MIB)
+		if (!defined($o_highperf) && $check_speed) {
+		  print "Cannot get interface speed with standard MIB, use highperf mib (-g) : UNKNOWN\n";
+		  exit $ERRORS{"UNKNOWN"}
+	        }
+	        if (defined ($results->{$oid_speed_high[$i]}) && $results->{$oid_speed_high[$i]} != 0) {
+		  $interfaces[$i]{'portspeed'}=$results->{$oid_speed_high[$i]} * 1000000;
+	        } 
+	        elsif ($specified_speed==0) {
+		  print "Cannot get interface speed using highperf mib : UNKNOWN\n";
+		  exit $ERRORS{"UNKNOWN"}
+	        }
+	     } else {
+		$interfaces[$i]{'portspeed'}=$results->{$oid_speed[$i]};
+	     }
+	 }
+
+	 # Load data from SNMP if that's how we got them
+	 if (defined($results->{$oid_perf_inoct[$i]}) && defined($results->{$oid_perf_outoct[$i]})) {
+	     $interfaces[$i]{'in_bytes'}=$results->{$oid_perf_inoct[$i]};
+	     $interfaces[$i]{'out_bytes'}=$results->{$oid_perf_outoct[$i]};
+	     $interfaces[$i]{'in_errors'}=0;
+	     $interfaces[$i]{'out_errors'}=0;
+	     $interfaces[$i]{'in_dropped'}=0;
+	     $interfaces[$i]{'out_dropped'}=0;
+	     if (defined($o_ext_checkperf)) { # Add other values (error & disc)
+		$interfaces[$i]{'in_errors'}=$results->{$oid_perf_inerr[$i]} if defined($results->{$oid_perf_inerr[$i]});
+		$interfaces[$i]{'out_errors'}=$results->{$oid_perf_outerr[$i]} if defined($results->{$oid_perf_outerr[$i]});
+		$interfaces[$i]{'in_dropped'}=$results->{$oid_perf_indisc[$i]} if defined($results->{$oid_perf_indisc[$i]});
+		$interfaces[$i]{'out_dropped'}=$results->{$oid_perf_outdisc[$i]} if defined($results->{$oid_perf_outdisc[$i]});
+	     }
+	 }
+
+	 # Extra text for interface status info
+	 if ($int_status_extratext ne '') {
+	     $interfaces[$i]{'status_extratext'} = '' if !exists($interfaces[$i]{'status_extratext'});
+	     $interfaces[$i]{'status_extratext'} .= ', ' if $interfaces[$i]{'status_extratext'};
+	     $interfaces[$i]{'status_extratext'} .= $int_status_extratext;
+	 }
+
+	 # Prepare index table and desc data for performance output / saved data caching and reuse
+	 if (defined($o_minsnmp) && defined($o_prevperf)) {
+	     @descr=();
+	     @portspeed=();
+	     for(my $iii=0;$iii<scalar(@tindex);$iii++) {
+		  $descr[$iii]=$interfaces[$iii]{'descr'};
+		  $portspeed[$iii]=$interfaces[$iii]{'portspeed'} if defined($interfaces[$iii]{'portspeed'});
+	     }
+	     $saved_out.= " cache_descr_ids=". join(',',@tindex) if scalar(@tindex)>0;
+	     $saved_out.= " cache_descr_names=".join(',',@descr) if scalar(@descr)>0;
+	     $saved_out.= " cache_descr_time=".$perfcache_time if defined($perfcache_time);
+	     $saved_out.= " cache_int_speed=". join(',',@portspeed) if $check_speed && scalar(@portspeed)>0 && defined($o_maxminsnmp) && $specified_speed==0;
+	     if (defined($o_ciscocat)) {
+		 $cport[0]=-1 if scalar(@cport)==0;
+		 $saved_out.= " cache_descr_cport=".join(',',@cport);
+		 if (scalar(keys %copt)>0) {
+		    $saved_out.= " cache_cisco_opt=".join(',',keys %copt);
+		 }
+		 elsif (scalar(keys %copt_next)>0) {
+		    $saved_out.= " cache_cisco_opt=".join(',',keys %copt_next);
+		 }
+	     }
+	     if (defined($o_stp)) {
+		 $stpport[0]=-1 if scalar(@stpport)==0;
+		 $saved_out.= " cache_descr_stpport=".join(',',@stpport);
+	     }
+	 }
+      }
+  }
+
+  return $results;
 }
 
-# No interface found -> error
-if ( $num_int == 0 ) {
-    if (defined($o_descr)) {
+########## MAIN #######
+
+check_options();
+
+# Check gobal timeout if snmp screws up
+if (defined($TIMEOUT)) {
+  verb("Alarm at $TIMEOUT + 5");
+  alarm($TIMEOUT+5);
+} else {
+  verb("no timeout defined : $o_timeout + 10");
+  alarm ($o_timeout+10);
+}
+
+$SIG{'ALRM'} = sub {
+ if (defined($o_host)) {
+      print "ERROR: alarm timeout. No answer from host $o_host\n";
+ }
+ else {
+      print "ERROR: alarm timeout\n";
+      kill 9, $shell_pid if defined($shell_pid);
+ }
+ exit $ERRORS{"UNKNOWN"};
+};
+
+#Select interface by regexp of exact match
+verb("Filter : $o_descr") if defined($o_descr);
+
+# WL: check if '-m' option is passed and previous description ids & names are available from
+#     previous performance data (caching to minimize SNMP lookups and only get specific data
+#     instead of getting description table every time)
+$perfcache_time = $prev_perf{'cache_descr_time'} if exists($prev_perf{'cache_descr_time'});
+
+# Get data from local machine about its interfaces if we're not doing SNMP or gather results from SNMP
+if ($do_snmp==0) {
+   getdata_localhost();
+}
+else {
+   getdata_snmp();
+}
+
+if ($num_int == 0) {
+   if (defined($o_descr)) {
 	  print "ERROR : Unknown interface $o_descr\n";
-    }
-    else {
+   }
+   else {
 	  print "ERROR : can not find any network interfaces\n";
-    }
-    exit $ERRORS{"UNKNOWN"};
-}
-
-if ($do_snmp) {
-  # Change to 64 bit counters if option is set : 
-  if (defined($o_highperf)) {
-    $out_octet_table=$out_octet_table_64;
-    $in_octet_table=$in_octet_table_64;
-  }
-  # WL: Prepare list of all OIDs to be retrieved for interfaces we want to check
-  for (my $i=0;$i<$num_int;$i++) {
-     verb("Name : $interfaces[$i]{'descr'}, Index : $tindex[$i]");
-     # put the admin or oper oid in an array
-     $oids[$i]= defined ($o_admin) ? $admin_table . $tindex[$i] 
-			: $oper_table . $tindex[$i] ;
-     $oids_admin[$i]= $admin_table . $tindex[$i];
-     # this is for verifying cached description index is correct
-     # (just in case ifindex port map or cisco port name changes)
-     if (defined($o_minsnmp) && !defined($o_maxminsnmp)) {
-       if (defined($o_cisco{use_portnames})) {
-         $oid_descr[$i] = $descr_table .'.'.$cport[$i];
-       }
-       else {
-	 $oid_descr[$i] = $descr_table .'.'.$tindex[$i];
-       }
-     }
-     if (defined($o_ciscocat) && $cport[$i]) {
-	if (exists($o_cisco{oper}) || exists($copt{oper}) || 
-	   (scalar(keys %copt)==0 && exists($o_cisco{auto}))) {
-		$oid_ciscooperstatus[$i] = $cisco_port_operstatus_table . $cport[$i];
-	}
-	if (exists($o_cisco{addoper}) || exists($copt{addoper}) ||
-           (scalar(keys %copt)==0 && exists($o_cisco{auto}))) {
-                $oid_ciscoaddoperstatus[$i] = $cisco_port_addoperstatus_table . $cport[$i];
-        }
-        if (exists($o_cisco{linkfault}) || exists($copt{linkfault}) ||
-           (scalar(keys %copt)==0 && exists($o_cisco{auto}))) {
-		$oid_ciscofaultstatus[$i] = $cisco_port_linkfaultstatus_table . $cport[$i];
-        }
-     }
-     if (defined($o_stp)) {
-       $oid_stpstate[$i] = $stp_dot1dbase_portstate . $stpport[$i] if $stpport[$i];
-     }
-     # Put the performance oid 
-     if (defined($o_perf) || defined($o_checkperf)) {
-       $oid_perf_inoct[$i]= $in_octet_table . $tindex[$i];
-       $oid_perf_outoct[$i]= $out_octet_table . $tindex[$i];
-       if (defined($o_ext_checkperf) || defined($o_perfe)) {
-	 $oid_perf_indisc[$i]= $in_discard_table . $tindex[$i];
-	 $oid_perf_outdisc[$i]= $out_discard_table . $tindex[$i];
-	 $oid_perf_inerr[$i]= $in_error_table . $tindex[$i];
-	 $oid_perf_outerr[$i]= $out_error_table . $tindex[$i];
-       }
-     }
-     if ($check_speed && (!defined($interfaces[$i]{'portspeed'}) || !defined($o_maxminsnmp))) {
-         $oid_speed[$i]=$speed_table . $tindex[$i];
-         $oid_speed_high[$i]=$speed_table_64 . $tindex[$i];
-     }
-     if (defined($o_commentoid)) {
-       if (defined($o_ciscocat) && defined($o_cisco{show_portnames})) {
-	 $oid_commentlabel[$i]=$o_commentoid .'.'. $cport[$i] if $cport[$i]; 
-       }
-       else {
-	 $oid_commentlabel[$i]=$o_commentoid . $tindex[$i];
-       }
-     }
-  }
-  # WL: do it as one query when -m option is used 
-  if (defined($o_perf) || defined($o_checkperf) || defined($o_intspeed)) {
-    @oid_perf=(@oid_perf_outoct,@oid_perf_inoct,@oid_speed);
-    if (defined($o_highperf)) {
-      @oid_perf=(@oid_perf,@oid_speed_high);
-    }
-    if (defined ($o_ext_checkperf) || defined($o_perfe)) {
-      @oid_perf=(@oid_perf,@oid_perf_inerr,@oid_perf_outerr,@oid_perf_indisc,@oid_perf_outdisc);
-    } 
-  }
-  if (defined($o_ciscocat)) {
-	@oid_ciscostatus=(@oid_ciscofaultstatus,@oid_ciscooperstatus,@oid_ciscoaddoperstatus);
-  }
-  if (defined($o_admindown_ok)) {
-	push @oids, @oids_admin if scalar(@oids_admin)>0;
-  }
-  if (defined($o_minsnmp)) {
-	push @oids, @oid_perf if scalar(@oid_perf)>0;
-	push @oids, @oid_descr if scalar(@oid_descr)>0;
-	push @oids, @oid_commentlabel if defined($o_commentoid) && scalar(@oid_commentlabel)>0;
-	push @oids, @oid_ciscostatus if defined($o_ciscocat) && scalar(@oid_ciscostatus)>0;
-	push @oids, @oid_stpstate if defined($o_stp) && scalar(@oid_stpstate)>0;
-  }
-  # Get the requested oid values
-  $result = snmp_get_request($session, \@oids, "status table");
-
-  # Get the perf value if -f (performance) option defined or -k (check bandwidth)
-  if (defined($o_perf) || defined($o_checkperf) || defined($o_intspeed)) {
-    if (!defined($o_minsnmp)) {
-  	$resultf = snmp_get_request($session, \@oid_perf, "statistics table");
-    }
-    else {
-        $resultf = $result;
-    }
-  }
-  # Additional cisco status tables
-  if (defined($o_ciscocat)) {
-    if (!defined($o_minsnmp) && scalar(@oid_ciscostatus)>0) {
-	$resultc = snmp_get_request($session, \@oid_ciscostatus, "cisco status tables");
-    }
-    else {
-        $resultc = $result;
-    }
-  }
-  # Addditional stp state table
-  if (defined($o_stp)) {
-    if (!defined($o_minsnmp) && scalar(@oid_stpstate)>0) {
-	$results = snmp_get_request($session, \@oid_stpstate, "stp state table");
-    }
-    else {
-        $results = $result;
-    }
-  }
-  # Suport for comments/description table (WL)
-  if (defined($o_commentoid)) {
-    if  (!defined($o_minsnmp) && scalar(@oid_commentlabel)>0) {
-	$resulto = snmp_get_request($session, \@oid_stpstate, "comments table");
-    }
-    else {
-	$resulto = $result;
-    }
-  }
-  $session->close;
+   }
+   exit $ERRORS{"UNKNOWN"};
 }
 
 # some more global variables I should probably move further up to main vars definition
 my $num_ok=0;
 my $num_admindown=0;
+my $ok_val= defined ($o_inverse) ? 2 : 1;  # define the OK value depending on -i option
+my $final_status = 0;
+my $print_out='';
+my $temp_file_name;
+my @prev_values=();
 my @checkperf_out_raw=undef;
 my @checkperf_out=undef;
 my $checkval_out=undef;
 my $checkval_in=undef;
 my $checkval_tdiff=undef;
-### Bandwidth test variables
-my $temp_file_name;
-my @prev_values=();
 my $usable_data=0;
 my $n_rows=0;
 my $n_items_check=(defined($o_ext_checkperf))?7:3;
@@ -2017,13 +2260,6 @@ my $old_time=undef;
 my $speed_unit=undef;
 my $speed_metric=undef;
 
-# define the OK value depending on -i option
-my $ok_val= defined ($o_inverse) ? 2 : 1;
-my $final_status = 0;
-my $print_out='';
-my $perf_out='';
-my $saved_out='';
-
 # make all checks and output for all interfaces
 for (my $i=0;$i < $num_int; $i++) { 
   $print_out.=", " if ($print_out);
@@ -2033,207 +2269,51 @@ for (my $i=0;$i < $num_int; $i++) {
   # Get the status of the current interface
   my $int_status = $ok_val;
   my $admin_int_status = $ok_val;
-  my $int_status_opt = 0;
   my $int_status_extratext = "";
   if (!defined($o_ignorestatus)) {
-    if ($do_snmp) {
-	$interfaces[$i]{'admin_up'} = $$result{$admin_table.$tindex[$i]} if exists($$result{$admin_table.$tindex[$i]});
-	$interfaces[$i]{'oper_up'} = $$result{$oper_table.$tindex[$i]} if exists($$result{$oper_table.$tindex[$i]});
-    }
-    if (defined($o_admin) && exists($interfaces[$i]{'admin_up'})) {
-	$interfaces[$i]{'up_status'} = $interfaces[$i]{'admin_up'};
-    }
-    elsif (exists($interfaces[$i]{'oper_up'})) {
-	$interfaces[$i]{'up_status'} = $interfaces[$i]{'oper_up'};
-    }
-    else {
-        printf("ERROR: Can not find up status for interface ".$interfaces[$i]{'descr'});
-        exit $ERRORS{"UNKNOWN"};
-    }
-    if (defined($o_admindown_ok) && exists($interfaces[$i]{'admin_up'})) {
+     if (!exists($interfaces[$i]{'up_status'})) {
+	if (defined($o_admin) && exists($interfaces[$i]{'admin_up'})) {
+	   $interfaces[$i]{'up_status'} = $interfaces[$i]{'admin_up'};
+	}
+	elsif (exists($interfaces[$i]{'oper_up'})) {
+	   $interfaces[$i]{'up_status'} = $interfaces[$i]{'oper_up'};
+	}
+	else {
+	    printf("ERROR: Can not find up status for interface ".$interfaces[$i]{'descr'});
+	    exit $ERRORS{"UNKNOWN"};
+	}
+     }
+     if (defined($o_admindown_ok) && exists($interfaces[$i]{'admin_up'})) {
         $admin_int_status = $interfaces[$i]{'admin_up'};
 	$int_status_extratext.="ADMIN:".$status_print{$admin_int_status} if $admin_int_status ne $interfaces[$i]{'up_status'}; 
-    }
-    $int_status = $interfaces[$i]{'up_status'} if exists($interfaces[$i]{'up_status'});
+     }
+     $int_status = $interfaces[$i]{'up_status'} if exists($interfaces[$i]{'up_status'});
+  }
+  if (exists($interfaces[$i]{'status_extratext'})) {
+     $int_status_extratext.=", " if $int_status_extratext;
+     $int_status_extratext.=$interfaces[$i]{'status_extratext'};
   }
 
-  # WL: First verify description is correct when -m option (but not --mm) is used
-  if ($do_snmp && defined($o_minsnmp) && !defined($o_maxminsnmp)) {
-      my $dsc=undef;
-      if (defined($o_cisco{use_portnames})) {
-		$dsc=$$result{$descr_table.'.'. $cport[$i]} if $cport[$i];
-      }
-      else {
-		$dsc=$$result{$descr_table.'.'. $tindex[$i]};
-      }
-      $dsc =~ s/[[:cntrl:]]//g if $dsc;
-      if (!defined($dsc) || $dsc ne $interfaces[$i]{'descr'}) {
-	    # WL: Perhaps this is not quite right and there should be "goto" here forcing to retrieve all tables again
-	    if (!defined($dsc)) {
-		printf("ERROR: Cached port description is %s while retrieved port name is not available\n", $interfaces[$i]{'descr'});
-	    }
-	    else {
-            	printf("ERROR: Cached port description %s is different then retrieved port name %s\n", $interfaces[$i]{'descr'}, $dsc);
-	    }
-            exit $ERRORS{"UNKNOWN"};
-      }
-      verb("Name : $dsc [confirmed cached name for port $i]");
-  }
-
-  # WL: moved it here so its not repeated and to account for additional name from comments table
+  # Get the final output interface description ready
   my $int_desc="";
   my $descr=$interfaces[$i]{'descr'};
   if (defined ($o_short)) {
-      if ($o_short < 0) {
-          $int_desc=substr($descr,$o_short);
-      }
-      else {
-          $int_desc=substr($descr,0,$o_short);
-      }
+     if ($o_short < 0) {
+        $int_desc=substr($descr,$o_short);
+     }
+     else {
+        $int_desc=substr($descr,0,$o_short);
+     }
   }
   else {
-        $int_desc = $descr;
+     $int_desc = $descr;
   }
-  # WL: comment/additional description data
-  if (defined($o_commentoid)) {
-        if (defined($o_cisco{show_portnames})) {
-                $int_desc.='('.$$resulto{$o_commentoid.'.'.$cport[$i]}.')' if $cport[$i] && $$resulto{$o_commentoid.'.'.$cport[$i]};
-        }
-        else {
-                $int_desc.='('.$$resulto{$o_commentoid.$tindex[$i]}.')' if $$resulto{$o_commentoid.$tindex[$i]};
-        }
+  if (exists($interfaces[$i]{'descr_extra'})) {
+     $int_desc .=  $interfaces[$i]{'descr_extra'};
   }
-  $interfaces[$num_int]{'full_descr'}=$int_desc;
+  $interfaces[$i]{'full_descr'}=$int_desc;
 
-  # WL: Additional cisco status data
-  if (defined($o_ciscocat) && $cport[$i]) {
-	my ($int_status_cisco,$operstat,$addoperstat)=(undef,undef,undef);
-	my $cisco_status_extratext="";
-        if (exists($o_cisco{linkfault}) || exists($copt{linkfault}) ||
-            (scalar(keys %copt)==0 && exists($o_cisco{auto}))) {
-            if (defined($$resultc{$cisco_port_linkfaultstatus_table.$cport[$i]})) {
-                $int_status_cisco=$$resultc{$cisco_port_linkfaultstatus_table.$cport[$i]};
-		if (defined($int_status_cisco) && $int_status_cisco !~ /\d+/) {
-                	verb("Received non-integer value for cisco linkfault status when checking port $i: $int_status_cisco");
-               		 $int_status_cisco=undef;
-            	}
-		if (defined($int_status_cisco) && $int_status_cisco!=1) {
-			$cisco_status_extratext.=',' if $cisco_status_extratext;
-			$cisco_status_extratext.=$cisco_port_linkfaultstatus{$int_status_cisco};
-		}
-            }
-            if (defined($int_status_cisco) && (
-                        (!defined($o_inverse) && $int_status_cisco!=1) || (defined($o_inverse) && $int_status_cisco==1))) {
-                $final_status=2;
-                $int_status_opt=2;
-            }
-        }
-        if (exists($o_cisco{oper}) || exists($copt{oper}) ||
-            (scalar(keys %copt)==0 && exists($o_cisco{auto}))) {
-            if (defined($$resultc{$cisco_port_operstatus_table.$cport[$i]})) {
-                $operstat=$$resultc{$cisco_port_operstatus_table.$cport[$i]};
-                if (defined($operstat) && $operstat !~ /\d+/) {
-                        verb("Received non-integer value for cisco operport status when checking port $i: $operstat");
-                         $operstat=undef;
-                }
-                if (defined($operstat) && $operstat!=2) {
-			$cisco_status_extratext.=',' if $cisco_status_extratext;
-                        $cisco_status_extratext.=$cisco_port_operstatus{$operstat};
-                }
-            }
-            if (defined($operstat) && (
-                        (!defined($o_inverse) && $operstat!=2) || (defined($o_inverse) && $operstat==2))) {
-                $final_status=2;
-                $int_status_opt=2;
-            }
-        }
-        if (exists($o_cisco{addoper}) || exists($copt{addoper}) ||
-            (scalar(keys %copt)==0 && exists($o_cisco{auto}))) {
-            if (defined($$resultc{$cisco_port_addoperstatus_table.$cport[$i]})) {
-                $addoperstat=$$resultc{$cisco_port_addoperstatus_table.$cport[$i]};
-            }
-	    if (defined($addoperstat) && ($addoperstat eq 'noSuchInstance' || $addoperstat eq 'noSuchObject')) {
-            	verb("Received invalid value for cisco addoper status when checking port $i: $addoperstat");
-                $addoperstat=undef;
-	    }
-	    if (defined($addoperstat)) {
-	    	if ($addoperstat !~ /0x.*/) {$addoperstat = hex ascii_to_hex($addoperstat);} else {$addoperstat = hex $addoperstat;}
-		for (my $j=0; $j<=15;$j++) { # WL: SNMP BITS type - yak!
-	 	    if ($addoperstat & (1<<(15-$j))) {
-			$cisco_status_extratext.=',' if $cisco_status_extratext;
-			$cisco_status_extratext.=$cisco_port_addoperstatus{$j} if $cisco_port_addoperstatus{$j} ne 'connected';
-		    }
-	        }
-	    }
-	}
-	if (scalar(keys %copt)==0 && exists($o_cisco{auto})) {
-		$copt_next{linkfault}=1 if defined($int_status_cisco);
-		$copt_next{oper}=1 if defined($operstat);
-		$copt_next{addoper}=1 if defined($addoperstat);
-	}
-	if ($cisco_status_extratext) {
-	    $int_status_extratext.=", " if $int_status_extratext;
-	    $int_status_extratext.="CISCO: ".$cisco_status_extratext;
-	}
-  }
-
-  # WL: Additional STP state data
-  if (defined($o_stp) && $stpport[$i]) {
-	my ($int_stp_state,$prev_stp_state,$prev_stp_changetime)=(undef,undef,undef);
-	$int_stp_state=$$results{$stp_dot1dbase_portstate.$stpport[$i]};
-	if ($int_stp_state !~ /\d+/) {
-		verb("Received non-numeric status for STP for port $i: $int_stp_state");
-		$int_stp_state=undef;
-	}
-	$prev_stp_state=$prev_perf{perf_name($descr,"stp_state")};
-	$prev_stp_changetime=$prev_perf{perf_name($descr,"stp_changetime")};
-	if (defined($int_stp_state)) {
-		$int_status_extratext.=',' if $int_status_extratext;
-		$int_status_extratext.='STP:'.$stp_portstate{$int_stp_state};
-		$perf_out .= " ".perf_name($descr,"stp_state")."=".$int_stp_state;
-		$perf_out .= " ".perf_name($descr,"prev_stp_state")."=".$prev_stp_state if defined($prev_stp_state);
-		if (defined($prev_stp_changetime) && defined($prev_stp_state) && $prev_stp_state == $int_stp_state) {
-			$perf_out .= " ".perf_name($descr,'stp_changetime').'='.$prev_stp_changetime;
-		}
-		elsif (!defined($prev_stp_state) || !defined($prev_stp_changetime)) {
-			$perf_out .= " ".perf_name($descr,'stp_changetime').'='.($timenow-$stp_warntime);
-		}
-		else {
-			$perf_out .= " ".perf_name($descr,'stp_changetime').'='.$timenow;
-		}
-		if ($o_stp ne '' && $int_stp_state != $stp_portstate_reverse{$o_stp}) {
-			$int_status_extratext.=":CRIT";
-			$int_status_opt=2;
-			$final_status=2;
-		}
-		elsif ((defined($prev_stp_changetime) && ($timenow-$prev_stp_changetime)<$stp_warntime) ||
-		       (defined($prev_stp_state) && $prev_stp_state != $int_stp_state)) {
-			$int_status_extratext.=":WARN(change from ".
-			         $stp_portstate{$prev_stp_state}.")";
-			$final_status=($final_status==2)?2:1;
-		}
-	}
-  }
-
-  # WL: portspeed data now put in separate array
-  # Get the speed in normal or highperf speed counters
-  if (defined($oid_speed[$i]) && defined($$resultf{$oid_speed[$i]})) {
-      if ($$resultf{$oid_speed[$i]} == 4294967295) { # Too high for this counter (cf IF-MIB)
-          if (!defined($o_highperf) && $check_speed) {
-              print "Cannot get interface speed with standard MIB, use highperf mib (-g) : UNKNOWN\n";
-              exit $ERRORS{"UNKNOWN"}
-          }
-          if (defined ($$resultf{$oid_speed_high[$i]}) && $$resultf{$oid_speed_high[$i]} != 0) {
-	      $interfaces[$i]{'portspeed'}=$$resultf{$oid_speed_high[$i]} * 1000000;
-          } 
-	  elsif ($specified_speed==0) {
-              print "Cannot get interface speed using highperf mib : UNKNOWN\n";
-              exit $ERRORS{"UNKNOWN"}
-          }
-      } else {
-          $interfaces[$i]{'portspeed'}=$$resultf{$oid_speed[$i]};
-      }
-  }
+  # Interface Speed
   if ($specified_speed!=0 && !exists($interfaces[$i]{'portspeed'})) {
       $interfaces[$i]{'portspeed'} = $specified_speed;
   }
@@ -2241,13 +2321,14 @@ for (my $i=0;$i < $num_int; $i++) {
       $int_status_extratext.=',' if $int_status_extratext;
       $int_status_extratext.="$speed_alert: Speed=".$interfaces[$i]{'portspeed'}." bps";
       $int_status_extratext.=" (should be $specified_speed bps)";
-      $int_status_opt=$ERRORS{$speed_alert} if $ERRORS{$speed_alert} > $int_status_opt;
-      $final_status=$ERRORS{$speed_alert} if $ERRORS{$speed_alert} > $final_status;
+      $interfaces[$i]{'nagios_status'}=$ERRORS{$speed_alert} if !exists($interfaces[$i]{'nagios_status'}) || $ERRORS{$speed_alert} > $interfaces[$i]{'nagios_status'};
   }
   verb ("Interface $i speed : ".$interfaces[$i]{'portspeed'}) if defined($interfaces[$i]{'portspeed'});
 
-  # Make the bandwith & error checks if necessary 
-  if (defined ($o_checkperf) && $int_status==1) {
+  $final_status = $interfaces[$i]{'nagios_status'} if exists($interfaces[$i]{'nagios_status'}) && $final_status < $interfaces[$i]{'nagios_status'};
+
+  # Make the bandwidth & error checks if necessary 
+  if (defined ($o_checkperf) && $int_status==$status{'UP'}) {
 
     # WL: checks if previous performance data & time last check was run are available
     if ($o_filestore || !defined($o_prevperf)) {
@@ -2306,22 +2387,6 @@ for (my $i=0;$i < $num_int; $i++) {
 	  else { $usable_data=0; } # OK
     }
     verb("Previous data array created: $n_rows rows");
-
-    # Load data from SNMP if that's how we got them
-    if ($do_snmp && defined($$resultf{$oid_perf_inoct[$i]}) && defined($$resultf{$oid_perf_outoct[$i]})) {
-	$interfaces[$i]{'in_bytes'}=$$resultf{$oid_perf_inoct[$i]};
-	$interfaces[$i]{'out_bytes'}=$$resultf{$oid_perf_outoct[$i]};
-	$interfaces[$i]{'in_errors'}=0;
-	$interfaces[$i]{'out_errors'}=0;
-	$interfaces[$i]{'in_dropped'}=0;
-	$interfaces[$i]{'out_dropped'}=0;
-        if (defined($o_ext_checkperf)) { # Add other values (error & disc)
-          $interfaces[$i]{'in_errors'}=$$resultf{$oid_perf_inerr[$i]} if defined($$resultf{$oid_perf_inerr[$i]});
-          $interfaces[$i]{'out_errors'}=$$resultf{$oid_perf_outerr[$i]} if defined($$resultf{$oid_perf_outerr[$i]});
-          $interfaces[$i]{'in_dropped'}=$$resultf{$oid_perf_indisc[$i]} if defined($$resultf{$oid_perf_indisc[$i]});
-          $interfaces[$i]{'out_dropped'}=$$resultf{$oid_perf_outdisc[$i]} if defined($$resultf{$oid_perf_outdisc[$i]});
-        }
-    }
 
     # Put the new values in the array
     if (defined($interfaces[$i]{'in_bytes'}) && defined($interfaces[$i]{'out_bytes'})) {
@@ -2469,9 +2534,9 @@ for (my $i=0;$i < $num_int; $i++) {
       }
       $print_out .= ")";
     } 
-    elsif (!defined($o_zerothresholds)) { # Return unknown when no data
+    elsif (!defined($o_zerothresholds)) {
       $print_out.= " (no usable data - ".$n_rows." rows) ";
-      # WL: I've removed return of UNKNOWN if no data is available, when plugin is first run that may still happen
+      # WL: I've removed return of UNKNOWN if no data is available, though when plugin is first run that may still happen
       # $final_status=3;
     }
   }
@@ -2479,8 +2544,6 @@ for (my $i=0;$i < $num_int; $i++) {
     $print_out.=sprintf("%s:%s",$int_desc, $status_print{$int_status});
     $print_out.=' ['.$int_status_extratext.']' if $int_status_extratext;
   }
-  # Get rid of special characters for performance in description
-  # $descr[$i] =~ s/'\/\(\)/_/g;
   if ((($int_status == $ok_val) || (defined($o_dormant) && $int_status == $status{'DORMANT'}))) { 
     # used to also be: "&& $int_status_opt==0" but I removed it in 2.4 so only main (admin/oper) status is counted for up/down 
     $num_ok++;
@@ -2584,33 +2647,6 @@ for (my $i=0;$i < $num_int; $i++) {
   } 
 }
 
-# WL: put index table and desc data in performance output for caching and reuse
-if (defined($o_minsnmp) && defined($o_prevperf)) {
-      my @descr=();
-      my @portspeed=();
-      for(my $iii=0;$iii<scalar(@tindex);$iii++) {
-	  $descr[$iii]=$interfaces[$iii]{'descr'};
-	  $portspeed[$iii]=$interfaces[$iii]{'portspeed'} if defined($interfaces[$iii]{'portspeed'});
-      }
-      $saved_out.= " cache_descr_ids=". join(',',@tindex) if scalar(@tindex)>0;
-      $saved_out.= " cache_descr_names=".join(',',@descr) if scalar(@descr)>0;
-      $saved_out.= " cache_descr_time=".$perfcache_time if defined($perfcache_time);
-      $saved_out.= " cache_int_speed=". join(',',@portspeed) if $check_speed && scalar(@portspeed)>0 && defined($o_maxminsnmp) && $specified_speed==0;
-      if (defined($o_ciscocat)) {
-	  $cport[0]=-1 if scalar(@cport)==0;
-      	  $saved_out.= " cache_descr_cport=".join(',',@cport);
-	  if (scalar(keys %copt)>0) {
-		$saved_out.= " cache_cisco_opt=".join(',',keys %copt);
-	  }
-	  elsif (scalar(keys %copt_next)>0) {
-	  	$saved_out.= " cache_cisco_opt=".join(',',keys %copt_next);
-	  }
-      }
-      if (defined($o_stp)) {
-	  $stpport[0]=-1 if scalar(@stpport)==0;
-          $saved_out.= " cache_descr_stpport=".join(',',@stpport);
-      }
-}
 # Add additional sets of previous performance data
 # do it at the very end so that if nagios does cut performance data
 # due to limits in its buffer space then what is cut is part of this data

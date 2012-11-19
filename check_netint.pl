@@ -2555,7 +2555,6 @@ for (my $i=0;$i < $num_int; $i++) {
   if (!(defined($o_admindown_ok) && $ok_val==1 && $int_status == $status{'DOWN'} && $admin_int_status == $status{'DOWN'}) && defined($interfaces[$i]{'descr'}) && (defined($o_perf) || defined($o_intspeed) || defined($o_perfr) || defined($o_perfp) || defined($o_checkperf))) {
     if (defined ($o_perfp)) { # output in % of speed
 	if ($usable_data==0 && defined($checkperf_out[0]) && defined($checkperf_out[1])) {
-	    $perf_out .= " ".perf_name($descr,"in_prct")."=";
 	    if (defined($o_prct)) {
 		$perf_out .= " ".perf_name($descr,"in_prct")."=";
 		$perf_out .= sprintf("%.0f",$checkperf_out[0]) . '%;';

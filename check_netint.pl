@@ -745,6 +745,11 @@ my $specified_speed=0;	# if -S has interface speed specified, this is set to spe
 my $speed_alert=undef; 	# if -S has alert specified, this is alert to issue if interface speed is not what is expected
 my $shell_pid=undef;	# defined only if run locally
 my $snmp_session_v=0;   # if no snmp session, its 0, otherwise 1 2 or 3 depending on version of SNMP session opened
+my $num_int = 0;	# number of interfaces that have matched
+my @interfaces=();	# main array for interfaces data
+# separated arrays that existed before that were replaced by above common array of structure/hash
+# my @descr = (); --> $descr[$i] is now $interfaces[$i]{'descr'}
+# my @portspeed=(); --> $portspeed[$i] is now $interfaces[$i]{'portspeed'}
 
 # Functions
 sub read_file { 
@@ -1469,130 +1474,18 @@ sub finish_shell_command {
   $shell_pid = undef;
 }
 
-########## MAIN #######
-
-check_options();
-
-# Check gobal timeout if snmp screws up
-if (defined($TIMEOUT)) {
-  verb("Alarm at $TIMEOUT + 5");
-  alarm($TIMEOUT+5);
-} else {
-  verb("no timeout defined : $o_timeout + 10");
-  alarm ($o_timeout+10);
-}
-
-$SIG{'ALRM'} = sub {
- if (defined($o_host)) {
-      print "ERROR: alarm timeout. No answer from host $o_host\n";
- }
- else {
-      print "ERROR: alarm timeout\n";
-      kill 9, $shell_pid if defined($shell_pid);
- }
- exit $ERRORS{"UNKNOWN"};
-};
-
-
-# global arrays of interface data used used for snmp retrieval
-# these should go into below defined @interfaces array too for cleaner code,
-# but I probably will not bother changing now (or it may take a while before I do)
-my $session = undef;
-my @tindex = ();
-my @oids = undef;
-my @oids_admin = undef;
-my @oid_descr=(); # this is actually only used with '-m' to double-check that cached index is correct
-my @oid_speed=();
-my @oid_speed_high=();
-my @oid_commentlabel=();
-my @oid_ciscostatus=();
-my @oid_ciscofaultstatus=();
-my @oid_ciscooperstatus=();
-my @oid_ciscoaddoperstatus=();
-my @oid_stpstate=();
-my %cisco_timap=();
-my %stp_ifmap=();
-my @stpport=();
-my @cport=();
-my %copt=();
-my %copt_next=();
-my (@oid_perf,@oid_perf_outoct,@oid_perf_inoct,@oid_perf_inerr,@oid_perf_outerr,@oid_perf_indisc,@oid_perf_outdisc)= (undef,undef,undef,undef,undef,undef,undef);
-my ($result,$resultp,$resultf,$resulto,$resultc,$results) = (undef,undef,undef,undef,undef,undef);
-
-# global variables and new array used for both snmp and locally retrieved data
-my $num_int = 0;
-my @interfaces=();
-# Separated arrays that existed before that were replaced by above common array of structure/hash
-# my @descr = (); --> $descr[$i] is now $interfaces[$i]{'descr'}
-# my @portspeed=(); --> $portspeed[$i] is now $interfaces[$i]{'portspeed'}
-
-# Create SNMP session
-if ($do_snmp) {
-    $session = create_snmp_session();
-}
-
-# WL: check if '-m' option is passed and previous description ids & names are available from
-#     previous performance data (caching to minimize SNMP lookups and only get specific data
-#     instead of getting description table every time)
-$perfcache_time = $prev_perf{cache_descr_time} if exists($prev_perf{cache_descr_time});
-
-if ($do_snmp && defined($o_minsnmp) && %prev_perf) {
-   # load old-style arrays
-   @tindex = split(',', $prev_perf{cache_descr_ids}) if exists($prev_perf{cache_descr_ids});
-   @cport = split(',', $prev_perf{cache_descr_cport}) if exists($prev_perf{cache_descr_cport});
-   @stpport = split(',', $prev_perf{cache_descr_stpport}) if exists($prev_perf{cache_descr_stpport});
-   my @portspeed = split(',', $prev_perf{cache_int_speed}) if exists($prev_perf{cache_int_speed}) && $specified_speed==0;
-   my @descr = split(',', $prev_perf{cache_descr_names}) if exists($prev_perf{cache_descr_names});
-
-   # clear old index if anything seems wrong with cached data
-   my %tindex_hash = map { $_ => 1 } @tindex;
-   @tindex = () if (scalar(@tindex) != scalar(keys %tindex_hash)) || # make sure no duplicates
-		   (scalar(@tindex) != scalar(@descr)) ||
-		   (defined($o_ciscocat) && (!exists($prev_perf{cache_descr_cport}) || scalar(@tindex) != scalar(@cport))) ||
-		   (defined($o_stp) && (!exists($prev_perf{cache_descr_stpport}) || scalar(@tindex) != scalar(@stpport))) ||
-		   (exists($prev_perf{cache_int_speed}) && scalar(@tindex) != scalar(@portspeed)) ||
-		   # this checks that time of last saved indeces is not way too long ago, in which case we check them again
-		   (!defined($perfcache_time) || $timenow < $perfcache_time || ($timenow - $perfcache_time) > $perfcache_recache_trigger);
-
-   # load into our new array
-   for (my $i=0;$i<scalar(@tindex);$i++) {
-	 $interfaces[$i]={'descr' => $descr[$i]};
-	 $interfaces[$i]{'speed'} = $portspeed[$i] if exists($prev_perf{cache_int_speed});
-   }
-   if (exists($prev_perf{cache_cisco_opt})) {
-   	$copt{$_}=$_ foreach(split ',',$prev_perf{cache_cisco_opt});
-   }
-
-   if (scalar(@tindex)>0) {
-      $num_int = scalar(@tindex);
-      verb("Using cached data:");
-      verb("  tindex=".join(',',@tindex));
-      verb("  descr=".join(',',@descr));
-      verb("  speed=".join(',',@portspeed)) if scalar(@portspeed)>0;
-      verb("  copt=".join(',',keys %copt)) if scalar(keys %copt)>0;
-      if (scalar(@cport)>0) {
-	verb("  cport=".join(',',@cport));
-	@cport=() if $cport[0]==-1; # perf data with previous check done with --cisco but no cisco data was found
-      }
-      if (scalar(@stpport)>0) {
-	verb("  stpport=".join(',',@stpport));
-	@stpport=() if $stpport[0]==-1; # perf data with previous check done with --stp but no stp data was found
-      }
-   }
-}
-
-#Select interface by regexp of exact match
-verb("Filter : $o_descr") if defined($o_descr);
-
-# New code to get data from local machine about its interfaces if we're not doing SNMP
-if ($do_snmp==0) {
+# this function gets all interface data on localhost
+# by executing ifconfig and other commands as necessary
+# for the machine and architecture its being run on
+sub getdata_localhost {
    my $linux_ifconfig = "/sbin/ifconfig";
    my $linux_ethtool = "/sbin/ethtool";
    my $linux_iwconfig = "/sbin/iwconfig";
-   # try to get data on a local server
+
+   # first find architecture we're running on
    my $shell_command;
-   my $os = `uname`;
    my $shell_ref = undef;
+   my $os = `uname`;
    chomp $os;
 
    # Linux output of "ifconfig":
@@ -1774,6 +1667,119 @@ if ($do_snmp==0) {
 	}
    }
 }
+
+########## MAIN #######
+
+check_options();
+
+# Check gobal timeout if snmp screws up
+if (defined($TIMEOUT)) {
+  verb("Alarm at $TIMEOUT + 5");
+  alarm($TIMEOUT+5);
+} else {
+  verb("no timeout defined : $o_timeout + 10");
+  alarm ($o_timeout+10);
+}
+
+$SIG{'ALRM'} = sub {
+ if (defined($o_host)) {
+      print "ERROR: alarm timeout. No answer from host $o_host\n";
+ }
+ else {
+      print "ERROR: alarm timeout\n";
+      kill 9, $shell_pid if defined($shell_pid);
+ }
+ exit $ERRORS{"UNKNOWN"};
+};
+
+
+# global arrays of interface data used used for snmp retrieval
+# these should go into below defined @interfaces array too for cleaner code,
+# but I probably will not bother changing now (or it may take a while before I do)
+my $session = undef;
+my @tindex = ();
+my @oids = undef;
+my @oids_admin = undef;
+my @oid_descr=(); # this is actually only used with '-m' to double-check that cached index is correct
+my @oid_speed=();
+my @oid_speed_high=();
+my @oid_commentlabel=();
+my @oid_ciscostatus=();
+my @oid_ciscofaultstatus=();
+my @oid_ciscooperstatus=();
+my @oid_ciscoaddoperstatus=();
+my @oid_stpstate=();
+my %cisco_timap=();
+my %stp_ifmap=();
+my @stpport=();
+my @cport=();
+my %copt=();
+my %copt_next=();
+my (@oid_perf,@oid_perf_outoct,@oid_perf_inoct,@oid_perf_inerr,@oid_perf_outerr,@oid_perf_indisc,@oid_perf_outdisc)= (undef,undef,undef,undef,undef,undef,undef);
+my ($result,$resultp,$resultf,$resulto,$resultc,$results) = (undef,undef,undef,undef,undef,undef);
+
+#Select interface by regexp of exact match
+verb("Filter : $o_descr") if defined($o_descr);
+
+# WL: check if '-m' option is passed and previous description ids & names are available from
+#     previous performance data (caching to minimize SNMP lookups and only get specific data
+#     instead of getting description table every time)
+$perfcache_time = $prev_perf{cache_descr_time} if exists($prev_perf{cache_descr_time});
+
+# Create SNMP session
+if ($do_snmp) {
+    $session = create_snmp_session();
+}
+
+if ($do_snmp && defined($o_minsnmp) && %prev_perf) {
+   # load old-style arrays
+   @tindex = split(',', $prev_perf{cache_descr_ids}) if exists($prev_perf{cache_descr_ids});
+   @cport = split(',', $prev_perf{cache_descr_cport}) if exists($prev_perf{cache_descr_cport});
+   @stpport = split(',', $prev_perf{cache_descr_stpport}) if exists($prev_perf{cache_descr_stpport});
+   my @portspeed = split(',', $prev_perf{cache_int_speed}) if exists($prev_perf{cache_int_speed}) && $specified_speed==0;
+   my @descr = split(',', $prev_perf{cache_descr_names}) if exists($prev_perf{cache_descr_names});
+
+   # clear old index if anything seems wrong with cached data
+   my %tindex_hash = map { $_ => 1 } @tindex;
+   @tindex = () if (scalar(@tindex) != scalar(keys %tindex_hash)) || # make sure no duplicates
+		   (scalar(@tindex) != scalar(@descr)) ||
+		   (defined($o_ciscocat) && (!exists($prev_perf{cache_descr_cport}) || scalar(@tindex) != scalar(@cport))) ||
+		   (defined($o_stp) && (!exists($prev_perf{cache_descr_stpport}) || scalar(@tindex) != scalar(@stpport))) ||
+		   (exists($prev_perf{cache_int_speed}) && scalar(@tindex) != scalar(@portspeed)) ||
+		   # this checks that time of last saved indeces is not way too long ago, in which case we check them again
+		   (!defined($perfcache_time) || $timenow < $perfcache_time || ($timenow - $perfcache_time) > $perfcache_recache_trigger);
+
+   # load into our new array
+   for (my $i=0;$i<scalar(@tindex);$i++) {
+	 $interfaces[$i]={'descr' => $descr[$i]};
+	 $interfaces[$i]{'speed'} = $portspeed[$i] if exists($prev_perf{cache_int_speed});
+   }
+   if (exists($prev_perf{cache_cisco_opt})) {
+   	$copt{$_}=$_ foreach(split ',',$prev_perf{cache_cisco_opt});
+   }
+
+   if (scalar(@tindex)>0) {
+      $num_int = scalar(@tindex);
+      verb("Using cached data:");
+      verb("  tindex=".join(',',@tindex));
+      verb("  descr=".join(',',@descr));
+      verb("  speed=".join(',',@portspeed)) if scalar(@portspeed)>0;
+      verb("  copt=".join(',',keys %copt)) if scalar(keys %copt)>0;
+      if (scalar(@cport)>0) {
+	verb("  cport=".join(',',@cport));
+	@cport=() if $cport[0]==-1; # perf data with previous check done with --cisco but no cisco data was found
+      }
+      if (scalar(@stpport)>0) {
+	verb("  stpport=".join(',',@stpport));
+	@stpport=() if $stpport[0]==-1; # perf data with previous check done with --stp but no stp data was found
+      }
+   }
+}
+
+# get data from local machine about its interfaces if we're not doing SNMP
+if ($do_snmp==0) {
+   getdata_localhost();
+}
 elsif (scalar(@tindex)==0) {
    # WL: Get cisco port->ifindex map table
    if (defined($o_ciscocat)) {
@@ -1857,7 +1863,7 @@ elsif (scalar(@tindex)==0) {
 }
 
 # No interface found -> error
-if ( $num_int == 0 ) {
+if ($num_int == 0) {
     if (defined($o_descr)) {
 	  print "ERROR : Unknown interface $o_descr\n";
     }
@@ -2492,7 +2498,6 @@ for (my $i=0;$i < $num_int; $i++) {
   if (!(defined($o_admindown_ok) && $ok_val==1 && $int_status == $status{'DOWN'} && $admin_int_status == $status{'DOWN'}) && defined($interfaces[$i]{'descr'}) && (defined($o_perf) || defined($o_intspeed) || defined($o_perfr) || defined($o_perfp) || defined($o_checkperf))) {
     if (defined ($o_perfp)) { # output in % of speed
 	if ($usable_data==0 && defined($checkperf_out[0]) && defined($checkperf_out[1])) {
-	    $perf_out .= " ".perf_name($descr,"in_prct")."=";
 	    if (defined($o_prct)) {
 		$perf_out .= " ".perf_name($descr,"in_prct")."=";
 		$perf_out .= sprintf("%.0f",$checkperf_out[0]) . '%;';

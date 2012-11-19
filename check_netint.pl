@@ -562,7 +562,7 @@
 # The following individuals have contributed code, patches, bug fixes and ideas to
 # this plugin (listed in last-name alphabetical order):
 #
-#    M. Beger
+#    M. Berger
 #    Yannick Charton
 #    Steve Hanselman
 #    Tristan Horn
@@ -1412,16 +1412,27 @@ sub snmp_get_request {
   my ($session, $oids_ref, $table_name) = @_;
   my $result = undef;
 
+  verb("Doing snmp request on ".$table_name." OIDs: ".join(' ',@{$oids_ref}));
   if (defined($o_bulksnmp) && $snmp_session_v > 1) {
-    verb("Doing bulk request on ".$table_name." OIDs: ".join(' ',@{$oids_ref}));
+    my @oids_bulk=();
+    my ($oid_part1,$oid_part2);
+    foreach(@{$oids_ref}) {
+	if (/^(.*)\.(\d+)$/) {
+		$oid_part1=$1;
+		$oid_part2=$2;
+		$oid_part2-- if $oid_part2 ne '0';
+		$oid_part1.='.'.$oid_part2;
+		push @oids_bulk,$oid_part1;
+	}
+    }
+    verb("Converted to bulk request on OIDs: ".join(' ',@oids_bulk));
     $result = $session->get_bulk_request(
-      -nonrepeaters => scalar(@{$oids_ref}),
+      -nonrepeaters => scalar(@oids_bulk),
       -maxrepetitions => 0,
-      -varbindlist => $oids_ref
+      -varbindlist => \@oids_bulk,
     );
   }
   else {
-    verb("Doing snmp request on ".$table_name." OIDs: ".join(' ',@{$oids_ref}));
     $result = $session->get_request(
       -varbindlist => $oids_ref
     );

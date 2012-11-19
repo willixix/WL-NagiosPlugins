@@ -1118,12 +1118,12 @@ sub check_options {
     );
     if (defined ($o_help) ) { help(); exit $ERRORS{"UNKNOWN"}};
     if (defined($o_version)) { p_version(); exit $ERRORS{"UNKNOWN"}};
-    if (defined($o_descroid)) { $descr_table = $o_descroid; }
 
     # check snmp information
     # 06/25/12: this is now required only if plugin name starts with check_snmp or if host is specified)
     if ($0 =~ /^check_snmp/ || defined($o_host)) {
 	if ($do_snmp==0) { print "Can't locate Net/SNMP.pm\n"; exit $ERRORS{"UNKNOWN"}}
+	if (defined($o_descroid)) { $descr_table = $o_descroid; }
 	if (!defined($o_descr) && !defined($o_community) && (!defined($o_login) || !defined($o_passwd)) )
 	    { print "Specify community and put snmp login info!\n"; print_usage(); exit $ERRORS{"UNKNOWN"}}
 	if ((defined($o_login) || defined($o_passwd)) && (defined($o_community) || defined($o_version2)) )
@@ -1175,7 +1175,7 @@ sub check_options {
 	$do_snmp=0;
 	if (defined($o_octetlength) || defined($o_highperf) || defined($o_maxminsnmp) || defined($o_minsnmp) ||
 	    defined($v3protocols) || defined($o_login) || defined($o_passwd) || defined($o_version2) || defined($o_community) ||
-	    defined($o_ciscocat) || defined($o_stp) || defined($o_commentoid)) {
+	    defined($o_ciscocat) || defined($o_stp) || defined($o_commentoid) || defined($o_descroid)) {
 	   print "Option you specified is only valid with SNMP. Maybe you forgot to specify hostname with -h?\n";print_usage(); exit $ERRORS{"UNKNOWN"};
 	}
     }

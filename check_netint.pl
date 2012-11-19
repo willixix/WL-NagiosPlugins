@@ -551,7 +551,7 @@
 #		     this option was used to warn if speed is not what is expected, To do this now
 #                    requires using prefix WARNING<> or CRITICAL<> before actual speed which is
 #		     an incompatible change to preious format of this option.
-# 2.4a6 - 11/17/12 - Changed ok interval from 0.9*delta - 4*delta to 0.75*delta - 4*delta.
+# 2.4a6 - 11/17/12 - Changed ok interval from 0.9*delta - 3*delta to 0.75*delta - 4*delta.
 #		     Fixed bug that would not put output interface speed percent data
 #                    in perf unless both -y and -u were used together. This bug was introduced
 #		     somewhere around 2.2 and apparently 2.31 did not entirely fix it
@@ -897,7 +897,7 @@ Threshold Checks and Performance Data options:
    i.e. do not check thresholds, but still give input/ouput bandwidth for graphing
    This option also prevents tmp files of being writtena.
 
-Options for saving results of previous checks to calcuate Traffic & Utilization:
+Options for saving results of previous checks to calculate Traffic & Utilization:
 
 -P, --prev_perfdata
    Previous performance data (normally put '-P \$SERVICEPERFDATA\$' in nagios

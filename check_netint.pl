@@ -520,8 +520,8 @@
 #		    to specify threshold based on deviation from this average. There
 #		    will be several alpha and beta versions before official 2.4 release.
 #
-# Specific info on each alpha/beta release will be removed in the future and only the most
-# important info when general release update info is written
+# Specific info on each alpha/beta release will be removed in the future and only
+# summary of below will appear in documentation on features and updated in 2.4 release
 # 
 # 2.4a1 - 07/07/12 - Implemented in this release:
 #		    1) The plugin has been renamed "check_netint" from "check_snmp_netint".

@@ -2,16 +2,14 @@
 #
 # ============================== SUMMARY =====================================
 #
-# Program : check_sasraid_megaraid.pl (also known as check_megaraid.pl)
-# Version : 2.0
-# Date    : Oct 22, 2012
+# Program : check_snmp_raid / check_sasraid_megaraid / check_megaraid
+# Version : 2.1
+# Date    : Nov 24, 2012
 # Author  : William Leibzon - william@leibzon.org
 # Copyright: (C) 2006-2012 William Leibzon
-# Summary : This is a nagios plugin to monitor LSI MegaRAID and attached disks
-#           and report status of the logical and physical drives and disk errors.
-#           Newer cards are called MTPFusion and many of these cards are
-#           sold by Dell under their own brand name 'PERC' (PERC3 - PERC6)
-#           Some are SCSI RAID cards and newer ones are SAS RAID cards.
+# Summary : This is a nagios plugin to monitor Raid controller cards with SNMP
+#           and report status of the physical drives and logical valumes and
+#	    any reported disk and volume errors.
 # Licence : GPL 3 - summary below, full text at http://www.fsf.org/licenses/gpl.txt
 # =========================== PROGRAM LICENSE ================================
 #
@@ -31,14 +29,21 @@
 #
 # ===================== INFORMATION ABOUT THIS PLUGIN ========================
 #
-# check_sasraid_megaraid | check_megaraid | check_sasraid
+# check_snmp_raid | check_sasraid_megaraid | check_megaraid | check_sasraid
 #
-# This Nagios plugin checks a LSI/Dell Megaraid & SAS RAID cards
-# and reports the status of the logical and physical drives and
-# any disk and other volume errors.
+# This is a Nagios plugin to checks RAID cards with SNMP and reports status of the
+# logical and physical drives an volumes and any disk and other volume errors.
 #
-# Requires that Net::SNMP be installed on the machine performing the monitoring
-# and that the megaraid snmp agent be set up on the machine to be monitored.
+# It was originally written to monitor LSI MegaRAID, sold directly by LSI and
+# more commonly found in Dell systems under their brand name 'PERC' (PERC3-PERC6),
+# some are SCSI RAID cards and newer are SAS RAID cards. New cards sold directly
+# are now called MTPFusion and are supported too. t has also been found that some
+# Adaptec cards can be monitored with this plugin and the way its written is general
+# enough that it maybe extended to other RAID controllers if people look at the MIBS
+# and are willing to contribute settings for them.
+#
+# This plugin requires that Net::SNMP be installed on the machine performing the
+# monitoring and that snmp agent be set up on the machine to be monitored.
 #
 # This plugin is maintained by William Leibzon and released at:
 #    http://william.leibzon.org/nagios/
@@ -50,7 +55,7 @@
 # This originally started as check_megaraid plugin but now has been extended
 # to work with various other cards. You must specify what card you have with
 # '-T' option. The following are acceptable types:
-#   megaraid|sasraid|perc3|perc4|perc5|perc6|mptfusion|sas6ir|sas6 
+#   megaraid|sasraid|perc3|perc4|perc5|perc6|mptfusion|sas6ir|sas6|adaptec
 #
 # You will need to have SNMP package installed appropriate for your card.
 # If you have SASRaid (also known as PERC5, PERC6) you will need
@@ -168,15 +173,26 @@
 #   19. [1.92 - Jun 15, 2012] Bug fixes when no SNNP version is specified
 #	                      Verb function & option updated to allow debug info go to file
 #			      specified as a parameter to -v rather than just stdout
-#   20. [2.0 - Oct 22, 2012] New version. Patches and Additions that went here:
+#   20. [1.95 - Oct 22, 2012] New version. Patches and Additions that went here:
 #        a. merged pool request from goochjj (John Gooch):
 #           Added good_drives threshold check (-g option) and show make and model of
 #           physical drives which is activated with "-i" option
 #        b. applied patch from Robert Wikman (sent by email) that adds checks of battery (BBU) data
-#        c. code cleanup and refactoring - functions moved to top and option variables renamed and properly commented
-#        d. list of contributors section added
-#      This version was originaly 1.95 but with two patches and all code cleanup, the number of
-#      of changes is more than sub-minor or even minor version upddate. So this is now released as 2.0
+#        c. code cleanup and refactoring - functions moved to top and option variables renamed
+#        d. list of contributors section added       
+#       [2.0 - Oct 2012] This version was originaly to be released as 1.95 but with two patches
+#        and all code cleanup, the number of changes is more than sub-minor and I released it
+#	 as 2.0. However I later downgraded it back to 1.95 because for 2.0 release the plugin
+#        is being renamed as check_snmp_raid and features limited support for Adaptec cards.
+#   21. [2.1 - Nov 22, 2012] Plugin has been renamed check_snmp_raid. Essentially this is
+#        first new 2.x release, see above on firs released 2.0 being downgraded back to 1.95.
+#        Release notes for this version:
+#        a. Adding limited support for Adaptec RAID cards contributed by K Truong
+#           and code updates to make it easier to support more cards in the future.
+#        b. Making both PHYDRV_CODES and BATTERY_CODES array contain 3 parameters as has
+#           been the case with LOGDRV_CODES. The first one is short code name,
+#           2nd is human-readable text, and 3rd is nagios status is corresponds to.
+#	 c. Documentation updates related to plugin renaming and other small updates.
 #		   
 # ========================== LIST OF CONTRIBUTORS =============================
 #
@@ -187,13 +203,14 @@
 #    William Leibzon
 #    Vitaly Percharsky
 #    John Reuning
+#    K Truong
 #    Robert Wikman
 #
 # Open source community is grateful for all your contributions.
 #
 # ========================== START OF PROGRAM CODE ===========================
 
-my $version = "2.0";
+my $version = "2.1";
 
 use strict;
 use Getopt::Long;
@@ -216,8 +233,8 @@ if ($@) {
 }
 
 # some defaults, most can be overriden by input parameters too
-my $cardtype="sasraid";   # default card type, can be "megaraid", "mptfusion" or "sasraid"
-my $baseoid=".1.3.6.1.4.1.3582";
+my $cardtype="sasraid";    # default card type, can be "megaraid", "mptfusion" or "sasraid"
+my $baseoid="";		   # if not specified here, it will use default ".1.3.6.1.4.1.3582"
 my $timeout=$TIMEOUT;      # default is nagios exported $TIMEOUT variable
 my $DEBUG = 0;             # to print debug messages, set this to 1
 my $MAX_OUTPUTSTR = 2048;  # maximum number of characters in otput
@@ -289,9 +306,10 @@ my(
     %BATTERY_CODES
 );
 
-# Function to set values for OIDs that are used (has to be a function as $baseoid is a parameter now)
+# Function to set values for OIDs that are used
 sub set_oids {
   if ($cardtype eq 'megaraid') {
+    $baseoid = "1.3.6.1.4.1.3582" if $baseoid eq "";		 # megaraid standard base oid
     $logdrv_status_tableoid = $baseoid . ".1.1.2.1.3";           # megaraid logical
     $phydrv_status_tableoid = $baseoid . ".1.1.3.1.4";           # megaraid physical
     $phydrv_mediumerrors_tableoid = $baseoid . ".1.1.3.1.12";    # megaraid medium errors
@@ -311,15 +329,16 @@ sub set_oids {
         4 => ['checkconsistency', 'array is being checked', 'WARNING' ],
     );
     %PHYDRV_CODES = (
-        1 => ['ready'],
-        3 => ['online'],
-        4 => ['failed'],
-        5 => ['rebuild'],
-        6 => ['hotspare'],
-        20 => ['nondisk'],
+        1 => ['ready', 'ready', 'OK'],
+        3 => ['online', 'online', 'OK'],
+        4 => ['failed', 'failed', 'CRITICAL'],
+        5 => ['rebuild', 'reuild', 'WARNING'],
+        6 => ['hotspare', 'hotspare', 'OK'],
+        20 => ['nondisk', 'nondisk', 'OK'],
     );
   }
   elsif ($cardtype eq 'mptfusion') { 
+    $baseoid = "1.3.6.1.4.1.3582" if $baseoid eq "";		   # megaraid standard base oid
     $logdrv_status_tableoid = $baseoid . ".5.1.4.3.1.2.1.5";       # mptfusion logical
     # $sas_logdrv_name_tableoid = $baseoid . ".4.1.4.3.1.2.1.6";   # sas virtual device name
     $phydrv_status_tableoid = $baseoid . ".5.1.4.2.1.2.1.10";      # mptfusion physical
@@ -336,16 +355,17 @@ sub set_oids {
     );
     ## Status codes for phyisical drives - these are specifically for MPTFUSION
     %PHYDRV_CODES = (
-        0 => ['unconfigured_good'],
-        1 => ['unconfigured_bad'],
-        2 => ['hotspare'],
-        16 => ['offline'],
-        17 => ['failed'],
-        20 => ['rebuild'],
-        24 => ['online'],
+        0 => ['unconfigured_good', 'unconfigured_good', 'OK'],
+        1 => ['unconfigured_bad', 'unconfigured_bad', 'CRITICAL'],
+        2 => ['hotspare', 'hotspare', 'OK'],
+        16 => ['offline', 'offline', 'OK'],
+        17 => ['failed', 'failed', 'CRITICAL'],
+        20 => ['rebuild', 'rebuild', 'WARNING'],
+        24 => ['online', 'online', 'OK'],
     );
   }
-  else { # $cardtype eq sasraid'
+  elsif ($cardtype eq 'sasraid') {
+    $baseoid = "1.3.6.1.4.1.3582" if $baseoid eq "";		   # megaraid standard base oid
     $logdrv_status_tableoid = $baseoid . ".4.1.4.3.1.2.1.5";       # sasraid logical
     # $sas_logdrv_name_tableoid = $baseoid . ".4.1.4.3.1.2.1.6";   # sas virtual device name
     $phydrv_status_tableoid = $baseoid . ".4.1.4.2.1.2.1.10";      # sasraid physical
@@ -354,11 +374,11 @@ sub set_oids {
     $phydrv_vendor_tableoid = $baseoid . ".4.1.4.2.1.2.1.24";      # sasraid drive vendor
     $phydrv_product_tableoid = $baseoid . ".4.1.4.2.1.2.1.25";     # sasraid drive model
     $phydrv_status_tableoid = $baseoid . ".4.1.4.2.1.2.1.10";      # sasraid physical
-    $phydrv_count_oid = $baseoid . ".4.1.4.1.2.1.21"; #pdPresentCount
-    $phydrv_goodcount_oid = $baseoid . ".4.1.4.1.2.1.22"; #pdDiskPresentCount
-    $phydrv_badcount_oid = $baseoid . ".4.1.4.1.2.1.23"; #pdDiskPredFailureCount
-    $phydrv_bad2count_oid = $baseoid . ".4.1.4.1.2.1.24"; #pdDiskFailureCount
-    $battery_status_tableoid = $baseoid . ".4.1.4.1.6.2.1.27"; # battery replacement status
+    $phydrv_count_oid = $baseoid . ".4.1.4.1.2.1.21";		   # pdPresentCount
+    $phydrv_goodcount_oid = $baseoid . ".4.1.4.1.2.1.22";	   # pdDiskPresentCount
+    $phydrv_badcount_oid = $baseoid . ".4.1.4.1.2.1.23";	   # pdDiskPredFailureCount
+    $phydrv_bad2count_oid = $baseoid . ".4.1.4.1.2.1.24"; 	   # pdDiskFailureCount
+    $battery_status_tableoid = $baseoid . ".4.1.4.1.6.2.1.27";	   # battery replacement status
 
     %LOGDRV_CODES = ( 
         0 => ['offline', 'volume is offline', 'NONE' ],
@@ -368,19 +388,45 @@ sub set_oids {
     );
     ## Status codes for phyisical drives - these are specifically for SASRAID
     %PHYDRV_CODES = (
-        0 => ['unconfigured_good'],
-        1 => ['unconfigured_bad'],
-        2 => ['hotspare'],
-        16 => ['offline'],
-        17 => ['failed'],
-        20 => ['rebuild'],
-        24 => ['online'],
+        0 => ['unconfigured_good', 'unconfigured_good', 'OK'],
+        1 => ['unconfigured_bad', 'unconfigured_bad', 'CRITICAL'],
+        2 => ['hotspare', 'hotspare', 'OK'],
+        16 => ['offline', 'offline', 'OK'],
+        17 => ['failed', 'failed', 'CRITICAL'],
+        20 => ['rebuild', 'rebuild', 'WARNING'],
+        24 => ['online', 'online', 'OK'],
     );
     ## Status codes for battery replacement - these are specifically for SASRAID
     %BATTERY_CODES = (
-	0 => ['Battery OK'],
-	1 => ['Battery needs replacement']
+	0 => ['ok', 'Battery OK', 'OK'],
+	1 => ['fail', 'Battery needs replacement', 'WARNING']
     );
+  }
+  elsif ($cardtype eq 'adaptec') {
+    $baseoid = "1.3.6.1.4.1.795" if $baseoid eq "";		   # Adaptec base oid
+    $logdrv_status_tableoid = ".14.1.1000.1.1.12";
+    $phydrv_status_tableoid = ".14.1.400.1.1.11";
+
+    %LOGDRV_CODES = (
+            1 => ['unknown', 'array state is unknown', 'UNKNOWN'],
+            2 => ['unknown', 'array state is other/unknown', 'UNKNOWN'],
+            3 => ['optimal', 'array is funtioning properly', 'OK'],
+            4 => ['optimal', 'array is funtioning properly', 'OK'],
+            5 => ['degraded', 'array is impacted', 'CRITICAL'],
+            6 => ['degraded', 'array is degraded', 'CRITICAL'],
+            7 => ['failed', 'array failed', 'CRITICAL'],
+    );
+
+    %PHYDRV_CODES = (
+            1 => ['unknown', 'unknown', 'WARNING'],
+            2 => ['other', 'other', 'OK'],
+            3 => ['okay', 'okay', 'OK'],
+            4 => ['warning', 'warning', 'WARNING'],
+            5 => ['failure', 'failure', 'CRITICAL'],
+    );
+  }
+  else {
+    usage("Specified card type $cardtype is not supported\n");
   }
 }
 
@@ -411,7 +457,7 @@ sub print_version {
 # display usage information
 sub print_usage {
         print "Usage:\n";
-        print "$0 [-s <snmp_version>] -H <host> (-C <snmp_community>) | (-l login -x passwd [-X pass -L <authp>,<privp>) [-p <port>] [-t <timeout>] [-O <base oid>] [-a <alert level>] [--extra_info] [--check_battery] [-g <num good drives>] [--drive_errors -P <previous performance data> -S <previous state>] [-v [DebugLogFile] || -d DebugLogFile] [--debug_time] [--snmp_optimize] [-T megaraid|sasraid|perc3|perc4|perc5|perc6|mptfusion|sas6ir|sas6]\n";
+        print "$0 [-s <snmp_version>] -H <host> (-C <snmp_community>) | (-l login -x passwd [-X pass -L <authp>,<privp>) [-p <port>] [-t <timeout>] [-O <base oid>] [-a <alert level>] [--extra_info] [--check_battery] [-g <num good drives>] [--drive_errors -P <previous performance data> -S <previous state>] [-v [DebugLogFile] || -d DebugLogFile] [--debug_time] [--snmp_optimize] [-T megaraid|sasraid|perc3|perc4|perc5|perc6|mptfusion|sas6ir|sas6|adaptec]\n";
         print "$0 --version | $0 --help (use this to see better documentation of above options)\n";
 }
 
@@ -606,6 +652,9 @@ sub check_options {
      elsif ($opt_cardtype eq 'mptfusion' || $opt_cardtype eq 'sas6ir' || $opt_cardtype eq 'sas6') {
 	$cardtype='mptfusion';
      }
+     elsif ($opt_cardtype eq 'adaptec') {
+	$cardtype='adaptec';
+     }
      else {
 	usage("Invalid controller type specified");
      }
@@ -779,15 +828,20 @@ if (defined($opt_battery) && defined($battery_status_tableoid) && $battery_statu
 }
 
 # last are medium and "other" errors reported for physical drives
-if (defined($opt_drverrors) && defined($opt_perfdata) && !defined($opt_optimize)) {
-	$debug_time{snmpgettable_mederrors}=time() if $opt_debugtime;
-	$phydrv_merr_in = $session->get_table(-baseoid=>$phydrv_mediumerrors_tableoid) if !$error;
-	$debug_time{snmpgettable_mederrors}=time()-$debug_time{snmpgettable_mederrors} if $opt_debugtime;
-	$error.= "could not retrieve snmp table $phydrv_mediumerrors_tableoid" if !$phydrv_merr_in && !$error;
-	$debug_time{snmpgettable_odrverrors}=time() if $opt_debugtime;
-	$phydrv_oerr_in = $session->get_table(-baseoid=>$phydrv_othererrors_tableoid) if !$error;
-	$debug_time{snmpgettable_odrverrors}=time()-$debug_time{snmpgettable_odrverrors} if $opt_debugtime;
-	$error.= "could not retrieve snmp table $phydrv_othererrors_tableoid" if !$phydrv_oerr_in && !$error;
+if (defined($opt_drverrors) && defined($opt_perfdata) && !defined($opt_optimize) &&
+    (defined($phydrv_mediumerrors_tableoid) || defined($phydrv_othererrors_tableoid))) {
+	if (defined($phydrv_mediumerrors_tableoid) && $phydrv_mediumerrors_tableoid) {
+	    $debug_time{snmpgettable_mederrors}=time() if $opt_debugtime;
+	    $phydrv_merr_in = $session->get_table(-baseoid=>$phydrv_mediumerrors_tableoid) if !$error;
+	    $debug_time{snmpgettable_mederrors}=time()-$debug_time{snmpgettable_mederrors} if $opt_debugtime;
+	    $error.= "could not retrieve snmp table $phydrv_mediumerrors_tableoid" if !$phydrv_merr_in && !$error;
+	}
+	if (defined($phydrv_othererrors_tableoid) && $phydrv_othererrors_tableoid) {
+	    $debug_time{snmpgettable_odrverrors}=time() if $opt_debugtime;
+	    $phydrv_oerr_in = $session->get_table(-baseoid=>$phydrv_othererrors_tableoid) if !$error;
+	    $debug_time{snmpgettable_odrverrors}=time()-$debug_time{snmpgettable_odrverrors} if $opt_debugtime;
+	    $error.= "could not retrieve snmp table $phydrv_othererrors_tableoid" if !$phydrv_oerr_in && !$error;
+	}
 }
 
 if ($error) {
@@ -903,7 +957,8 @@ foreach $line (Net::SNMP::oid_lex_sort(keys(%{$phydrv_data_in}))) {
 	}
 	# find which additional OIDs should be queried if snmp query optimization is enabled
 	if (defined($opt_optimize)) {
-	   if (defined($opt_drverrors) && defined($opt_perfdata)) {
+	   if (defined($opt_drverrors) && defined($opt_perfdata) &&
+	       defined($phydrv_mediumerrors_tableoid) && defined($phydrv_othererrors_tableoid)) {
 		push @extra_oids, $phydrv_mediumerrors_tableoid.'.'.$line;
 		push @extra_oids, $phydrv_othererrors_tableoid.'.'.$line;
 	   }
@@ -977,31 +1032,27 @@ foreach $line (Net::SNMP::oid_lex_sort(keys(%{$phydrv_data_in}))) {
 		$pdrv_status{$line}{'status_str'} = $code;
         }
 	else {
-		$pdrv_status{$line}{'status_str'} = $PHYDRV_CODES{$code};
-		if ($PHYDRV_CODES{$code}[0] eq 'failed' || $PHYDRV_CODES{$code}[0] eq 'rebuild' || $PHYDRV_CODES{$code}[0] eq 'unconfigured_bad') {
+		$pdrv_status{$line}{'status_str'} = $PHYDRV_CODES{$code}[1];
+		if ($PHYDRV_CODES{$code}[2] ne 'OK') {
+		# if ($PHYDRV_CODES{$code}[0] eq 'failed' || $PHYDRV_CODES{$code}[0] eq 'rebuild' || $PHYDRV_CODES{$code}[0] eq 'unconfigured_bad') {
 			$output_data .= ", " if $output_data;
-			$output_data .= "phy drv($phydrv_id) ".$PHYDRV_CODES{$code}[0];
-			if ($PHYDRV_CODES{$code}[0] eq 'rebuild') {
-				$phd_nagios_status = "WARNING" if $phd_nagios_status eq 'OK';
-				# optionally check rate of rebuild
-				if (defined($opt_extrainfo)) {
-					my $eoid = $phydrv_rebuildstats_tableoid.'.'.$line;
-					if (!defined($opt_optimize)) {
-  						$debug_time{'snmpretrieve_rebuild_'.$phydrv_id}=time() if $opt_debugtime;
-  						$snmp_result=$session->get_request(-Varbindlist => [ $eoid ]);
-  						$debug_time{'snmpretrieve_rebuild_'.$phydrv_id}=time()-$debug_time{'snmpretrieve_rebuild_'.$phydrv_id} if $opt_debugtime;
-						if (!$snmp_result) {
-        						$error=sprintf("could not retrieve OID $eoid: %s\n", $session->error());
-        						$session->close;
-        						print_output('UNKNOWN',$error);
-        						exit $ERRORS{'UNKNOWN'};
-  						}
-					}
-					$output_data.= ' ('.$snmp_result->{$eoid}.')' if defined($snmp_result->{$eoid});
+			$output_data .= "phy drv($phydrv_id) ".$PHYDRV_CODES{$code}[1];
+			$phd_nagios_status = $PHYDRV_CODES{$code}[1] if $phd_nagios_status ne 'CRITICAL';
+			# optionally check rate of rebuild
+			if ($PHYDRV_CODES{$code}[0] eq 'rebuild' && defined($opt_extrainfo)) {
+				my $eoid = $phydrv_rebuildstats_tableoid.'.'.$line;
+				if (!defined($opt_optimize)) {
+  					$debug_time{'snmpretrieve_rebuild_'.$phydrv_id}=time() if $opt_debugtime;
+  					$snmp_result=$session->get_request(-Varbindlist => [ $eoid ]);
+  					$debug_time{'snmpretrieve_rebuild_'.$phydrv_id}=time()-$debug_time{'snmpretrieve_rebuild_'.$phydrv_id} if $opt_debugtime;
+					if (!$snmp_result) {
+        					$error=sprintf("could not retrieve OID $eoid: %s\n", $session->error());
+        					$session->close;
+        					print_output('UNKNOWN',$error);
+        					exit $ERRORS{'UNKNOWN'};
+  					}
 				}
-			}
-			else { # failed state
-				$phd_nagios_status = $alert; 
+				$output_data.= ' ('.$snmp_result->{$eoid}.')' if defined($snmp_result->{$eoid});
 			}
 		}
 		$phydrv_total++ if ($PHYDRV_CODES{$code}[0] ne 'nondisk' && ($cardtype ne 'sasraid' || $cardtype ne 'mptfusion' || $code>0));  # only count disks for output
@@ -1027,12 +1078,10 @@ if (defined($opt_battery)) {
                 $output_data.= "battery status($battery_id) unknown code $code";
                 $nagios_status = $alert; # maybe this should not be an alert???
         }
-        elsif ($BATTERY_CODES{$code}[0] ne 'Battery OK') {
+        elsif ($BATTERY_CODES{$code}[2] ne 'OK') {
                 $output_data.= ", " if $output_data;
-                $output_data .= "battery status($battery_id) ".$BATTERY_CODES{$code}[0];
-                if ($BATTERY_CODES{$code}[0] eq 'Battery needs replacement') {
-                        $nagios_status = "WARNING" if $nagios_status eq "OK";
-                }
+                $output_data .= "battery status($battery_id) ".$BATTERY_CODES{$code}[1];
+                $nagios_status = $BATTERY_CODES{$code}[2] if $nagios_status ne "CRITICAL";
        	}
     }
 }
@@ -1082,8 +1131,10 @@ my $ndiff=0;
 if (defined($opt_perfdata)) {
     foreach $line (keys %pdrv_status) {
 	# first process medium errors
-        $nerr = $phydrv_merr_in->{$phydrv_mediumerrors_tableoid.'.'.$line};
-          print "phydrv_mediumerr: $phydrv_mediumerrors_tableoid.$line = $nerr" if $DEBUG;
+	if (defined($phydrv_mediumerrors_tableoid)) {
+	  $nerr = $phydrv_merr_in->{$phydrv_mediumerrors_tableoid.'.'.$line};
+	    print "phydrv_mediumerr: $phydrv_mediumerrors_tableoid.$line = $nerr" if $DEBUG;
+	}
 	if ($pdrv_status{$line}{status_str} ne 'nondisk' && ($cardtype ne 'sasraid' || $cardtype ne 'mptfusion' || $pdrv_status{$line}{status}>0)) {
 		  print " | suffix = $line, phydrv_id = ".$pdrv_status{$line}{phydrv_id} if $DEBUG;
 		$curr_perf{'merr_'.$line}=$nerr;
@@ -1103,8 +1154,10 @@ if (defined($opt_perfdata)) {
 	  print "\n" if $DEBUG;
 	# now process other errors 
 	$nerr = 0;
-        $nerr = $phydrv_oerr_in->{$phydrv_othererrors_tableoid.'.'.$line};
-          print "phydrv_othererr: $phydrv_othererrors_tableoid.$line = $nerr" if $DEBUG;
+	if (defined($phydrv_othererrors_tableoid)) {
+	  $nerr = $phydrv_oerr_in->{$phydrv_othererrors_tableoid.'.'.$line};
+	    print "phydrv_othererr: $phydrv_othererrors_tableoid.$line = $nerr" if $DEBUG;
+	}
 	if ($pdrv_status{$line}{status_str} ne 'nondisk' && ($cardtype ne 'sasraid' ||$pdrv_status{$line}{status}>0)) {
 		  print " | suffix = $line, phydrv_id = ".$pdrv_status{$line}{phydrv_id} if $DEBUG;
 		$curr_perf{'oerr_'.$line}=$nerr;
@@ -1121,7 +1174,7 @@ if (defined($opt_perfdata)) {
                         $output_data_end .= "phy drv(".$pdrv_status{$line}{phydrv_id}.") $nerr other errors";
                 }
 	}
-	  print "\n" if $DEBUG;
+	print "\n" if $DEBUG;
     }
 }
 
@@ -1149,7 +1202,7 @@ exit $ERRORS{$nagios_status};
 sub print_output {
    my ($out_status,$out_str)=@_;
 
-   print "Megaraid $out_status";
+   print "Raid $out_status";
 
    # netsaint doesn't like output strings larger than 256 chars
    # [William: modified it so that number of characters is now $MAX_OUTPUTSTR

@@ -3,8 +3,8 @@
 # =============================== SUMMARY =====================================
 #
 # Program : check_netint.pl or check_snmp_netint.pl
-# Version : 2.4 alpha 8
-# Date    : Nov 20, 2012
+# Version : 2.4 alpha 9
+# Date    : Nov 24, 2012
 # Maintainer: William Leibzon - william@leibzon.org,
 # Authors : See "CONTRIBUTORS" documentation section
 # Licence : GPL - summary below, full text at http://www.fsf.org/licenses/gpl.txt
@@ -520,6 +520,9 @@
 #		    to specify threshold based on deviation from this average. There
 #		    will be several alpha and beta versions before official 2.4 release.
 #
+# Specific info on each alpha/beta release will be removed in the future and only the most
+# important info when general release update info is written
+# 
 # 2.4a1 - 07/07/12 - Implemented in this release:
 #		    1) The plugin has been renamed "check_netint" from "check_snmp_netint".
 #		       It can now check interfaces on a local Linux system and in the
@@ -559,6 +562,7 @@
 # 2.4a8 - 11/20/12 - Another major code refactoring work to separate snmp-specific query
 #                    code into its own function (as well as new ifconfig processing
 #                    for linux local checks into its own function).
+# 2.4a9 - 11/22/12 - prev_perf() function added in place of directly accessing prev_perf hash
 #
 # ============================ LIST OF CONTRIBUTORS ===============================
 #
@@ -736,7 +740,7 @@ my @countername = ( "in=" , "out=" , "errors-in=" , "errors-out=" , "discard-in=
 my $checkperf_out_desc;
 
 ## Additional global variables
-my %prev_perf=	();     # array that is populated with previous performance data
+my %prev_perf_data=();  # array that is populated with previous performance data
 my @prev_time=	();     # timestamps if more then one set of previois performance data
 my $perfcache_time=undef;  # time when data was cached
 my $perfcache_recache_trigger=43200;  # How many seconds to use cached data for (default 12 hours for -m)
@@ -1063,6 +1067,22 @@ sub perf_name2 {
   return $iname."_".$vtype;
 } 
 
+# This is used to lookup previous perf data.
+# If only one argument is given, it is used as is. 
+# Otherwise perf_name is called with these two arguments to get the name
+# so function does something similar to $prev_perf{perf_name($iname,$vtype)} 
+sub prev_perf {
+ my ($name, $vtype) = @_;
+
+ $name = perf_name($name,$vtype) if defined($vtype);
+ return $prev_perf_data{$name} if exists($prev_perf_data{$name});
+ # also lets check in case nagios stripped quotes out of perf
+ if ($name =~ /^'(.*)`$/) {
+    return $prev_perf_data{$1} if exists($prev_perf_data{$1});
+ }
+ return undef;
+}
+
 sub check_options {
     Getopt::Long::Configure ("bundling");
 	GetOptions(
@@ -1195,14 +1215,14 @@ sub check_options {
     }
     if (defined($o_prevperf)) {
 	if (defined($o_perf)) {
-		%prev_perf=process_perf($o_prevperf);
+		%prev_perf_data=process_perf($o_prevperf);
 		# put last time nagios was checked in timestamp array
-		if (defined($prev_perf{ptime})) {
-			push @prev_time, $prev_perf{ptime};
+		if (defined($prev_perf_data{'ptime'})) {
+			push @prev_time, $prev_perf_data{'ptime'};
 		}
 		elsif (defined($o_prevtime)) {
 			push @prev_time, $o_prevtime;
-			$prev_perf{ptime}=$o_prevtime;
+			$prev_perf_data{'ptime'}=$o_prevtime;
 		}
 		else {
 			@prev_time=();
@@ -1725,31 +1745,31 @@ sub getdata_snmp {
    # Create SNMP session
    $session = create_snmp_session();
 
-   if (defined($o_minsnmp) && %prev_perf) {
+   if (defined($o_minsnmp) && %prev_perf_data) {
       # load old-style arrays
-      @tindex = split(',', $prev_perf{'cache_descr_ids'}) if exists($prev_perf{'cache_descr_ids'});
-      @cport = split(',', $prev_perf{'cache_descr_cport'}) if exists($prev_perf{'cache_descr_cport'});
-      @stpport = split(',', $prev_perf{'cache_descr_stpport'}) if exists($prev_perf{'cache_descr_stpport'});
-      @portspeed = split(',', $prev_perf{'cache_int_speed'}) if exists($prev_perf{'cache_int_speed'}) && $specified_speed==0;
-      @descr = split(',', $prev_perf{'cache_descr_names'}) if exists($prev_perf{'cache_descr_names'});
+      @tindex = split(',', prev_perf('cache_descr_ids')) if defined(prev_perf('cache_descr_ids'));
+      @cport = split(',', prev_perf('cache_descr_cport')) if defined(prev_perf('cache_descr_cport'));
+      @stpport = split(',', prev_perf('cache_descr_stpport')) if defined(prev_perf('cache_descr_stpport'));
+      @portspeed = split(',', prev_perf('cache_int_speed')) if defined(prev_perf('cache_int_speed')) && $specified_speed==0;
+      @descr = split(',', prev_perf('cache_descr_names')) if defined(prev_perf('cache_descr_names'));
 
       # clear old index if anything seems wrong with cached data
       my %tindex_hash = map { $_ => 1 } @tindex;
       @tindex = () if (scalar(@tindex) != scalar(keys %tindex_hash)) || # make sure no duplicates
 		   (scalar(@tindex) != scalar(@descr)) ||
-		   (defined($o_ciscocat) && (!exists($prev_perf{'cache_descr_cport'}) || scalar(@tindex) != scalar(@cport))) ||
-		   (defined($o_stp) && (!exists($prev_perf{'cache_descr_stpport'}) || scalar(@tindex) != scalar(@stpport))) ||
-		   (exists($prev_perf{'cache_int_speed'}) && scalar(@tindex) != scalar(@portspeed)) ||
+		   (defined($o_ciscocat) && (!defined(prev_perf('cache_descr_cport')) || scalar(@tindex) != scalar(@cport))) ||
+		   (defined($o_stp) && (!defined(prev_perf('cache_descr_stpport')) || scalar(@tindex) != scalar(@stpport))) ||
+		   (defined(prev_perf('cache_int_speed')) && scalar(@tindex) != scalar(@portspeed)) ||
 		   # this checks that time of last saved indeces is not way too long ago, in which case we check them again
 		   (!defined($perfcache_time) || $timenow < $perfcache_time || ($timenow - $perfcache_time) > $perfcache_recache_trigger);
 
       # load into our new array
       for (my $i=0;$i<scalar(@tindex);$i++) {
 	 $interfaces[$i]={'descr' => $descr[$i]};
-	 $interfaces[$i]{'speed'} = $portspeed[$i] if exists($prev_perf{'cache_int_speed'});
+	 $interfaces[$i]{'speed'} = $portspeed[$i] if defined(prev_perf('cache_int_speed'));
       }
-      if (exists($prev_perf{cache_cisco_opt})) {
-	 $copt{$_}=$_ foreach(split ',',$prev_perf{'cache_cisco_opt'});
+      if (defined(prev_perf('cache_cisco_opt'))) {
+	 $copt{$_}=$_ foreach(split ',',prev_perf('cache_cisco_opt'));
       }
 
       if (scalar(@tindex)>0) {
@@ -2098,12 +2118,12 @@ sub getdata_snmp {
 		verb("Received non-numeric status for STP for port $i: $int_stp_state");
 		$int_stp_state=undef;
 	    }
-	    $prev_stp_state=$prev_perf{perf_name($interfaces[$i]{'descr'},"stp_state")};
-	    $prev_stp_changetime=$prev_perf{perf_name($interfaces[$i]{'descr'},"stp_changetime")};
+	    $prev_stp_state=prev_perf($interfaces[$i]{'descr'},"stp_state");
+	    $prev_stp_changetime=prev_perf($interfaces[$i]{'descr'},"stp_changetime");
 	    if (defined($int_stp_state)) {
 		$int_status_extratext.=',' if $int_status_extratext;
 		$int_status_extratext.='STP:'.$stp_portstate{$int_stp_state};
-		$perf_out .= " ".perf_name($interfaces[$i]{'descr'},"stp_state")."=".$int_stp_state;
+		$perf_out .= " ".prev_name($interfaces[$i]{'descr'},"stp_state")."=".$int_stp_state;
 		$perf_out .= " ".perf_name($interfaces[$i]{'descr'},"prev_stp_state")."=".$prev_stp_state if defined($prev_stp_state);
 		if (defined($prev_stp_changetime) && defined($prev_stp_state) && $prev_stp_state == $int_stp_state) {
 			$perf_out .= " ".perf_name($interfaces[$i]{'descr'},'stp_changetime').'='.$prev_stp_changetime;
@@ -2216,7 +2236,7 @@ verb("Filter : $o_descr") if defined($o_descr);
 # WL: check if '-m' option is passed and previous description ids & names are available from
 #     previous performance data (caching to minimize SNMP lookups and only get specific data
 #     instead of getting description table every time)
-$perfcache_time = $prev_perf{'cache_descr_time'} if exists($prev_perf{'cache_descr_time'});
+$perfcache_time = prev_perf('cache_descr_time') if defined(prev_perf('cache_descr_time'));
 
 # Get data from local machine about its interfaces or from SNMP
 if ($do_snmp==0) {
@@ -2354,18 +2374,18 @@ for (my $i=0;$i < $num_int; $i++) {
 	my $j=0;
 	my $jj=0;
 	my $data_ok;
-	my $pnpref='';
+	my $timeref='';
 	for (;$j<$o_pcount && exists($prev_time[$j]); $j++) {
 		$data_ok=1;
-		$pnpref='.'.$prev_time[$j];
-		$pnpref='' if $prev_perf{ptime} eq $prev_time[$j];
+		$timeref='.'.$prev_time[$j];
+		$timeref='' if prev_perf('ptime') eq $prev_time[$j];
 		$prev_values[$jj]=[ $prev_time[$j],
-		          $prev_perf{perf_name($descr,'in_octet'.$pnpref)}, 
-		          $prev_perf{perf_name($descr,'out_octet'.$pnpref)},
-		          $prev_perf{perf_name($descr,'in_error'.$pnpref)},
-		          $prev_perf{perf_name($descr,'out_error'.$pnpref)},
-		          $prev_perf{perf_name($descr,'in_discard'.$pnpref)},
-		          $prev_perf{perf_name($descr,'out_discard'.$pnpref)} ];
+				    prev_perf($descr,'in_octet'.$timeref),
+				    prev_perf($descr,'out_octet'.$timeref),
+				    prev_perf($descr,'in_error'.$timeref),
+				    prev_perf($descr,'out_error'.$timeref),
+				    prev_perf($descr,'in_discard'.$timeref),
+				    prev_perf($descr,'out_discard'.$timeref) ];
 		# this checks if data is ok and not, this set of values would not be used
 		# and next set put in its place as $jj is not incrimented
 		for (my $k=1;$k<(defined($o_ext_checkperf)?7:3);$k++) { 
@@ -2620,24 +2640,21 @@ for (my $i=0;$i < $num_int; $i++) {
     }
     # output in octet counter
     if (defined($o_perfo) || (defined($o_prevperf) && !defined($o_nagios_saveddata))) {
+	# we add 'c' for graphing programs to know its a COUNTER
         $perf_out .= " ".perf_name($descr,"in_octet")."=". $interfaces[$i]{'in_bytes'}."c";
         $perf_out .= " ".perf_name($descr,"out_octet")."=". $interfaces[$i]{'out_bytes'}."c";
-        # $perf_out .= " ".perf_name($descr,"in_octet")."=". $$resultf{$oid_perf_inoct[$i]} ."c" if defined($oid_perf_inoct[$i]) && defined($$resultf{$oid_perf_inoct[$i]});
-        # $perf_out .= " ".perf_name($descr,"out_octet")."=". $$resultf{$oid_perf_outoct[$i]} ."c" if defined($oid_perf_outoct[$i]) && defined($$resultf{$oid_perf_outoct[$i]});
     }
     if (defined($o_prevperf) && defined($o_nagios_saveddata)) {
+        # we don't need to add 'c' if saved data is separate from perfdata
         $saved_out .= " ".perf_name($descr,"in_octet")."=". $interfaces[$i]{'in_bytes'};
         $saved_out .= " ".perf_name($descr,"out_octet")."=". $interfaces[$i]{'out_bytes'};
     }
     if (defined ($o_perfe) && defined($o_ext_checkperf)) {
+	# these are techinically counters too, but its better to have them graphed as total
         $perf_out .= " ".perf_name($descr,"in_error")."=". $interfaces[$i]{'in_errors'};
         $perf_out .= " ".perf_name($descr,"out_error")."=". $interfaces[$i]{'out_errors'};
         $perf_out .= " ".perf_name($descr,"in_discard")."=". $interfaces[$i]{'in_dropped'} if defined ($interfaces[$i]{'in_dropped'});
         $perf_out .= " ".perf_name($descr,"out_discard")."=". $interfaces[$i]{'out_dropped'} if defined ($interfaces[$i]{'out_dropped'});
-        # $perf_out .= " ".perf_name($descr,"in_error")."=". $$resultf{$oid_perf_inerr[$i]} ."c" if defined $$resultf{$oid_perf_inerr[$i]};
-        # $perf_out .= " ".perf_name($descr,"in_discard")."=". $$resultf{$oid_perf_indisc[$i]} ."c" if defined $$resultf{$oid_perf_indisc[$i]};
-        # $perf_out .= " ".perf_name($descr,"out_error")."=". $$resultf{$oid_perf_outerr[$i]} ."c" if defined $$resultf{$oid_perf_outerr[$i]};
-        # $perf_out .= " ".perf_name($descr,"out_discard")."=". $$resultf{$oid_perf_outdisc[$i]} ."c" if defined $$resultf{$oid_perf_outdisc[$i]};
     }
     if (defined($interfaces[$i]{'portspeed'}) && defined($o_perf) && defined($o_intspeed)) {
         $perf_out .= " ".perf_name($descr,"speed_bps")."=".$interfaces[$i]{'portspeed'};
@@ -2654,22 +2671,22 @@ if (defined($o_prevperf) && $o_pcount>0) {
     $pcount=0;
     foreach $loop_time (reverse sort(@prev_time)) {
       if (defined($interfaces[$i]{'descr'}) && $pcount<($o_pcount-1)) {
-        my $pnpref='.'.$loop_time;
-        $pnpref='' if defined($prev_perf{ptime}) && $prev_perf{ptime} eq $loop_time;
-        if (defined($prev_perf{perf_name($interfaces[$i]{'descr'},'in_octet'.$pnpref)}) &&
-	    defined($prev_perf{perf_name($interfaces[$i]{'descr'},'in_octet'.$pnpref)})) {
-	  $saved_out .= " ".perf_name($interfaces[$i]{'descr'},'in_octet.'.$loop_time).'='.$prev_perf{perf_name($interfaces[$i]{'descr'},'in_octet'.$pnpref)};
-	  $saved_out .= " ".perf_name($interfaces[$i]{'descr'},'out_octet.'.$loop_time).'='.$prev_perf{perf_name($interfaces[$i]{'descr'},'out_octet'.$pnpref)};
+        my $timeref='.'.$loop_time;
+        $timeref='' if defined(prev_perf('ptime')) && prev_perf('ptime') eq $loop_time;
+        if (defined(prev_perf($interfaces[$i]{'descr'},'in_octet'.$timeref)) &&
+	    defined(prev_perf($interfaces[$i]{'descr'},'in_octet'.$timeref))) {
+	  $saved_out .= " ".perf_name($interfaces[$i]{'descr'},'in_octet.'.$loop_time).'='.prev_perf($interfaces[$i]{'descr'},'in_octet'.$timeref);
+	  $saved_out .= " ".perf_name($interfaces[$i]{'descr'},'out_octet.'.$loop_time).'='.prev_perf($interfaces[$i]{'descr'},'out_octet'.$timeref);
         }
         if (defined ($o_perfe) &&
-	    defined($prev_perf{perf_name($interfaces[$i]{'descr'},'in_error'.$pnpref)}) &&
-	    defined($prev_perf{perf_name($interfaces[$i]{'descr'},'out_error'.$pnpref)}) &&
-	    defined($prev_perf{perf_name($interfaces[$i]{'descr'},'in_discard'.$pnpref)}) &&
-	    defined($prev_perf{perf_name($interfaces[$i]{'descr'},'out_discard'.$pnpref)})) {
-	  $saved_out .= " ".perf_name($interfaces[$i]{'descr'},'in_error.'.$loop_time).'='.$prev_perf{perf_name($interfaces[$i]{'descr'},'in_error'.$pnpref)};
-	  $saved_out .= " ".perf_name($interfaces[$i]{'descr'},'out_error.'.$loop_time).'='.$prev_perf{perf_name($interfaces[$i]{'descr'},'out_error'.$pnpref)};
-	  $saved_out .= " ".perf_name($interfaces[$i]{'descr'},'in_discard.'.$loop_time).'='.$prev_perf{perf_name($interfaces[$i]{'descr'},'in_discard'.$pnpref)};
-	  $saved_out .= " ".perf_name($interfaces[$i]{'descr'},'out_discard.'.$loop_time).'='.$prev_perf{perf_name($interfaces[$i]{'descr'},'out_discard'.$pnpref)};
+	    defined(prev_perf($interfaces[$i]{'descr'},'in_error'.$timeref)) &&
+	    defined(prev_perf($interfaces[$i]{'descr'},'out_error'.$timeref)) &&
+	    defined(prev_perf($interfaces[$i]{'descr'},'in_discard'.$timeref)) &&
+	    defined(prev_perf($interfaces[$i]{'descr'},'out_discard'.$timeref))) {
+	  $saved_out .= " ".perf_name($interfaces[$i]{'descr'},'in_error.'.$loop_time).'='.prev_perf($interfaces[$i]{'descr'},'in_error'.$timeref);
+	  $saved_out .= " ".perf_name($interfaces[$i]{'descr'},'out_error.'.$loop_time).'='.prev_perf($interfaces[$i]{'descr'},'out_error'.$timeref);
+	  $saved_out .= " ".perf_name($interfaces[$i]{'descr'},'in_discard.'.$loop_time).'='.prev_perf($interfaces[$i]{'descr'},'in_discard'.$timeref);
+	  $saved_out .= " ".perf_name($interfaces[$i]{'descr'},'out_discard.'.$loop_time).'='.prev_perf($interfaces[$i]{'descr'},'out_discard'.$timeref);
         }
         $pcount++;
       }

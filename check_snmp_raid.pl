@@ -37,10 +37,11 @@
 # It was originally written to monitor LSI MegaRAID, sold directly by LSI and
 # more commonly found in Dell systems under their brand name 'PERC' (PERC3-PERC6),
 # some are SCSI RAID cards and newer are SAS RAID cards. New cards sold directly
-# are now called MTPFusion and are supported too. t has also been found that some
+# are now called MTPFusion and are supported too. It has also been found that some
 # Adaptec cards can be monitored with this plugin and the way its written is general
 # enough that it maybe extended to other RAID controllers if people look at the MIBS
-# and are willing to contribute settings for them.
+# and are willing to contribute settings for them. HP SmartArray has now been added
+# to list of support RAID controllers as well.
 #
 # This plugin requires that Net::SNMP be installed on the machine performing the
 # monitoring and that snmp agent be set up on the machine to be monitored.
@@ -55,7 +56,7 @@
 # This originally started as check_megaraid plugin but now has been extended
 # to work with various other cards. You must specify what card you have with
 # '-T' option. The following are acceptable types:
-#   megaraid|sasraid|perc3|perc4|perc5|perc6|mptfusion|sas6ir|sas6|adaptec
+#   megaraid|sasraid|perc3|perc4|perc5|perc6|mptfusion|sas6ir|sas6|adaptec|smartarray
 #
 # You will need to have SNMP package installed appropriate for your card.
 # If you have SASRaid (also known as PERC5, PERC6) you will need
@@ -189,13 +190,14 @@
 #        first new 2.x release (see above on first released 2.0 being downgraded back to 1.95).
 #        Release notes for this version:
 #        a. Adding limited support for Adaptec RAID cards contributed by K Truong
-#        b  Code updates to make it easier to support other cards in the future
-#        c. Making both PHYDRV_CODES and BATTERY_CODES array contain 3 parameters as has
+#	 b. Adding limited support for HP Smart Array RAID, also contributed by K Truong
+#        c  Code updates to make it easier to support more cards and vendors in the future
+#        d. Making both PHYDRV_CODES and BATTERY_CODES array contain 3 parameters as has
 #           been the case with LOGDRV_CODES. The first one is short code name,
 #           2nd is human-readable text, and 3rd is nagios status is corresponds to.
-#	 d. Documentation updates related to plugin renaming and many other small
+#	 e. Documentation updates related to plugin renaming and many other small
 #           code updates
-#        e. Starting with 2.x the plugin is licensed under GPL 3.0 licence (was 2.0 before)
+#        f. Starting with 2.x the plugin is licensed under GPL 3.0 licence (was 2.0 before)
 #		   
 # ========================== LIST OF CONTRIBUTORS =============================
 #
@@ -428,6 +430,49 @@ sub set_oids {
             5 => ['failure', 'failure', 'CRITICAL'],
     );
   }
+  elsif ($cardtype eq 'smartarray') {
+    $baseoid = "1.3.6.1.4.1.232" if $baseoid eq "";        # SmartArray base oid
+    $logdrv_status_tableoid = $baseoid . ".3.2.3.1.1.4";
+    $phydrv_status_tableoid = $baseoid . ".3.2.5.1.1.6";
+    %LOGDRV_CODES = (
+            # as taken from CPQIDA-MIB
+            # other(1),
+            # ok(2),
+            # failed(3),
+            # unconfigured(4),
+            # recovering(5),
+            # readyForRebuild(6),
+            # rebuilding(7),
+            # wrongDrive(8),
+            # badConnect(9),
+            # overheating(10),
+            # shutdown(11),
+            # expanding(12),
+            # notAvailable(13),
+            # queuedForExpansion(14)
+            1 => ['unknown', 'array state is unknown', 'UNKNOWN'],
+            2 => ['optimal', 'array is functioning properly', 'OK'],
+            3 => ['failed', 'array failed', 'CRITICAL'],
+            4 => ['degraded', 'array is unconfigured', 'WARNING'],
+            5 => ['degraded', 'array is recovering', 'WARNING'],
+            6 => ['degraded', 'array is ready for rebuild', 'WARNING'],
+            7 => ['degraded', 'array is rebuilding', 'WARNING'],
+            8 => ['degraded', 'array wrong drive', 'CRITICAL'],
+            9 => ['degraded', 'array bad connect', 'CRITICAL'],
+           10 => ['degraded', 'array is overheating', 'CRITICAL'],
+           11 => ['degraded', 'array is shutdown', 'CRITICAL'],
+           12 => ['degraded', 'array is expanding', 'WARNING'],
+           13 => ['unknown', 'array not available', 'CRITICAL'],
+           14 => ['degraded', 'array queued for expansion', 'WARNING'],
+    );   
+
+    %PHYDRV_CODES = (
+            1 => ['other', 'other', 'UNKNOWN'], 	# unknown, maybe this should be critical in nagios
+            2 => ['okay', 'okay', 'OK'],
+            3 => ['failure', 'failure', 'CRITICAL'], 
+            4 => ['warning', 'warning', 'WARNING'], 	# predictive failure
+    );   
+  }
   else {
     usage("Specified card type $cardtype is not supported\n");
   }
@@ -460,7 +505,7 @@ sub print_version {
 # display usage information
 sub print_usage {
         print "Usage:\n";
-        print "$0 [-s <snmp_version>] -H <host> (-C <snmp_community>) | (-l login -x passwd [-X pass -L <authp>,<privp>) [-p <port>] [-t <timeout>] [-O <base oid>] [-a <alert level>] [--extra_info] [--check_battery] [-g <num good drives>] [--drive_errors -P <previous performance data> -S <previous state>] [-v [DebugLogFile] || -d DebugLogFile] [--debug_time] [--snmp_optimize] [-T megaraid|sasraid|perc3|perc4|perc5|perc6|mptfusion|sas6ir|sas6|adaptec]\n";
+        print "$0 [-s <snmp_version>] -H <host> (-C <snmp_community>) | (-l login -x passwd [-X pass -L <authp>,<privp>) [-p <port>] [-t <timeout>] [-O <base oid>] [-a <alert level>] [--extra_info] [--check_battery] [-g <num good drives>] [--drive_errors -P <previous performance data> -S <previous state>] [-v [DebugLogFile] || -d DebugLogFile] [--debug_time] [--snmp_optimize] [-T megaraid|sasraid|perc3|perc4|perc5|perc6|mptfusion|sas6ir|sas6|adaptec|smartarray]\n";
         print "$0 --version | $0 --help (use this to see better documentation of above options)\n";
 }
 
@@ -475,7 +520,7 @@ sub help {
         print_version();
         print "GPL 3.0 licence (c) 2006-2012 William Leibzon\n";
         print "This plugin uses SNMP to check logical and physical drive status of a RAID controllers\n";
-	print "sold by LSI, MPTFusion, Dell (PERC brand), Adaptec and other vendors.\n";
+	print "sold by LSI, MPTFusion, Dell PERC, Adaptec, HP SmartArray and other brands.\n";
 	print "\n";
         print_usage();
         print "\n";
@@ -486,13 +531,13 @@ sub help {
 	print "    Display version\n";
 	print "  -T, --controller_type <type>\n";
 	print "    Type of controller - can be:\n";
-	print "       megaraid|sasraid|perc3|perc4|perc5|perc6|perch700|mptfusion|sas6ir|sas6|adaptec\n";
-	print "       (megaraid=perc3,perc4; sasraid=perc5,perc6,perch700; mptfusion=sas6ir,sas6)\n";
+	print "       megaraid|sasraid|perc3|perc4|perc5|perc6|perch700|mptfusion|sas6ir|sas6|adaptec|hp|smartarray\n";
+	print "       (megaraid=perc3,perc4; sasraid=perc5,perc6,perch700; mptfusion=sas6ir,sas6; smartarray=hp)\n";
 	print "  -a, --alert <alert level>\n";
 	print "    Alert status to use if an error condition is found\n";
 	print "    Accepted values are: \"crit\" and \"warn\" (defaults to crit)\n";
 	print "  -b, --check_battery\n";
-	print "    Check and print information on hard drive batteries (BBU). Only for sasraid card types\n"; 
+	print "    Check and print information on hard drive batteries (BBU). Currently only 'sasraid' card types\n"; 
 	print "  -i, --extra_info\n";
 	print "    Extra information in output. This includes rebuild rate, product & drive vendor names, etc\n";
 	print "  -g, --good_drive <number>\n";
@@ -657,6 +702,9 @@ sub check_options {
      }
      elsif ($opt_cardtype eq 'adaptec') {
 	$cardtype='adaptec';
+     }
+     elsif ($opt_cardtype eq 'hp' || $opt_cardtype eq 'smartarray') {
+        $cardtype='smartarray';
      }
      else {
 	usage("Invalid controller type specified");

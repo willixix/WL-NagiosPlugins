@@ -110,8 +110,8 @@
 #      also need to send previous state so as to force notification
 #      (performance data would be same as original until non-OK HARD state)
 #   6. [1.3  - Apr 2007] Reworked reporting of physical id to report it as 
-#      "control/channel/id" when more then one controller is present or as
-#      "channnel/id" when one controller and more then one channel
+#      "control/channel/id" when more than one controller is present or as
+#      "channnel/id" when one controller and more than one channel
 #      Also for persnmp5 if you have multiple luns (which should not happen
 #      with disk drives) it will in theory add lun# as ".lun" to physical id
 #   7. [1.35 - Apr 2007] Changed reporting of 'medium' and 'other' errors as
@@ -133,16 +133,16 @@
 #      before as you had to pass on "-P" with old performance data to
 #      make use of it, but now it also has to be specifically enabled
 #      with '-e' or '--drive_errors" option.
-#      Also new option '-i' ('--extra_info') which is enable information-only
-#      data in plugin output. For 1.5 this is drive rebuilt rate info.
+#      Also new option '-i' ('--extra_info') which adds more information 
+#      in plugin output. For 1.5 this is drive rebuilt rate info.
 #   11. [1.6 - Oct 2007] Additional option '-o' ('--snmp_optimize') to minimize
 #      number of SNMP queries when extra data is needed. When this is given
 #      only one extra query is made for specific OIDs that are needed
 #      instead of multiple SNMP table walks. Note that despite this type
 #      of optimization working very well for number of my other plugins,
-#      it is not clear if it actually better with percsnmp or not. Use at
-#      your own risk and do some trials with '--debug_time' option to
-#      if it is better for you.
+#      it is not clear if it is actually better with percsnmp or not. Use
+#      this at your own risk and do some trials with '--debug_time' option
+#      to see if it is better for you.
 #   12. [1.7 - Nov 2007] Some code cleanup and addition of -O to set base oid.
 #      The only reason you might want this is if you modified /etc/snmp/snmpd
 #      to have line other then "pass .1.3.6.1.4.1.3582 /usr/sbin/percmain".
@@ -153,8 +153,8 @@
 #      quick hack as in the near future I plan to merge both check_megaraid
 #      and check_sasraid back into one plugin with -T option specifying
 #      what type of card you want to check 
-#   14. [1.75 - Dec 2007] Code fixes and merger of
-#      check_megaraid and check_sasraid plugins. Support for -T
+#   14. [1.75 - Dec 2007] Code fixes and merger of check_megaraid and
+#      check_sasraid plugins.Type -T option added to specify card type.
 #   15. [1.8 - Nov 2010, release Dec 15, 2010] patch by Vitaly Pecharsky:
 #      Added support for mptsas devices, such as Dell SAS6i/R and other
 #      similar LSI Logic / Symbios Logic SAS1068E PCI-Express Fusion-MPT SAS
@@ -164,35 +164,38 @@
 #      Added explicit support for PERC 6 and PERC H700 controllers,
 #      which are already supporting through sasraid path.
 #   16. [1.901 - Dec 25, 2011] Support for SNMP v3. 
-#      Bunch of new options added to support v3.
+#      Bunch of new options added to support SNMP v3.
 #      There is also an incompatible change in that default community is no longer
-#      'public'. You must now specify community if you use snmp v1 or v2
-#      This is all for better security for those few who do use this plugin
-#   17. [1.902 - Jan 12, 2012] Documentation fixes
-#   18. [1.91 - Feb 8, 2012] Bug fixes with 1.9 release (forgot to include verb() function)
-#   19. [1.92 - Jun 15, 2012] Bug fixes when no SNNP version is specified
-#	                      Verb function & option updated to allow debug info go to file
-#			      specified as a parameter to -v rather than just stdout
+#      'public' - you must now specify community if you use snmp v1 or v2
+#      This is all for better security for those few who do use this plugin.
+#   17. [1.902 - Jan 12, 2012] Minor fixes mostly in documentation.
+#   18. [1.91 - Feb 8, 2012] More bug fixes with 1.9 release (forgot to include verb() function)
+#   19. [1.92 - Jun 15, 2012] Bug fixed when no SNNP version was specified.
+#      Verb function & option updated to allow debug info go to file specified
+#      as a parameter to -v (now also called --debug) rather than just stdout.
 #   20. [1.95 - Oct 22, 2012] New version. Patches and Additions that went here:
 #        a. merged pool request from goochjj (John Gooch):
-#           Added good_drives threshold check (-g option) and show make and model of
-#           physical drives which is activated with "-i" option
-#        b. applied patch from Robert Wikman (sent by email) that adds checks of battery (BBU) data
+#           Added good_drives threshold check (new '-g' option) and info on
+#           make and model of physical drives which is activated with "-i" option
+#        b. applied patch from Robert Wikman (sent by email) that adds checks on status of
+#           batteries (BBU data) enabled with a new -b (--check_battery) option
 #        c. code cleanup and refactoring - functions moved to top and option variables renamed
 #        d. list of contributors section added       
-#       [2.0 - Oct 2012] This version was originaly to be released as 1.95 but with two patches
-#        and all code cleanup, the number of changes is more than sub-minor and I released it
-#	 as 2.0. However I later downgraded it back to 1.95 because for 2.0 release the plugin
-#        is being renamed as check_snmp_raid and features limited support for Adaptec cards.
+#       [2.0 - Oct 2012] The version was originaly to be released as 1.95 but with two patches
+#        and all the code cleanup, the number of changes is more than sub-minor and I released
+#        it as 2.0. However I later downgraded it back to 1.95 because for 2.0 release the plugin
+#        is being renamed as check_snmp_raid since it was possible to add support for Adaptec cards.
 #   21. [2.1 - Nov 22, 2012] Plugin has been renamed check_snmp_raid. Essentially this is
-#        first new 2.x release, see above on firs released 2.0 being downgraded back to 1.95.
+#        first new 2.x release (see above on first released 2.0 being downgraded back to 1.95).
 #        Release notes for this version:
 #        a. Adding limited support for Adaptec RAID cards contributed by K Truong
-#           and code updates to make it easier to support more cards in the future.
-#        b. Making both PHYDRV_CODES and BATTERY_CODES array contain 3 parameters as has
+#        b  Code updates to make it easier to support other cards in the future
+#        c. Making both PHYDRV_CODES and BATTERY_CODES array contain 3 parameters as has
 #           been the case with LOGDRV_CODES. The first one is short code name,
 #           2nd is human-readable text, and 3rd is nagios status is corresponds to.
-#	 c. Documentation updates related to plugin renaming and other small updates.
+#	 d. Documentation updates related to plugin renaming and many other small
+#           code updates
+#        e. Starting with 2.x the plugin is licensed under GPL 3.0 licence (was 2.0 before)
 #		   
 # ========================== LIST OF CONTRIBUTORS =============================
 #
@@ -470,9 +473,9 @@ sub usage {
 # display help information
 sub help {
         print_version();
-        print "GPL 2.0 licence (c) 2006-2012 William Leibzon\n";
+        print "GPL 3.0 licence (c) 2006-2012 William Leibzon\n";
         print "This plugin uses SNMP to check logical and physical drive status of a RAID controllers\n";
-	print "sold under LSI, MPTFusion, Dell PERC Megaraid, Dell PERC SASRaid brands.\n";
+	print "sold by LSI, MPTFusion, Dell (PERC brand), Adaptec and other vendors.\n";
 	print "\n";
         print_usage();
         print "\n";
@@ -483,7 +486,7 @@ sub help {
 	print "    Display version\n";
 	print "  -T, --controller_type <type>\n";
 	print "    Type of controller - can be:\n";
-	print "       megaraid|sasraid|perc3|perc4|perc5|perc6|perch700|mptfusion|sas6ir|sas6\n";
+	print "       megaraid|sasraid|perc3|perc4|perc5|perc6|perch700|mptfusion|sas6ir|sas6|adaptec\n";
 	print "       (megaraid=perc3,perc4; sasraid=perc5,perc6,perch700; mptfusion=sas6ir,sas6)\n";
 	print "  -a, --alert <alert level>\n";
 	print "    Alert status to use if an error condition is found\n";

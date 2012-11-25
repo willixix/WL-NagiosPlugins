@@ -407,8 +407,8 @@ sub set_oids {
   }
   elsif ($cardtype eq 'adaptec') {
     $baseoid = "1.3.6.1.4.1.795" if $baseoid eq "";		   # Adaptec base oid
-    $logdrv_status_tableoid = ".14.1.1000.1.1.12";
-    $phydrv_status_tableoid = ".14.1.400.1.1.11";
+    $logdrv_status_tableoid = $baseoid . ".14.1.1000.1.1.12";
+    $phydrv_status_tableoid = $baseoid . ".14.1.400.1.1.11";
 
     %LOGDRV_CODES = (
             1 => ['unknown', 'array state is unknown', 'UNKNOWN'],

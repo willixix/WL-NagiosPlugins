@@ -206,7 +206,7 @@
 #    William Leibzon
 #    Vitaly Percharsky
 #    John Reuning
-#    K Truong
+#    Khanh Truong
 #    Robert Wikman
 #
 # Open source community is grateful for all your contributions.

@@ -4,7 +4,7 @@
 #
 # Program : check_netint.pl or check_snmp_netint.pl
 # Version : 2.4 alpha 9
-# Date    : Nov 24, 2012
+# Date    : Nov 26, 2012
 # Maintainer: William Leibzon - william@leibzon.org,
 # Authors : See "CONTRIBUTORS" documentation section
 # Licence : GPL - summary below, full text at http://www.fsf.org/licenses/gpl.txt
@@ -559,10 +559,11 @@
 #                    perf unless both -y and -u were used together. This bug was introduced
 #		     somewhere around 2.2 and apparently 2.31 did not entirely fix it
 # 2.4a7 - 11/18/12 - Added support for SNMP bulk requests and --bulk_snmp_queries option
-# 2.4a8 - 11/20/12 - Another major code refactoring work to separate snmp-specific query
+# 2.4a8 - 11/21/12 - Another major code refactoring work to separate snmp-specific query
 #                    code into its own function (as well as new ifconfig processing
 #                    for linux local checks into its own function).
-# 2.4a9 - 11/22/12 - prev_perf() function added in place of directly accessing prev_perf hash
+# 2.4a9 - 11/26/12 - prev_perf() function added in place of directly accessing prev_perf hash
+#		     message size is reset to 5 times the default with --bulk_snmp_queries
 #
 # ============================ LIST OF CONTRIBUTORS ===============================
 #
@@ -1434,11 +1435,16 @@ sub create_snmp_session {
    printf("ERROR opening session: %s.\n", $error);
    exit $ERRORS{"UNKNOWN"};
   }
-  if (defined($o_octetlength)) {
+  if (defined($o_octetlength) || defined($o_bulksnmp)) {
 	my $oct_resultat=undef;
 	my $oct_test=$session->max_msg_size();
 	verb(" actual max octets:: $oct_test");
-	$oct_resultat = $session->max_msg_size($o_octetlength);
+	if (defined($o_octetlength)) {
+	    $oct_resultat = $session->max_msg_size($o_octetlength);
+	}
+	else { # for bulksnmp we set message size to 5 times its default
+	    $oct_resultat = $session->max_msg_size($oct_test * 5);
+	}
 	if (!defined($oct_resultat)) {
 		 printf("ERROR: Session settings : %s.\n", $session->error);
 		 $session->close;

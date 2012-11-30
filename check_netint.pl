@@ -4,7 +4,7 @@
 #
 # Program : check_netint.pl or check_snmp_netint.pl
 # Version : 2.4 alpha 9
-# Date    : Nov 26, 2012
+# Date    : Nov 30, 2012
 # Maintainer: William Leibzon - william@leibzon.org,
 # Authors : See "CONTRIBUTORS" documentation section
 # Licence : GPL - summary below, full text at http://www.fsf.org/licenses/gpl.txt
@@ -562,7 +562,7 @@
 # 2.4a8 - 11/21/12 - Another major code refactoring work to separate snmp-specific query
 #                    code into its own function (as well as new ifconfig processing
 #                    for linux local checks into its own function).
-# 2.4a9 - 11/26/12 - prev_perf() function added in place of directly accessing prev_perf hash
+# 2.4a9 - 11/30/12 - prev_perf() function added in place of directly accessing prev_perf hash
 #		     message size is reset to 5 times the default with --bulk_snmp_queries
 #
 # ============================ LIST OF CONTRIBUTORS ===============================
@@ -2129,7 +2129,7 @@ sub getdata_snmp {
 	    if (defined($int_stp_state)) {
 		$int_status_extratext.=',' if $int_status_extratext;
 		$int_status_extratext.='STP:'.$stp_portstate{$int_stp_state};
-		$perf_out .= " ".prev_name($interfaces[$i]{'descr'},"stp_state")."=".$int_stp_state;
+		$perf_out .= " ".perf_name($interfaces[$i]{'descr'},"stp_state")."=".$int_stp_state;
 		$perf_out .= " ".perf_name($interfaces[$i]{'descr'},"prev_stp_state")."=".$prev_stp_state if defined($prev_stp_state);
 		if (defined($prev_stp_changetime) && defined($prev_stp_state) && $prev_stp_state == $int_stp_state) {
 			$perf_out .= " ".perf_name($interfaces[$i]{'descr'},'stp_changetime').'='.$prev_stp_changetime;

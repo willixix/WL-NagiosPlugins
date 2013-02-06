@@ -618,7 +618,7 @@ if (defined($o_stdin)) {
 
     # I would have preferred open3 [# if (!open3($cin, $cout, $cerr, $shell_command))]
     # but there are problems when using it within nagios embedded perl
-    verb("Executing $shell_command 2>&1");
+    verb("Executing ".$shell_command." 2>&1");
     $ls_pid=open(SHELL_DATA, "$shell_command 2>&1 |");
     if (!$ls_pid) {
         print "UNKNOWN ERROR - could not execute $shell_command - $!";

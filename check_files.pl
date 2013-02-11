@@ -3,10 +3,9 @@
 # ============================== SUMMARY =====================================
 #
 # Program  : check_files.pl 
-# Version  : 0.39
-# Date     : Jan 23, 2013
+# Version  : 0.4
+# Date     : Feb 15, 2013
 # Author   : William Leibzon - william@leibzon.org
-# Modify by: BAILAT Patrick
 # Summary  : This is a nagios plugin that checks directory and files
 #            file count and directory and file age and file size
 # Licence  : GPL - summary below, full text at http://www.fsf.org/licenses/gpl.txt
@@ -30,9 +29,8 @@
 # ===================== INFORMATION ABOUT THIS PLUGIN ========================
 #
 # This is a nagios plugin that checks number of files of specified type
-# in a directory. It can also check file or directory age. It can give an
-# error if there are too few or too many files. It can also check file age
-# and return an error if its too old
+# in a directory. It can give an error if there are too few or too few files
+# and can also check file age and return an error if file(s) is/are too old.
 #
 # This program is written and maintained by:
 #   William Leibzon - william(at)leibzon.org
@@ -41,60 +39,83 @@
 #
 # List of files to check are specified with -F option. These should be
 # specified in a way you'd specify files for ls, so for example to check
-# all perl files you use "*.pl" which is specified for example as:
-#    ./check_files.pl -L Files -F '*.pl' -w 4 -c 7 
+# all perl files you use "*.pl" which is specified as:
+#    $ ./check_files.pl -L Files -F '*.pl' -w 4 -c 7 
 # (above will give a warning if there are > 4 *.pl files and critical alert if > 7)
 #
 # You can specify more than one file type to check, for example:
-#    ./check_files.pl -L Files -F '*.pl,*.sh' -w 4,3 -c 7,5 
+#    $ ./check_files.pl -L Files -F '*.pl,*.sh' -w 4,3 -c 7,5 
 # (above will give a warning if there are more than 4 .pl or more than 3 *.sh files
 #  and CRITICAL alert if there are more than 7 .pl or more than 5 *.sh files)
+#
+# And these are examples provided by Patrick Bailat for options he added:
+#  Compute the sum size of files:
+#    $ ./check_files.pl -D /opt/oradata -F "t" -f -S -H "10.0.0.1"
+#    OK - Sum of file sizes is 3897 octet, 2 t files found | 't'=2 size_sum=3897o
+#  Search largest file:
+#    $ ./check_files.pl -D /opt/oradata -F "t" -f -s -H "10.0.0.1"
+#    OK - Largest size file is 3896 octet, 2 t files found | 't'=2 size_largest=3896o size_smallest=1o
 # 
-# Warning and critical levels are specified with '-w' and '-c' and each one
-# must have exactly same number of values (separated by ',') as number of
-# file type checks specified with '-F'. Any values you dont want
-# to compare you specify as ~. There are also number of other one-letter
-# modifiers that can be used before actual data value to direct how data is
-# to be checked. These are as follows:
-#    > : issue alert if data is above this value (default)
-#    < : issue alert if data is below this value
-#    = : issue alert if data is equal to this value
-#    ! : issue alert if data is NOT equal to this value
+# About Threhold Format:
 #
-# Supported are also two specifications of range formats:
-#   number1:number2   issue alert if data is OUTSIDE of range [number1..number2]
+#   Warning and critical levels are specified with '-w' and '-c' and each one
+#   must have exactly same number of values (separated by ',') as number of
+#   file type checks specified with '-F'. Any values you dont want
+#   to compare you specify as ~. There are also number of other one-letter
+#   modifiers that can be used before actual data value to direct how data is
+#   to be checked. These are as follows:
+#      > : issue alert if data is above this value (default)
+#      < : issue alert if data is below this value
+#      = : issue alert if data is equal to this value
+#      ! : issue alert if data is NOT equal to this value
+#
+#   Supported are also two specifications of range formats:
+#     number1:number2   issue alert if data is OUTSIDE of range [number1..number2]
 #                 i.e. alert if data<$number1 or data>$number2
-#   @number1:number2  issue alert if data is WITHIN range [number1..number2] 
-#             i.e. alert if data>=$number and $data<=$number2
+#     @number1:number2  issue alert if data is WITHIN range [number1..number2] 
+#                 i.e. alert if data>=$number and $data<=$number2
 #
-# A special modifier '^' can also be used to disable checking that warn values
-# are less than (or greater than) critical values (it is rarely needed).
+#   A special modifier '^' can also be used to disable checking that warn values
+#   are less than (or greater than) critical values (it is rarely needed).
 #
-# You can also check file age with '--age' option which allows to set threshold
-# if any file (in any of the file specs given with -F) is older than specified
-# number of seconds. The option either takes one number separated by ',' for
-# WARNING and CRITICAL alerts. If you want only CRITICAL specify WARNING as ~.
-# For example -a '~,60' would give CRITICAL alert if any file is older than minute
+# Additional Options:
 #
-# Just '-a' will show how old found files are which was the behavior prior to 0.36
-# version even if -a was not given as an option.
+#   You can check file age with '--age' option which allows to set threshold
+#   if any file (in any of the file specs given with -F) is older than specified
+#   number of seconds. The option either takes one number separated by ',' for
+#   WARNING and CRITICAL alerts. If you want only CRITICAL specify WARNING as ~.
+#   For example -a '~,60' would give CRITICAL alert if any file is older than minute
 #
-# You can also check file size with '--size' option which allows to set threshold
-# if any file (in any of the file specs given with -F) is larger than specified
-# number of octet. The option either takes one number separated by ',' for
-# WARNING and CRITICAL alerts. If you want only CRITICAL specify WARNING as ~.
-# For example -s '~,60' would give CRITICAL alert if any file is larger than 60
-# octets
+#   Just '-a' will show how old found files are which was the behavior prior to 0.36
+#   version even if -a was not given as an option.
 #
+#   You can also check file size with '--size' option which allows to set threshold
+#   if any file (in any of the file specs given with -F) is larger than specified
+#   number of octets (bytes). The option either takes one number separated by ','
+#   for WARNING and CRITICAL alerts. If you want only CRITICAL specify WARNING as ~.
+#   For example -s '~,60' would give CRITICAL alert if any file is larger than 60
+#   octets (bytes)
 #
-# Additionally if you want performance output then use '-f' option. The plugin
-# will output number of files of each type and age of oldest and newest files.
+#   If you want performance output then use '-f' option. The plugin will then
+#   output number of files of each type and age of oldest and newest files.
 #
-# Two options -C and -I are used so that you could execute 'ls' on a remote
-# system and process results locally. With -I the plugin will expect output
-# from "ls -l" in standard input. With -C you specify actual shell command
-# and it is executed by the plugin. I first -C firt but foud that -I is
-# easier to use and cleaner as far as nagios command specification.
+# Execution Options:
+# 
+#   This plugin checks list of files by executing 'ls' on a local system where
+#   it is run. It can also execute ls on a remote system or process the output
+#   from ls command executed through some other plugin. Options -C, -H and -I
+#   are used to specify how and where to execute 'ls' and process results. 
+#
+#   With -I the plugin will expect output from "ls -l" in standard input.
+#
+#   With -C you specify actual shell command and it is executed by the plugin.
+#
+#   With option -H plugin executes ls on a specified host using ssh, it is expected
+#   that you'd have proper keys for this option to work. This is simple option is
+#   basically a special case of -C and if you want something more complex use -C
+#
+#   Note: I first wrote -C but found that -I is easier to use and cleaner as
+#         far as nagios command specification. Patrick Bailat added -H option.
 #
 # ========================== VERSION CHANGES AND TODO =========================
 #
@@ -106,9 +127,26 @@
 #  [0.35] Aug 21, 2012 - Option '-T' was broken. Bug reported by Jeremy Mauro
 #  [0.36] Sep 20, 2012 - Made reporting of age optional only when -a option is given.
 #                        This is a suggestion by Bernhard Eisenschmid
-#  [0.37] Jan 21, 2013 - Added -s option for check file size
-#  [0.38] Jan 22, 2013 - Added -S option for check sum of file size
-#  [0.39] Jan 23, 2013 - Added -H option for execute ls -l by ssh
+#  [0.37] Jan 21, 2013 - Added -s option for check file size (Patrick Bailat)
+#  [0.38] Jan 22, 2013 - Added -S option for check sum of file size (Patrick Bailat)
+#  [0.39] Jan 23, 2013 - Added -H option for execute ls -l by ssh (Patrick Bailat)
+#  [0.40] Feb 10, 2013 - Documentation cleanup. New release.
+#
+#  TODO: This plugin is using early threshold chek code that became the base of
+#        Naglio library and should be updated to use this library.
+#
+# ========================== LIST OF CONTRIBUTORS =============================
+#
+# The following individuals have contributed code, patches, bug fixes and ideas to
+# this plugin (listed in last-name alphabetical order):
+#
+#    Patrick Bailat
+#    Vincent Besançon
+#    Bernhard Eisenschmid
+#    William Leibzon
+#    Jeremy Mauro
+#
+# Open source community is grateful for all your contributions.
 #
 # ========================== START OF PROGRAM CODE ============================
 
@@ -126,7 +164,7 @@ if ($@) {
  %ERRORS = ('OK'=>0,'WARNING'=>1,'CRITICAL'=>2,'UNKNOWN'=>3,'DEPENDENT'=>4);
 }
 
-my $Version='0.39';
+my $Version='0.40';
 
 my $o_help=         undef; # help option
 my $o_timeout=      10;    # Default 10s Timeout
@@ -287,56 +325,26 @@ sub help {
     print " by William Leibzon - william(at)leibzon.org\n\n";
     print_usage();
     print <<EOD;
--v, --verbose
-    print extra debugging information
 -h, --help
     print this help message
+-V, --version
+    prints version number
+-t, --timeout=INTEGER
+    timeout for command to finish (Default : 5)
 -L, --label
-        Plugin output label
--D, --dir=<STR>
-    Directory name in which to check files. If this is specifies all file names
-    given in -F will be relative to this directory.
+    output label (what prints first on status line)
+-v, --verbose
+    print extra debugging information
+
+File and Directory Selection options:
+    
 -F, --files=STR[,STR[,STR[..]]]
     Which files to check. What is here is similar to what you use for listing
     file with ls i.e. *.temp would look for all temp files. This is converted
     to a regex and NOT an actual ls command input, so some errors are possible.
--w, --warn=STR[,STR[,STR[..]]]
-    Warning level(s) for number of files - must be a number
-    Warning values can have the following prefix modifiers:
-       > : warn if data is above this value (default)
-       < : warn if data is below this value
-       = : warn if data is equal to this value
-       ! : warn if data is not equal to this value
-       ~ : do not check this data (must be by itself)
-       ^ : this disables checks that warning is less than critical
-    Threshold values can also be specified as range in two forms:
-       num1:num2  - warn if data is outside range i.e. if data<num1 or data>num2
-       \@num1:num2 - warn if data is in range i.e. data>=num1 && data<=num2
--c, --crit=STR[,STR[,STR[..]]]
-    Critical level(s) (if more than one file spec, must have multiple values)
-    Critical values can have the same prefix modifiers as warning
-    (see above) except '^'
--a, --age[=WARN[,CRIT]]
-    Show file age if no WARN/CRIT threshold parameter specified.
-    Check to make sure files are not older than the specified threshold(s).
-    This number is in seconds. Though you probably will not want to use it,
-    threshold does supports same spec format as in -w and -c
--s, --size[=WARN[,CRIT]]
-    Show file size if no WARN/CRIT threshold parameter specified.
-    Check to make sure files are not larger than the specified threshold(s).
-    This number is in octet. Though you probably will not want to use it,
-    threshold does supports same spec format as in -w and -c
--S, --sumsize[=WARN[,CRIT]]
-    Show sum of file sizes if no WARN/CRIT threshold parameter specified.
-    Check to make sure sum of file sizes are not larger than the specified threshold(s).
-    This number is in octet. Though you probably will not want to use it,
-    threshold does supports same spec format as in -w and -c
--t, --timeout=INTEGER
-    timeout for command to finish (Default : 5)
--V, --version
-    prints version number
--f, --perfparse
-        Give number of files and file oldest file age in perfout
+-D, --dir=<STR>
+    Directory name in which to check files. If this is specifies all file names
+    given in -F will be relative to this directory.
 -T, --filetype='files'|'dir'
     Allows to specify if we should count only files or only directories.
     Default is to count both and ignore file type.
@@ -348,6 +356,9 @@ sub help {
     list all files in directory and choose some with regex. This option 
     should be used if there are a lot of files in a directory.
     WARNING: using this option will cause -r not to work on most system
+
+Exection Options:
+
 -C, --cmd=STR
     By default the plugin will chdir to specified directory, do 'ls -l'
     and parse results. Here you can specify alternative cmd to execute
@@ -363,6 +374,38 @@ sub help {
     on the remote server with ssh. Beware the script must be run with an account
     that has its public key to the remote server.
     This option does not work with the -C option
+    
+Threshold Checks and Performance Data options:
+
+-f, --perfparse
+    Give number of files and file oldest file age in perfout
+-w, --warn=STR[,STR[,STR[..]]]
+    Warning level(s) for number of files - must be a number
+    Warning values can have the following prefix modifiers:
+       > : warn if data is above this value (default)
+       < : warn if data is below this value
+       = : warn if data is equal to this value
+       ! : warn if data is not equal to this value
+       ~ : do not check this data (must be by itself)
+       ^ : this disables checks that warning is less than critical
+    Threshold values can also be specified as range in two forms:
+       num1:num2  - warn if data is outside range i.e. if data<num1 or data>num2
+       \@num1:num2 - warn if data is in range i.e. data>=num1 && data<=num2
+-c, --crit=STR[,STR[,STR[..]]]
+    Critical level(s) (if more than one file spec, must have multiple values)
+    Critical values can have the same prefix modifiers as warning, except '^'
+-a, --age[=WARN[,CRIT]]
+    Show file age if no WARN/CRIT threshold parameter specified.
+    Check to make sure files are not older than the specified threshold(s).
+    This number is in seconds. Also supports same extended spec as -w and -c
+-s, --size[=WARN[,CRIT]]
+    Show file size if no WARN/CRIT threshold parameter specified.
+    Check to make sure files are not larger than the specified threshold(s).
+    This number is in octet/byte. Also supports same extended spec as -w and -c
+-S, --sumsize[=WARN[,CRIT]]
+    Show sum of file sizes if no WARN/CRIT threshold parameter specified.
+    Check to make sure sum of file sizes are not larger than the specified threshold(s).
+    This number is in octet/byte. Also supports same extended spec as -w and -c
 
 EOD
 }
@@ -471,8 +514,10 @@ sub check_options {
         }
     }
 
-    if (defined($o_stdin) && defined($o_cmd)) {
-        print "Can not use both -C and -I together (and whatever you can do with one, you can usually do with the other)\n";
+    if ((defined($o_stdin) && defined($o_cmd)) || 
+	(defined($o_stdin) && defined($o_host)) ||
+	(defined($o_host) && defined($o_cmd))) {
+        print "Can use only one of -C or -I or -H\n";
         print_usage();
         exit $ERRORS{"UNKNOWN"};
     }

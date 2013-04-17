@@ -388,12 +388,12 @@ sub parse_threshold {
     if ($th =~ /^\:([-|+]?\d+\.?\d*)/) { # :number format per nagios spec
 	$th_array->[1]=$1;
 	$th_array->[0]=($at !~ /@/)?'>':'<=';
-	$th_array->[5]=($at != /@/)?('~:'.$th_array->[1]):($th_array->[1].':');
+	$th_array->[5]=($at !~ /@/)?('~:'.$th_array->[1]):($th_array->[1].':');
     }
     elsif ($th =~ /([-|+]?\d+\.?\d*)\:$/) { # number: format per nagios spec
         $th_array->[1]=$1;
 	$th_array->[0]=($at !~ /@/)?'<':'>=';
-	$th_array->[5]=($at != /@/)?'':'@';
+	$th_array->[5]=($at !~ /@/)?'':'@';
 	$th_array->[5].=$th_array->[1].':';
     }
     elsif ($th =~ /([-|+]?\d+\.?\d*)\:([-|+]?\d+\.?\d*)/) { # nagios range format
@@ -405,7 +405,7 @@ sub parse_threshold {
                 exit $ERRORS{"UNKNOWN"};
 	}
 	$th_array->[0]=($at !~ /@/)?':':'@';
-	$th_array->[5]=($at != /@/)?'':'@';
+	$th_array->[5]=($at !~ /@/)?'':'@';
 	$th_array->[5].=$th_array->[1].':'.$th_array->[2];
     }
     if (!defined($th_array->[1])) {

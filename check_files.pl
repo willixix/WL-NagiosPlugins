@@ -3,11 +3,11 @@
 # ============================== SUMMARY =====================================
 #
 # Program  : check_files.pl 
-# Version  : 0.4
-# Date     : Feb 15, 2013
+# Version  : 0.41
+# Date     : Mar 23, 2013
 # Author   : William Leibzon - william@leibzon.org
-# Summary  : This is a nagios plugin that checks directory and files
-#            file count and directory and file age and file size
+# Summary  : This is a nagios plugin that counts files in a directory and
+#            checks their age an size. Various thresholds on this can be set.
 # Licence  : GPL - summary below, full text at http://www.fsf.org/licenses/gpl.txt
 #
 # =========================== PROGRAM LICENSE ================================
@@ -29,8 +29,9 @@
 # ===================== INFORMATION ABOUT THIS PLUGIN ========================
 #
 # This is a nagios plugin that checks number of files of specified type
-# in a directory. It can give an error if there are too few or too few files
-# and can also check file age and return an error if file(s) is/are too old.
+# in a directory and can give an error if there are too few or too few.
+# It can also check files age, file size and set thresholds based on these
+# parameters such as report an error if files are too old.
 #
 # This program is written and maintained by:
 #   William Leibzon - william(at)leibzon.org
@@ -131,8 +132,9 @@
 #  [0.38] Jan 22, 2013 - Added -S option for check sum of file size (Patrick Bailat)
 #  [0.39] Jan 23, 2013 - Added -H option for execute ls -l by ssh (Patrick Bailat)
 #  [0.40] Feb 10, 2013 - Documentation cleanup. New release.
+#  [0.41] Mar 23, 2013 - Fixed bug in parse_threshold function
 #
-#  TODO: This plugin is using early threshold chek code that became the base of
+#  TODO: This plugin is using early threshold check code that became the base of
 #        Naglio library and should be updated to use this library.
 #
 # ========================== LIST OF CONTRIBUTORS =============================
@@ -164,7 +166,7 @@ if ($@) {
  %ERRORS = ('OK'=>0,'WARNING'=>1,'CRITICAL'=>2,'UNKNOWN'=>3,'DEPENDENT'=>4);
 }
 
-my $Version='0.40';
+my $Version='0.41';
 
 my $o_help=         undef; # help option
 my $o_timeout=      10;    # Default 10s Timeout
@@ -206,7 +208,7 @@ sub verb { my $t=shift; print $t,"\n" if defined($o_verb) ; }
 sub print_version { print "$0: $Version\n" };
 
 sub print_usage {
-    print "Usage: $0 [-v] [-t <timeout>] -D <directory> -F <files to check> -w <warn level(s)> -c <crit level(s)> [-a [<warn age>,<crit age>]] [-s [<warn size>,<crit size>]] [-S [<warn size>,<crit size>]] [-f] [-r] [-l] [-T files|dir] [-L label] [-V] [-H <hostaddress>] [-I | -C <cmd that does 'ls -l>']\n";
+    print "Usage: $0 [-v] [-t <timeout>] -D <directory> -F <files to check> -w <warn level(s)> -c <crit level(s)> [-a [<warn age>,<crit age>]] [-s [<warn size>,<crit size>]] [-S [<warn size>,<crit size>]] [-f] [-r] [-l] [-T files|dir] [-L label] [-V] [-H <hostaddress> | -I | -C <cmd that does 'ls -l>']\n";
 }
 
 # Return true if arg is a number - in this case negative and real numbers are not allowed
@@ -258,12 +260,12 @@ sub parse_threshold {
     if ($th =~ /^\:([-|+]?\d+\.?\d*)/) { # :number format per nagios spec
         $th_array->[1]=$1;
         $th_array->[0]=($at !~ /@/)?'>':'<=';
-        $th_array->[5]=($at != /@/)?('~:'.$th_array->[1]):($th_array->[1].':');
+        $th_array->[5]=($at !~ /@/)?('~:'.$th_array->[1]):($th_array->[1].':');
     }
     elsif ($th =~ /([-|+]?\d+\.?\d*)\:$/) { # number: format per nagios spec
         $th_array->[1]=$1;
         $th_array->[0]=($at !~ /@/)?'<':'>=';
-        $th_array->[5]=($at != /@/)?'':'@';
+        $th_array->[5]=($at !~ /@/)?'':'@';
         $th_array->[5].=$th_array->[1].':';
     }
     elsif ($th =~ /([-|+]?\d+\.?\d*)\:([-|+]?\d+\.?\d*)/) { # nagios range format
@@ -275,7 +277,7 @@ sub parse_threshold {
             exit $ERRORS{"UNKNOWN"};
         }
         $th_array->[0]=($at !~ /@/)?':':'@';
-        $th_array->[5]=($at != /@/)?'':'@';
+        $th_array->[5]=($at !~ /@/)?'':'@';
         $th_array->[5].=$th_array->[1].':'.$th_array->[2];
     }
     if (!defined($th_array->[1])) {
@@ -570,17 +572,69 @@ sub parse_lsline {
 sub div_mod { return int( $_[0]/$_[1]) , ($_[0] % $_[1]); }
 
 sub readable_time {
-  my $total_sec = shift;
-  my ($sec,$mins,$hrs,$days);
-  ($mins,$sec) = div_mod($total_sec,60);
-  ($hrs,$mins) = div_mod($mins,60);
-  ($days,$hrs) = div_mod($hrs,24);
-  my $txtout="";
-  $txtout .= "$days days " if $days>0;
-  $txtout .= "$hrs hours " if $hrs>0;
-  $txtout .= "$mins minutes " if $mins>0 && ($days==0 || $hrs==0);
-  $txtout .= "$sec seconds" if ($sec>0 || $mins==0) && ($hrs==0 && $days==0);
-  return $txtout;
+    my $total_sec = shift;
+    my ($sec,$mins,$hrs,$days);
+    ($mins,$sec) = div_mod($total_sec,60);
+    ($hrs,$mins) = div_mod($mins,60);
+    ($days,$hrs) = div_mod($hrs,24);
+    my $txtout="";
+    $txtout .= "$days days " if $days>0;
+    $txtout .= "$hrs hours " if $hrs>0;
+    $txtout .= "$mins minutes " if $mins>0 && ($days==0 || $hrs==0);
+    $txtout .= "$sec seconds" if ($sec>0 || $mins==0) && ($hrs==0 && $days==0);
+    return $txtout;
+}
+
+sub open_shell_stream {
+  my $shell_command_ref = shift;
+  my $cd_dir=undef;
+  my $shell_command=undef;
+  
+  if (defined($o_stdin)) {
+    $shell_command = "<stdin>";
+    $shell_command_ref = $shell_command if defined($shell_command_ref);
+    return \*STDIN;
+  }
+  else {
+    if ($o_dir) {
+        if (not defined($o_host)) {
+            if (!chdir($o_dir)) {
+                print "UNKNOWN ERROR - could not chdir to $o_dir - $!";
+                exit $ERRORS{'UNKNOWN'};
+            } else {
+                verb("Changed to directory '".$o_dir."'");
+            }
+        } else {
+            $cd_dir="\"cd ".$o_dir." && ";
+        }
+    }
+    if (defined($o_cmd)) {
+        verb("Command Specified: ".$o_cmd);
+        $shell_command=$o_cmd;
+    } else {
+        if(defined($o_host)) {
+            $shell_command = "ssh -o BatchMode=yes -o ConnectTimeout=30 ".$o_host." ";
+        }
+        verb("Command: ".$shell_command);
+        $shell_command .= $cd_dir if defined($cd_dir);
+        $shell_command .= "LANG=C ls -l";
+    }
+    $shell_command .= " -R" if defined($o_recurse);
+    $shell_command .= " ".join(" ",@o_filesLv) if defined($o_lsfiles);
+    $shell_command .= "\"" if defined($cd_dir);
+
+    # I would have preferred open3 [# if (!open3($cin, $cout, $cerr, $shell_command))]
+    # but there are problems when using it within nagios embedded perl
+    verb("Executing ".$shell_command." 2>&1");
+    $ls_pid=open(SHELL_DATA, "$shell_command 2>&1 |");
+    if (!$ls_pid) {
+        print "UNKNOWN ERROR - could not execute $shell_command - $!";
+        exit $ERRORS{'UNKNOWN'};
+    }
+    $$shell_command_ref = $shell_command if defined($shell_command_ref);
+    return \*SHELL_DATA;
+  }
+  return undef; # it should never get here
 }
 
 # Get the alarm signal (just in case timeout screws up)
@@ -628,49 +682,7 @@ my $matched=0;
 my $temp;
 my $sum_filesize=0;
 
-if (defined($o_stdin)) {
-    $READTHIS=\*STDIN;
-} else {
-    my $cd_dir=undef;
-    if ($o_dir) {
-        if (not defined($o_host)) {
-            if (!chdir($o_dir)) {
-                print "UNKNOWN ERROR - could not chdir to $o_dir - $!";
-                exit $ERRORS{'UNKNOWN'};
-            } else {
-                verb("Changed to directory '".$o_dir."'");
-            }
-        } else {
-            $cd_dir="\"cd ".$o_dir." && ";
-        }
-    }
-
-    if (defined($o_cmd)) {
-        verb("Command Specified: ".$o_cmd);
-        $shell_command=$o_cmd;
-    } else {
-        if(defined($o_host)) {
-            $shell_command = "ssh -o BatchMode=yes -o ConnectTimeout=30 ".$o_host." ";
-        }
-        verb("Command: ".$shell_command);
-        $shell_command .= $cd_dir if defined($cd_dir);
-        $shell_command .= "LANG=C ls -l";
-    }
-    $shell_command .= " -R" if defined($o_recurse);
-    $shell_command .= " ".join(" ",@o_filesLv) if defined($o_lsfiles);
-    $shell_command .= "\"" if defined($cd_dir);
-
-
-    # I would have preferred open3 [# if (!open3($cin, $cout, $cerr, $shell_command))]
-    # but there are problems when using it within nagios embedded perl
-    verb("Executing ".$shell_command." 2>&1");
-    $ls_pid=open(SHELL_DATA, "$shell_command 2>&1 |");
-    if (!$ls_pid) {
-        print "UNKNOWN ERROR - could not execute $shell_command - $!";
-        exit $ERRORS{'UNKNOWN'};
-    }
-    $READTHIS=\*SHELL_DATA;
-}
+$READTHIS = open_shell_stream(\$shell_command);
 # go through each line
 while (<$READTHIS>) {
     chomp($_);
@@ -745,7 +757,7 @@ if (defined($o_age) && defined($oldest_secold)) {
         $statusinfo .= $chk." seconds old";
     }
     if (defined($o_age_warn) && ($chk = check_threshold($oldest_filename." ",$oldest_secold,$o_age_warn)) && $statuscode eq 'OK' ) {
-        $statuscode="WARNING";
+        $statuscode = "WARNING" if $statuscode eq "OK";
         $statusinfo .= "," if $statusinfo;
         $statusinfo .= $chk." seconds old";
     }
@@ -763,17 +775,17 @@ if (defined($o_size) && defined($largest_filesize)) {
         $flag_data=1;
         $statuscode = "CRITICAL";
         $statusinfo .= "," if $statusinfo;
-        $statusinfo .= $chk." octet";
+        $statusinfo .= $chk." bytes";
     }
     if (defined($o_size_warn) && ($chk = check_threshold($largest_filesizename." ",$largest_filesize,$o_size_warn)) && ($statuscode eq 'OK' || $statuscode eq 'WARNING') ) {
         $flag_data=1;
-        $statuscode="WARNING";
+        $statuscode = "WARNING" if $statuscode eq "OK";
         $statusinfo .= "," if $statusinfo;
-        $statusinfo .= $chk." octet ";
+        $statusinfo .= $chk." bytes";
     }
     if ($flag_data==0) {
         $statusdata .= "," if ($statusdata);
-        $statusdata .= " Largest size file is ".$largest_filesize." octet";
+        $statusdata .= " Largest size file is ".$largest_filesize." bytes";
     }
 }
 
@@ -789,13 +801,13 @@ if (defined($o_sumsize) && $sum_filesize > 0) {
     }
     if (defined($o_sumsize_warn) && ($chk = check_threshold("Sum of file sizes ",$sum_filesize,$o_sumsize_warn)) && ($statuscode eq 'OK' || $statuscode eq 'WARNING') ) {
         $flag_data=1;
-        $statuscode="WARNING";
+        $statuscode="WARNING" if $statuscode eq "OK";
         $statusinfo .= "," if $statusinfo;
-        $statusinfo .= $chk." octet ";
+        $statusinfo .= $chk." bytes ";
     }
     if ($flag_data==0) {
         $statusdata .= "," if ($statusdata);
-        $statusdata .= " Sum of file sizes is ".$sum_filesize." octet";
+        $statusdata .= " Sum of file sizes is ".$sum_filesize." bytes";
     }
 
 }

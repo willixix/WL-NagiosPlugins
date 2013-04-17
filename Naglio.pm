@@ -15,7 +15,7 @@ our $AUTHOR     = "William Leibzon";
 #
 # Name    : Naglio Perl Library For Developing Nagios Plugins
 # Version : 0.3
-# Date    : Sep ??, 2012
+# Date    : Apr ??, 2013
 # Author  : William Leibzon - william@leibzon.org
 # Licence : LGPL - full text at http://www.fsf.org/licenses/lgpl.txt
 #
@@ -68,17 +68,18 @@ our $AUTHOR     = "William Leibzon";
 #	       also added for regex matching with PATTERN option spec. Also added NAME spec.
 #	       License changed to LGPL from GPL for this code.
 # [0.21 - Sep 3, 2012] Fix bug in handling absent data
+# [0.22 - Mar 23, 2013] Fixed bug in parse_threshold function (reported by Charlie Langrall)
 #
 # ================================== LIBRARY TODO =================================================
 #
 # (a) Add library function to support '--extra-opts' to read plugin options from a file
-#     This is being to be compatible with http://nagiosplugins.org/extra-opts
+#     This is to be compatible with http://nagiosplugins.org/extra-opts
 # (b) Support regex matching and allowing multiple data for same threshold definition.
 #     [DONE]
 # (c) Support for expressions in places of numeric values for thresholds. The idea is to allow
 #     to refer to another variable or to special macro. I know at least one person has extended
 #     my check_mysqld to support using mysql variables (not same as status data) for thresholds.
-#     I also previouslyhad planned such support with experimental check_snmp_attributes plugin
+#     I also previouslyh had planned such support with experimental check_snmp_attributes plugin
 #     library/base. The idea was also floated around on nagios-devel list.
 # (d) Support specifying variables as expressions. This is straight out of check_snmp_atributes
 #     and maybe part of it can be reused for this
@@ -97,7 +98,7 @@ $0 = $NAME;
 
 our @ISA = qw(Exporter);
 
-our @EXPORT_OK = qw(%ERRORS %STATUS_TEXT verb uptime_info trim isnum);
+our @EXPORT_OK = qw(%ERRORS %STATUS_TEXT verb readable_time trim isnum);
 our @EXPORT = qw()
 
 our %ERRORS = ('OK'=>0,'WARNING'=>1,'CRITICAL'=>2,'UNKNOWN'=>3,'DEPENDENT'=>4);
@@ -136,7 +137,7 @@ sub lib_init {
     my @allVars = ();		# all variables after options processing
     my @perfVars = ();		# performance variables list [renamed from @o_perfVarsL in earlier code]
     my %thresholds=();		# hash array of thresholds for above variables, [this replaced @o_warnL and @o_critL in earlier code]
-    my %dataresults= ();	# This is where data is loaded. It is a hash with variable names as keys and array array for value:
+    my %dataresults= ();	# This is where data is loaded. It is a hash with variable names as keys and array for value:
 				#   $dataresults{$var}[0] - undef of value of this variable
 				#   $dataresults{$var}[1] - 0 if variable not printed out to status line yet, 1 or more otherwise
 			        #   $dataresults{$var}[2] - 0 if variable data not yet put into PERF output, -1 if PERF output is preset, 1 after output
@@ -145,7 +146,7 @@ sub lib_init {
     my %dataVars = ();		# keys are variables from allVars and perfVars, values is array of data that matched i.e. keys in dataresults
     my @ar_warnLv = ();		# used during options processing
     my @ar_critLv = ();		# used during options processing
-    my @ar_varsL=   ();         # used during options processing
+    my @ar_varsL=   ();        # used during options processing
     my @prev_time=  ();     	# timestamps if more then one set of previois performance data
 
     my $self = {  # library and nagios versions
@@ -182,7 +183,7 @@ sub lib_init {
 		knownStatusVars => {},		# Special HASH ARRAY with names and description of known variables
 		perfOKStatusRegex => $DEFAULT_PERF_OK_STATUS_REGEX,
 		verbose => 0,			# verbose, same as debug, same as o_verb
-		plugin_name => '',		# next 3 parameters are variables are currently not used
+		plugin_name => '',		# this and next 3 parameters are currently not used
 		plugin_description => '',	# but its still better if these are provided
 		plugin_authors => '',		# in the future these maybe used for help & usage functions
 		usage_text => ''		# usage text, this is alternative to usage_function()
@@ -193,9 +194,9 @@ sub lib_init {
 		all_variables_perf => 0,	# should we all variables go to PERF (even those not listed in o_variables and o_perfvars)
 						# this is the option set to 1 when --perfvars '*' is used
 		enable_long_options => 0,	# enable support for long options generated based on knownStatusVars description
-		enable_rate_of_change => 1,	# enables support for calculatin rate of chane and for rate of change long options
+		enable_rate_of_change => 1,	# enables support for calculating rate of change and for rate of change long options
 		enable_regex_match => 0,	# 0 is not enabled, 1 means variables in o_variables and o_perfvars are considered regex to match actual data
-						# a value of 2 means its enabled, but for options with PATTERN specifier (this is not configurale value)
+						# a value of 2 means its enabled, but for options with PATTERN specifier (this is not configurable value)
 	      };
 
     # bless to create an object
@@ -255,10 +256,10 @@ sub configure {
     $self->{'output_comparison_symbols'} = $args{'output_comparison_symbols'} if exists($args{'output_comparison_symbols'});
 }
 
-#  @DESCRIPTION   : Allows functions to take be used both directly and as object referenced functions
-#                   In the 2nd case they get $self as 1st argument, in 1st they don't. this just adds
+#  @DESCRIPTION   : Allows functions to be used both directly and as an object referenced functions
+#                   In the 2nd case they get $self as 1st argument, in 1st they don't. So this just adds
 #		    $self if its if its not there so their argument list is known.
-#		    Functions that allow both should still check if $self is defined
+#		    Functions that allow both should still check if $self is defined.
 #  @LAST CHANGED  : 08-20-12 by WL
 #  @INPUT         : arbitrary list of arguments
 #  @RETURNS       : arbitrary list of arguments with 1st being object hash or undef
@@ -291,26 +292,26 @@ sub usage {
   else if (defined($self) && defined($self->{'usage_text'})) { print $self->{'usage_text'}; print "\n"; }
 }
 
-#  @DESCRIPTION   : This function converts uptime in seconds to nice & short output format
-#  @LAST_CHANGED  : 08-20-12 by WL
-#  @INPUT         : ARG1 - uptime in seconds
-#  @RETURNS       : string of uptime for human consumption
-#  @PRIVACY & USE : PUBLIC, Maybe used directly or as object instance function :
-sub uptime_info {
-  my ($self,$uptime_seconds) = _self_args(@_);
-  my $upinfo = "";
-  my ($secs,$mins,$hrs,$days) = (undef,undef,undef,undef);
-
+#  @DESCRIPTION   : This function converts time in seconds to nice & short output format
+#  @LAST_CHANGED  : 02-10-13 by WL
+#  @INPUT         : ARG1 - time in seconds
+#  @RETURNS       : string of time for human consumption
+#  @PRIVACY & USE : PUBLIC, Maybe used directly or as an object instance function :
+sub readable_time {
+  my ($self,$total_sec) = _self_args(@_);
+  my ($sec,$mins,$hrs,$days);
+  my $txtout="";
+  
   sub div_mod { return int( $_[0]/$_[1]) , ($_[0] % $_[1]); }
 
-  ($mins,$secs) = div_mod($uptime_seconds,60);
+  ($mins,$sec) = div_mod($total_sec,60);
   ($hrs,$mins) = div_mod($mins,60);
   ($days,$hrs) = div_mod($hrs,24);
-  $upinfo .= "$days days" if $days>0;
-  $upinfo .= (($upinfo ne '')?' ':'').$hrs." hours" if $hrs>0;
-  $upinfo .= (($upinfo ne '')?' ':'').$mins." minutes" if $mins>0 && ($days==0 || $hrs==0);
-  $upinfo .= (($upinfo ne '')?' ':'').$secs." seconds" if $secs>0 && $days==0 && $hrs==0; 
-  return $upinfo;
+  $txtout .= "$days days " if $days>0;
+  $txtout .= (($txtout ne '')?' ':'').$hrs." hours" if $hrs>0;
+  $txtout .= (($txtout ne '')?' ':'').$mins." minutes" if $mins>0 && ($days==0 || $hrs==0);
+  $txtout .= (($txtout ne '')?' ':'').$secs." seconds" if ($sec>0 || $mins==0) && ($hrs==0 && $days==0);
+  return $txtout;
 }
 
 #  @DESCRIPTION   : If debug / verbose option is set, function prints its input out or to debug file
@@ -1354,12 +1355,12 @@ sub _options_setthresholds {
 
 #  @DESCRIPTION   : Internal helper function. Finds time when previous performance data was calculated/saved at
 #  @DEVNOTE	  : Right now this library and function only supports one previous performance data set,
-#		    but check_snmp_netint plugin supports multiple sets and there the code is more complex,
+#		    but check_snmp_netint plugin supports multiple sets and its code is more complex,
 #		    As this function originated there, that code is commented out right now.
 #  @LAST CHANGED  : 08-21-12 by WL
 #  @INPUT         :  ARG1 - reference to previous performance data hash array. It looks for _ptime variable there.
 #		     ARG2 - string with previous performance time in unix seconds. This may come from separate plugin option.
-#  @RETURNS       : Time in unix seconds frm 1970 or undef if it was not located
+#  @RETURNS       : Time in unix seconds frm 1970 or undef if it was not locatedthe code istthe code ishe code is
 #  @PRIVACY & USE : PRIVATE, Maybe used directly or as an object instance function.
 sub _set_prevtime {
     my ($self,$prevperf,$o_prevtime) = _self_args(@_);
@@ -1695,18 +1696,18 @@ sub calculate_ratevars {
 #  @RETURNS       : returns string with a name
 #  @PRIVACY & USE : PUBLIC, Maybe used directly or as an object instance function
 sub get_shortname {
-  my ($self) = _self_args(@_);
-  my $name = "";
+    my ($self) = _self_args(@_);
+    my $name = "";
 
-  if (defined($self) && defined($self->{'plugin_name'})) {
-      $name = $self->{'plugin_name'};
-  }
-  else {
-      $name = uc basename( $ENV{NAGIOS_PLUGIN} || $0 );
-  }
-  $name=$1 if $name =~ /^check(.*)/;
-  $name=$1 if $name =~ /(.*)\.(.*)$/; 
-  return $name;
+    if (defined($self) && defined($self->{'plugin_name'})) {
+        $name = $self->{'plugin_name'};
+    }
+    else {
+        $name = uc basename( $ENV{NAGIOS_PLUGIN} || $0 );
+    }
+    $name=$1 if $name =~ /^check(.*)/;
+    $name=$1 if $name =~ /(.*)\.(.*)$/; 
+    return $name;
 }
 
 #  @DESCRIPTION   : Functions for those who don't need complex functionality. Similar to Nagios::Plugins nagios_exit and nagios_die functions.
@@ -1721,23 +1722,23 @@ sub get_shortname {
 #  @RETURNS       : these functions exists/terminate execution
 #  @PRIVACY & USE : PUBLIC, Maybe used directly or as an object instance function
 sub nagios_exit {
-  my ($self, $code, $line) = _self_args(@_);
-  my $name = "";
-  if (defined($self)) {
-      $name = $self->get_shortname();
-  }
-  else {
-      $name = get_shortname();
-  }
-  $code = "UNKNOWN" if !defined($ERRORS{$code});
-  print $name ." ".$code;
-  print " - ".$line if defined($line);
-  exit $ERRORS{$code};
+    my ($self, $code, $line) = _self_args(@_);
+    my $name = "";
+    if (defined($self)) {
+        $name = $self->get_shortname();
+    }
+    else {
+        $name = get_shortname();
+    }
+    $code = "UNKNOWN" if !defined($ERRORS{$code});
+    print $name ." ".$code;
+    print " - ".$line if defined($line);
+    exit $ERRORS{$code};
 }
 
 sub nagios_die {
-  my ($self, $line, $code) = _self_args(@_);
-  nagios_exit($code, $line);
+    my ($self, $line, $code) = _self_args(@_);
+    nagios_exit($code, $line);
 }
 
 #  @DESCRIPTION   : Function replicates functionality of same named Nagios::Plugins. See:
@@ -1745,12 +1746,12 @@ sub nagios_die {
 #		    It is by itself and not used by any other library functions.
 #  @LAST CHANGED  : 09-05-12 by WL
 #  @INPUT         : The following possible hash input keys:
-#			'critical' => ARRAYREF   - List of critical status messages
+#			'critical' => ARRAYREF   - list of critical status messages
 #			'warning'  => ARRAYREF  - list of warning status messages
 #			'ok => ARRAYREF 	- array of ok  info
 #			'join' => str 	- does join on relevant type of message using str
 #			'join_all'str   - join on all types
-#  @RETURNS       : returns array of 2 arguments, first is an error code (OK, WARNIN, CRITICAL) and 2nd is message
+#  @RETURNS       : returns array of 2 arguments, first is an error code (OK, WARNING, CRITICAL) and 2nd is message
 #  @PRIVACY & USE : PUBLIC, Maybe used directly or as an object instance function
 sub check_messages {
     my @all_args = _self_ars(@_);

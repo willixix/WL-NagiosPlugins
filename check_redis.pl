@@ -3,8 +3,8 @@
 # ============================== SUMMARY =====================================
 #
 # Program : check_redis.pl
-# Version : 0.72
-# Date    : Oct 05, 2012
+# Version : 0.73
+# Date    : Mar 23, 2013
 # Author  : William Leibzon - william@leibzon.org
 # Licence : GPL - summary below, full text at http://www.fsf.org/licenses/gpl.txt
 #
@@ -191,14 +191,16 @@
 #
 # 6. Performance Data
 #
-#   Using '-f' option causes values of all variables you specified in -a as
-#   well as response time from -T (response time), from -R (hitrate), from -m
-#   and other checks to go out as performance data for Nagios graphing programs.
+#   With '-f' option values of all variables you specified in -a as well as
+#      response time from -T (response time),
+#      hirate from -R, 
+#      memory utilization from -m
+#   and other data are reported back out as performance data for Nagios graphing programs.
 #
 #   You may also directly specify which variables are to be return as performance data
 #   with '-A' option. If you use '-A' by itself and not specify any variables or use
-#   special special value of '*' (as in '-A *') the plugin will output all variables
-#   which is very useful for finding what data you can chck with this plugin.
+#   special value of '*' (as in '-A *') the plugin will output all variables which is useful
+#   for finding what data you can chck with this plugin.
 #
 #   The plugin will output threshold values as part of performance data as specified at
 #     http://nagiosplug.sourceforge.net/developer-guidelines.html#AEN201
@@ -365,6 +367,7 @@
 #			 when KB are used. Fixed bugs in adding performance data that
 # 			 results in keyspace_hits, keyspace_misses, memory_utilization
 #			 having double 'c' or '%' in perfdata. Added contributors section.
+#  [0.73 - Mar 23, 2013] Fixed bug in parse_threshold function of embedded library
 #
 # TODO or consider for future:
 #
@@ -433,7 +436,7 @@ if ($@) {
  %ERRORS = ('OK'=>0,'WARNING'=>1,'CRITICAL'=>2,'UNKNOWN'=>3,'DEPENDENT'=>4);
 }
 
-my $Version='0.72';
+my $Version='0.73';
 
 # This is a list of known stat and info variables including variables added by plugin,
 # used in order to designate COUNTER variables with 'c' in perfout for graphing programs
@@ -772,6 +775,7 @@ EOT
 #	       also added for regex matching with PATTERN option spec. Also added NAME spec.
 #	       License changed to LGPL from GPL for this code.
 # [0.21 - Sep 3, 2012] Fix bug in handling absent data
+# [0.22 - Mar 23, 2013] Fix bug in parse_threshold functon
 #
 # ================================== LIBRARY TODO =================================================
 #
@@ -1407,7 +1411,7 @@ sub check_threshold {
 }
 
 #  @DESCRIPTION   : This function is called to parse threshold string
-#  @LAST CHANGED  : 08-20-12 by WL
+#  @LAST CHANGED  : 03-23-13 by WL
 #		    (the code in this function can be traced back to late 2006. It has not much changed from 2008)
 #  @INPUT         : ARG1 - String for one variable WARN or CRIT threshold which can be as follows:
 #			 data  - warn if data is above this value if numeric data, or equal for non-numeric
@@ -1436,12 +1440,12 @@ sub parse_threshold {
     if ($th =~ /^\:([-|+]?\d+\.?\d*)/) { # :number format per nagios spec
 	$th_array->[1]=$1;
 	$th_array->[0]=($at !~ /@/)?'>':'<=';
-	$th_array->[5]=($at != /@/)?('~:'.$th_array->[1]):($th_array->[1].':');
+	$th_array->[5]=($at !~ /@/)?('~:'.$th_array->[1]):($th_array->[1].':');
     }
     elsif ($th =~ /([-|+]?\d+\.?\d*)\:$/) { # number: format per nagios spec
         $th_array->[1]=$1;
 	$th_array->[0]=($at !~ /@/)?'<':'>=';
-	$th_array->[5]=($at != /@/)?'':'@';
+	$th_array->[5]=($at !~ /@/)?'':'@';
 	$th_array->[5].=$th_array->[1].':';
     }
     elsif ($th =~ /([-|+]?\d+\.?\d*)\:([-|+]?\d+\.?\d*)/) { # nagios range format
@@ -1453,7 +1457,7 @@ sub parse_threshold {
                 exit $ERRORS{"UNKNOWN"};
 	}
 	$th_array->[0]=($at !~ /@/)?':':'@';
-	$th_array->[5]=($at != /@/)?'':'@';
+	$th_array->[5]=($at !~ /@/)?'':'@';
 	$th_array->[5].=$th_array->[1].':'.$th_array->[2];
     }
     if (!defined($th_array->[1])) {			# my own format (<,>,=,!)

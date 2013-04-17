@@ -3,18 +3,13 @@
 # ============================== SUMMARY =====================================
 #
 # Program : check_netstat.pl 
-# Version : 0.352 
-# Date    : Jun 21, 2012
+# Version : 0.353
+# Date    : Mar 23, 2013
 # Author  : William Leibzon - william@leibzon.org
 # Summary : This is a nagios plugin that allows to check number of TCP
 #           connections on or to given set of ports. It is using
 #           'netstat' when run locally or 'snmpnetstat' for remote host.
 # Licence : GPL - summary below, full text at http://www.fsf.org/licenses/gpl.txt
-#
-#  ********************* IMPORTANT NOTE ABOUT THIS VERSION ********************
-#  ***        THIS IS A BETA RELEASE WHICH HAS NOT BEEN FULLY TESTED       ****
-#  *** IF YOU NEED A STABLE VERSION, PLEASE GET 0.34 VERSION OF THIS PLUGIN ***
-#  ****************************************************************************
 #
 # =========================== PROGRAM LICENSE ================================
 #
@@ -175,6 +170,7 @@
 #	             performance data i.e. "var=data:warn:crit" in perfdata
 #  [0.351] Mar 2012 - Bug fixes in new threshold spec code
 #  [0.352] Jun 2012 - Another bug fix in threshold check
+#  [0.353] Mar 2013 - Bug fix in parse_threshold function
 #
 # TODO (mostly written between 0.1 and 0.2 and still valid):
 #  0. Support SNMP v3 (login,authpass,privpass)
@@ -217,7 +213,7 @@ if ($@) {
 
 my $snmpnetstat='/usr/bin/snmpnetstat'; # you may want to modify this too
 
-my $Version='0.352';
+my $Version='0.353';
 
 my $o_host=     undef;          # hostname
 my $o_community= undef;         # community
@@ -331,12 +327,12 @@ sub parse_threshold {
     if ($th =~ /^\:([-|+]?\d+\.?\d*)/) { # :number format per nagios spec
 	$th_array->[1]=$1;
 	$th_array->[0]=($at !~ /@/)?'>':'<=';
-	$th_array->[5]=($at != /@/)?('~:'.$th_array->[1]):($th_array->[1].':');
+	$th_array->[5]=($at !~ /@/)?('~:'.$th_array->[1]):($th_array->[1].':');
     }
     elsif ($th =~ /([-|+]?\d+\.?\d*)\:$/) { # number: format per nagios spec
         $th_array->[1]=$1;
 	$th_array->[0]=($at !~ /@/)?'<':'>=';
-	$th_array->[5]=($at != /@/)?'':'@';
+	$th_array->[5]=($at !~ /@/)?'':'@';
 	$th_array->[5].=$th_array->[1].':';
     }
     elsif ($th =~ /([-|+]?\d+\.?\d*)\:([-|+]?\d+\.?\d*)/) { # nagios range format
@@ -348,7 +344,7 @@ sub parse_threshold {
                 exit $ERRORS{"UNKNOWN"};
 	}
 	$th_array->[0]=($at !~ /@/)?':':'@';
-	$th_array->[5]=($at != /@/)?'':'@';
+	$th_array->[5]=($at !~ /@/)?'':'@';
 	$th_array->[5].=$th_array->[1].':'.$th_array->[2];
     }
     if (!defined($th_array->[1])) {

@@ -3,8 +3,8 @@
 # ============================== SUMMARY =====================================
 #
 # Program : check_memcached.pl
-# Version : 0.82
-# Date    : Nov 16, 2012
+# Version : 0.83
+# Date    : Mar 23, 2013
 # Author  : William Leibzon - william@leibzon.org
 # Licence : GPL  (main code) summary below and full text at http://www.fsf.org/licenses/gpl.txt
 #	    LGPL (library functions) full text at http://www.fsf.org/licenses/lgpl.txt
@@ -322,6 +322,7 @@
 #			not available. For use with that option also added UOM specifier.
 # [0.81 - Sep 04, 2012] Fix bug in the library on handling absent data
 # [0.82 - Nov 16, 2012] Bug fix in memory utilization, noticed and fixed by Herman van Rink
+# [0.83 - Mar 23, 2013] Buf fix in parse_threshold function of the embedded library
 #
 #  1. Library Enhancements (will apply to multiple plugins that share common code)
 #     (a) Add '--extra-opts' to allow to read options from a file as specified
@@ -375,7 +376,7 @@ if ($@) {
  %ERRORS = ('OK'=>0,'WARNING'=>1,'CRITICAL'=>2,'UNKNOWN'=>3,'DEPENDENT'=>4);
 }
 
-my $Version='0.82';
+my $Version='0.83';
 
 # This is a list of known statistics variables (plus few variables added by plugin),
 # used in order to designate COUNTER variables with 'c' in perfout for graphing programs
@@ -652,6 +653,7 @@ EOT
 #	       also added for regex matching with PATTERN option spec. Also added NAME spec.
 #	       License changed to LGPL from GPL for this code.
 # [0.21 - Sep 3, 2012] Fix bug in handling absent data
+# [0.22 - Mar 23, 2013] Fix bug in parse_threshold functon
 #
 # ================================== LIBRARY TODO =================================================
 #
@@ -1287,7 +1289,7 @@ sub check_threshold {
 }
 
 #  @DESCRIPTION   : This function is called to parse threshold string
-#  @LAST CHANGED  : 08-20-12 by WL
+#  @LAST CHANGED  : 03-23-13 by WL
 #		    (the code in this function can be traced back to late 2006. It has not much changed from 2008)
 #  @INPUT         : ARG1 - String for one variable WARN or CRIT threshold which can be as follows:
 #			 data  - warn if data is above this value if numeric data, or equal for non-numeric
@@ -1316,12 +1318,12 @@ sub parse_threshold {
     if ($th =~ /^\:([-|+]?\d+\.?\d*)/) { # :number format per nagios spec
 	$th_array->[1]=$1;
 	$th_array->[0]=($at !~ /@/)?'>':'<=';
-	$th_array->[5]=($at != /@/)?('~:'.$th_array->[1]):($th_array->[1].':');
+	$th_array->[5]=($at !~ /@/)?('~:'.$th_array->[1]):($th_array->[1].':');
     }
     elsif ($th =~ /([-|+]?\d+\.?\d*)\:$/) { # number: format per nagios spec
         $th_array->[1]=$1;
 	$th_array->[0]=($at !~ /@/)?'<':'>=';
-	$th_array->[5]=($at != /@/)?'':'@';
+	$th_array->[5]=($at !~ /@/)?'':'@';
 	$th_array->[5].=$th_array->[1].':';
     }
     elsif ($th =~ /([-|+]?\d+\.?\d*)\:([-|+]?\d+\.?\d*)/) { # nagios range format
@@ -1333,7 +1335,7 @@ sub parse_threshold {
                 exit $ERRORS{"UNKNOWN"};
 	}
 	$th_array->[0]=($at !~ /@/)?':':'@';
-	$th_array->[5]=($at != /@/)?'':'@';
+	$th_array->[5]=($at !~ /@/)?'':'@';
 	$th_array->[5].=$th_array->[1].':'.$th_array->[2];
     }
     if (!defined($th_array->[1])) {			# my own format (<,>,=,!)

@@ -3,18 +3,13 @@
 # ============================== SUMMARY =====================================
 #
 # Program : check_snmp_temperature.pl
-# Version : 0.40 (beta 2)
-# Date    : Mar 31, 2012
+# Version : 0.41
+# Date    : Mar 23, 2012
 # Author  : William Leibzon - william@leibzon.org
 # Summary : This is a nagios plugin that checks temperature sensors
 #           using SNMP. Dell, HP, Cisco and other types are supported
 #	    and for other systems OIDs can be easily specified too
 # Licence : GPL - summary below, text at http://www.fsf.org/licenses/gpl.txt
-#
-#  ********************* IMPORTANT NOTE ABOUT THIS VERSION ********************
-#  ***        THIS IS A BETA RELEASE WHICH HAS NOT BEEN FULLY TESTED       ****
-#  *** IF YOU NEED A STABLE VERSION, PLEASE GET 0.34 VERSION OF THIS PLUGIN ***
-#  ****************************************************************************
 #
 # =========================== PROGRAM LICENSE =================================
 #
@@ -183,17 +178,15 @@
 #		    and snmpd compiled as:
 #			--with-mib-modules="ucd-snmp/lmSensors ucd-snmp/diskio"
 # 0.40 (beta) - Mar 2012 :
-#                   I imported newest code from check_mysqld 0.93 to support full nagios
+#                   Imported newest code from check_mysqld 0.93 to support full nagios
 #                   threshold specification (including ranges) as well as reporting
 #		    of warn/crit threshold in performance data. This changes internal
-#                   processing significantly and it needs to be tested. Unfortunately
-#		    I only support cloud environments and don't have anywhere to test
-#		    this at. Therefore I'm going to release this version to the public
-#		    and hope that if there are any errors, I'd get bug reports. After
-#		    period of 4 months, official (non-beta) 0.41 will be released.
+#                   processing significantly and it needs to be tested more.
+# 0.41 - Mar 23, 2013: Fixed bug in parse_threshold function, reported by Charlie Langrall
+#		        official release of 0.4 code branch
 #
-# TODO and older revision history: 
-#  -- TODO ON TODO --> since most of below is now done, it should be cleaned up in 0.41
+# TODO and older revision history:
+#  -- TODO ON TODO --> since most of below is done, it should be cleaned up sometime later
 # 
 # 1. [DONE - Aug 2006] To support multiple types of equipment add config
 #    array/hash and --type parameter
@@ -216,9 +209,8 @@
 # 5. Support specifying table OIDs for temperature threshold values.
 #    I'll do it only after adding optional file caching so these values
 #    can be retrieved about once every day rather then for each check.
-#
-# Note: if you want eny of that to be done faster for specific application,
-#       contact me privately to discuss
+# 6. Support directly querying lmsensors on linux system without SNMP
+#    plugin would then be renamed to check_temperature similar to check_netint
 #
 # ========================== START OF PROGRAM CODE ============================
 
@@ -360,12 +352,12 @@ sub parse_threshold {
     if ($th =~ /^\:([-|+]?\d+\.?\d*)/) { # :number format per nagios spec
 	$th_array->[1]=$1;
 	$th_array->[0]=($at !~ /@/)?'>':'<=';
-	$th_array->[5]=($at != /@/)?('~:'.$th_array->[1]):($th_array->[1].':');
+	$th_array->[5]=($at !~ /@/)?('~:'.$th_array->[1]):($th_array->[1].':');
     }
     elsif ($th =~ /([-|+]?\d+\.?\d*)\:$/) { # number: format per nagios spec
         $th_array->[1]=$1;
 	$th_array->[0]=($at !~ /@/)?'<':'>=';
-	$th_array->[5]=($at != /@/)?'':'@';
+	$th_array->[5]=($at !~ /@/)?'':'@';
 	$th_array->[5].=$th_array->[1].':';
     }
     elsif ($th =~ /([-|+]?\d+\.?\d*)\:([-|+]?\d+\.?\d*)/) { # nagios range format
@@ -377,7 +369,7 @@ sub parse_threshold {
                 exit $ERRORS{"UNKNOWN"};
 	}
 	$th_array->[0]=($at !~ /@/)?':':'@';
-	$th_array->[5]=($at != /@/)?'':'@';
+	$th_array->[5]=($at !~ /@/)?'':'@';
 	$th_array->[5].=$th_array->[1].':'.$th_array->[2];
     }
     if (!defined($th_array->[1])) {

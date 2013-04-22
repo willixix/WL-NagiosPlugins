@@ -418,6 +418,8 @@ sub set_oids {
     $logdrv_status_tableoid = $baseoid . ".14.1.1000.1.1.12";
     $phydrv_status_tableoid = $baseoid . ".14.1.400.1.1.11";
     $battery_status_tableoid = $baseoid . ".14.1.201.1.1.14";	   # battery status
+    $phydrv_vendor_tableoid = $baseoid . ".14.1.400.1.1.6";        # adaptec drive vendor
+    $phydrv_product_tableoid = $baseoid . ".14.1.400.1.1.7";       # adaptec drive model
 
     %LOGDRV_CODES = (
             1 => ['unknown', 'array state is unknown', 'UNKNOWN'],

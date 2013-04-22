@@ -411,6 +411,7 @@ sub set_oids {
     $baseoid = "1.3.6.1.4.1.795" if $baseoid eq "";		   # Adaptec base oid
     $logdrv_status_tableoid = $baseoid . ".14.1.1000.1.1.12";
     $phydrv_status_tableoid = $baseoid . ".14.1.400.1.1.11";
+    $battery_status_tableoid = $baseoid . ".14.1.201.1.1.14";	   # battery status
 
     %LOGDRV_CODES = (
             1 => ['unknown', 'array state is unknown', 'UNKNOWN'],
@@ -428,6 +429,18 @@ sub set_oids {
             3 => ['okay', 'okay', 'OK'],
             4 => ['warning', 'warning', 'WARNING'],
             5 => ['failure', 'failure', 'CRITICAL'],
+    );
+    ## Status codes for batteries - these are specifically for ADAPTEC
+    %BATTERY_CODES = (
+	1 => ['unknown', 'unknown', 'UNKNOWN'],
+	2 => ['other', 'other', 'WARNING'],
+	3 => ['notApplicable', 'notApplicable', 'WARNING'],
+	4 => ['notInstalled', 'notInstalled', 'WARNING'],
+	5 => ['okay', 'Battery OK', 'OK'],
+	6 => ['failed', 'failed', 'CRITICAL'],
+	7 => ['charging', 'charging', 'WARNING'],
+	8 => ['discharging', 'discharging', 'WARNING'],
+	9 => ['inMaintenanceMode', 'inMaintenanceMode', 'WARNING']
     );
   }
   elsif ($cardtype eq 'smartarray') {

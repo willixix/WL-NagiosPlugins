@@ -3,10 +3,10 @@
 # ============================== SUMMARY =====================================
 #
 # Program : check_snmp_raid / check_sasraid_megaraid / check_megaraid
-# Version : 2.1
-# Date    : Nov 24, 2012
+# Version : 2.15
+# Date    : Apr 22, 2013
 # Author  : William Leibzon - william@leibzon.org
-# Copyright: (C) 2006-2012 William Leibzon
+# Copyright: (C) 2006-2013 William Leibzon
 # Summary : This is a nagios plugin to monitor Raid controller cards with SNMP
 #           and report status of the physical drives and logical valumes and
 #	    any reported disk and volume errors.
@@ -198,7 +198,12 @@
 #	 e. Documentation updates related to plugin renaming and many other small
 #           code updates
 #        f. Starting with 2.x the plugin is licensed under GPL 3.0 licence (was 2.0 before)
-#
+#    22.[2.15 - Apr 22, 2013] The following are additions in this version:
+#        a. Added limited support for ETI UtraStor ES1660SS (this was in dev from February)
+#           (controller and volume checks are not written right now despite adding OIDs in)
+#	 b. Added support for battery status for Adaptec cards, contributed by Stanislav GE (giner)
+#           based on http://www.circitor.fr/Mibs/Html/ADAPTEC-UNIVERSAL-STORAGE-MIB.php#BatteryStatus
+#			      
 # ========================== LIST OF CONTRIBUTORS =============================
 #
 # The following individuals have contributed code, patches, bug fixes and ideas to
@@ -210,12 +215,13 @@
 #    John Reuning
 #    Khanh Truong
 #    Robert Wikman
+#    Stanislav GE (giner)
 #
 # Open source community is grateful for all your contributions.
 #
 # ========================== START OF PROGRAM CODE ===========================
 
-my $version = "2.1";
+my $version = "2.15";
 
 use strict;
 use Getopt::Long;
@@ -486,7 +492,7 @@ sub set_oids {
             4 => ['warning', 'warning', 'WARNING'], 	# predictive failure
     );   
   }
-  elsif ($cardtype eq 'ultrastore') {
+  elsif ($cardtype eq 'ultrastor') {
     $baseoid = "1.3.6.1.4.1.22274" if $baseoid eq "";		     # ETI base oid
     $logdrv_status_tableoid = $baseoid . ".1.2.3.1.6";       	     # sasraid volume status
     # $voldrv_status_tableoid = $baseoid . ".1.2.2.1.6";           # sasraid volume status (volumes not supported yet)
@@ -510,8 +516,8 @@ sub set_oids {
         20 => ['rebuild', 'rebuild', 'WARNING'],
         24 => ['online', 'online', 'OK'],
     );
-    ## Controller Status OIDs - only for ultrastore right now
-    %controller_status_oids = {
+    ## Controller Systems Status OIDs (For future. No support for any of these yet)
+    %controller_status_oids = (
        "general" => $baseoid . ".1.1.1",
        "temperature" => $baseoid . ".1.1.2",
        "voltage" => $baseoid . ".1.1.3",
@@ -519,8 +525,9 @@ sub set_oids {
        "fan" => $baseoid . ".1.1.5",
        "powersupply" => $baseoid . ".1.1.6",
        "dualcontroller" => $baseoid . ".1.1.7",
-    };    
-    %controller_status_codes = {
+    );
+    ## Controller general status OID (For future. Not supported yet)
+    %controller_status_codes = (
         0 => ['good', 'good', 'NONE' ],
         1 => ['bad', 'bad', 'CRITICAL' ],
     );
@@ -570,7 +577,7 @@ sub usage {
 # display help information
 sub help {
         print_version();
-        print "GPL 3.0 licence (c) 2006-2012 William Leibzon\n";
+        print "GPL 3.0 license (c) 2006-2012 William Leibzon\n";
         print "This plugin uses SNMP to check logical and physical drive status of a RAID controllers\n";
 	print "sold by LSI, MPTFusion, Dell PERC, Adaptec, HP SmartArray and other brands.\n";
 	print "\n";
@@ -583,8 +590,8 @@ sub help {
 	print "    Display version\n";
 	print "  -T, --controller_type <type>\n";
 	print "    Type of controller - can be:\n";
-	print "       megaraid|sasraid|perc3|perc4|perc5|perc6|perch700|mptfusion|sas6ir|sas6|adaptec|hp|smartarray\n";
-	print "       (megaraid=perc3,perc4; sasraid=perc5,perc6,perch700; mptfusion=sas6ir,sas6; smartarray=hp)\n";
+	print "       megaraid|sasraid|perc3|perc4|perc5|perc6|perch700|mptfusion|sas6ir|sas6|adaptec|hp|smartarray|ultrastor\n";
+	print "       (megaraid=perc3,perc4; sasraid=perc5,perc6,perch700; mptfusion=sas6ir,sas6; smartarray=hp; eti=ultrastor)\n";
 	print "  -a, --alert <alert level>\n";
 	print "    Alert status to use if an error condition is found\n";
 	print "    Accepted values are: \"crit\" and \"warn\" (defaults to crit)\n";
@@ -758,8 +765,8 @@ sub check_options {
      elsif ($opt_cardtype eq 'hp' || $opt_cardtype eq 'smartarray') {
         $cardtype='smartarray';
      }
-     elsif ($opt_cardtype eq 'eti' || $opt_cardtype eq 'ultrastore') {
-        $cardtype='ultrastore';
+     elsif ($opt_cardtype eq 'eti' || $opt_cardtype eq 'ultrastor') {
+        $cardtype='ultrastor';
      }
      else {
 	usage("Invalid controller type specified");

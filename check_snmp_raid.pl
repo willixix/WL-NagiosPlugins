@@ -1150,7 +1150,7 @@ foreach $line (Net::SNMP::oid_lex_sort(keys(%{$phydrv_data_in}))) {
 		# if ($PHYDRV_CODES{$code}[0] eq 'failed' || $PHYDRV_CODES{$code}[0] eq 'rebuild' || $PHYDRV_CODES{$code}[0] eq 'unconfigured_bad') {
 			$output_data .= ", " if $output_data;
 			$output_data .= "phy drv($phydrv_id) ".$PHYDRV_CODES{$code}[1];
-			$phd_nagios_status = $PHYDRV_CODES{$code}[1] if $phd_nagios_status ne 'CRITICAL';
+			$phd_nagios_status = $PHYDRV_CODES{$code}[2] if $phd_nagios_status ne 'CRITICAL';
 			# optionally check rate of rebuild
 			if ($PHYDRV_CODES{$code}[0] eq 'rebuild' && defined($opt_extrainfo)) {
 				my $eoid = $phydrv_rebuildstats_tableoid.'.'.$line;

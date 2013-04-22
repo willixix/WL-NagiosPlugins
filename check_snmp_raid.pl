@@ -31,8 +31,8 @@
 #
 # check_snmp_raid | check_sasraid_megaraid | check_megaraid | check_sasraid
 #
-# This is a Nagios plugin to checks RAID cards with SNMP and reports status of the
-# logical and physical drives an volumes and any disk and other volume errors.
+# This is a SNMP Nagios plugin for RAID cards, that checks status of physical
+# drives and logical volumes, and reports any disk and volume errors.
 #
 # It was originally written to monitor LSI MegaRAID, sold directly by LSI and
 # more commonly found in Dell systems under their brand name 'PERC' (PERC3-PERC6),
@@ -194,11 +194,11 @@
 #        c  Code updates to make it easier to support more cards and vendors in the future
 #        d. Making both PHYDRV_CODES and BATTERY_CODES array contain 3 parameters as has
 #           been the case with LOGDRV_CODES. The first one is short code name,
-#           2nd is human-readable text, and 3rd is nagios status is corresponds to.
+#           2nd is human-readable text, and 3rd is nagios status it corresponds to.
 #	 e. Documentation updates related to plugin renaming and many other small
 #           code updates
 #        f. Starting with 2.x the plugin is licensed under GPL 3.0 licence (was 2.0 before)
-#		   
+#
 # ========================== LIST OF CONTRIBUTORS =============================
 #
 # The following individuals have contributed code, patches, bug fixes and ideas to
@@ -306,6 +306,8 @@ my(
     $writefail_oid,
     $adpt_readfail_oid,
     $adpt_writefail_oid,
+    %controller_status_oids,
+    %controller_status_codes,
     %LOGDRV_CODES,
     %PHYDRV_CODES,
     %BATTERY_CODES
@@ -314,13 +316,13 @@ my(
 # Function to set values for OIDs that are used
 sub set_oids {
   if ($cardtype eq 'megaraid') {
-    $baseoid = "1.3.6.1.4.1.3582" if $baseoid eq "";		 # megaraid standard base oid
+    $baseoid = "1.3.6.1.4.1.3582" if $baseoid eq "";		   # megaraid standard base oid
     $logdrv_status_tableoid = $baseoid . ".1.1.2.1.3";           # megaraid logical
     $phydrv_status_tableoid = $baseoid . ".1.1.3.1.4";           # megaraid physical
     $phydrv_mediumerrors_tableoid = $baseoid . ".1.1.3.1.12";    # megaraid medium errors
     $phydrv_othererrors_tableoid = $baseoid . ".1.1.3.1.15";     # megaraid other errors
     $phydrv_rebuildstats_tableoid = $baseoid . ".1.1.3.1.11";
-    $phydrv_product_tableoid = $baseoid . ".1.1.3.1.8";  	 # megaraid drive vendor+model
+    $phydrv_product_tableoid = $baseoid . ".1.1.3.1.8";  	   # megaraid drive vendor+model
     $readfail_oid = $baseoid . ".1.1.1.1.13";
     $writefail_oid = $baseoid . ".1.1.1.1.14";
     $adpt_readfail_oid = $baseoid . ".1.1.1.1.15";
@@ -343,9 +345,8 @@ sub set_oids {
     );
   }
   elsif ($cardtype eq 'mptfusion') { 
-    $baseoid = "1.3.6.1.4.1.3582" if $baseoid eq "";		   # megaraid standard base oid
+    $baseoid = "1.3.6.1.4.1.3582" if $baseoid eq "";		     # megaraid standard base oid
     $logdrv_status_tableoid = $baseoid . ".5.1.4.3.1.2.1.5";       # mptfusion logical
-    # $sas_logdrv_name_tableoid = $baseoid . ".4.1.4.3.1.2.1.6";   # sas virtual device name
     $phydrv_status_tableoid = $baseoid . ".5.1.4.2.1.2.1.10";      # mptfusion physical
     $phydrv_mediumerrors_tableoid = $baseoid . ".5.1.4.2.1.2.1.7"; # mptfusion medium errors
     $phydrv_othererrors_tableoid = $baseoid . ".5.1.4.2.1.2.1.8";  # mptfusion other errors
@@ -370,7 +371,7 @@ sub set_oids {
     );
   }
   elsif ($cardtype eq 'sasraid') {
-    $baseoid = "1.3.6.1.4.1.3582" if $baseoid eq "";		   # megaraid standard base oid
+    $baseoid = "1.3.6.1.4.1.3582" if $baseoid eq "";		     # megaraid standard base oid
     $logdrv_status_tableoid = $baseoid . ".4.1.4.3.1.2.1.5";       # sasraid logical
     # $sas_logdrv_name_tableoid = $baseoid . ".4.1.4.3.1.2.1.6";   # sas virtual device name
     $phydrv_status_tableoid = $baseoid . ".4.1.4.2.1.2.1.10";      # sasraid physical
@@ -378,12 +379,11 @@ sub set_oids {
     $phydrv_othererrors_tableoid = $baseoid . ".4.1.4.2.1.2.1.8";  # sasraid other errors
     $phydrv_vendor_tableoid = $baseoid . ".4.1.4.2.1.2.1.24";      # sasraid drive vendor
     $phydrv_product_tableoid = $baseoid . ".4.1.4.2.1.2.1.25";     # sasraid drive model
-    $phydrv_status_tableoid = $baseoid . ".4.1.4.2.1.2.1.10";      # sasraid physical
-    $phydrv_count_oid = $baseoid . ".4.1.4.1.2.1.21";		   # pdPresentCount
-    $phydrv_goodcount_oid = $baseoid . ".4.1.4.1.2.1.22";	   # pdDiskPresentCount
-    $phydrv_badcount_oid = $baseoid . ".4.1.4.1.2.1.23";	   # pdDiskPredFailureCount
-    $phydrv_bad2count_oid = $baseoid . ".4.1.4.1.2.1.24"; 	   # pdDiskFailureCount
-    $battery_status_tableoid = $baseoid . ".4.1.4.1.6.2.1.27";	   # battery replacement status
+    $phydrv_count_oid = $baseoid . ".4.1.4.1.2.1.21";		     # pdPresentCount
+    $phydrv_goodcount_oid = $baseoid . ".4.1.4.1.2.1.22";	     # pdDiskPresentCount
+    $phydrv_badcount_oid = $baseoid . ".4.1.4.1.2.1.23";	     # pdDiskPredFailureCount
+    $phydrv_bad2count_oid = $baseoid . ".4.1.4.1.2.1.24"; 	     # pdDiskFailureCount
+    $battery_status_tableoid = $baseoid . ".4.1.4.1.6.2.1.27";     # battery replacement status
 
     %LOGDRV_CODES = ( 
         0 => ['offline', 'volume is offline', 'NONE' ],
@@ -431,7 +431,7 @@ sub set_oids {
     );
   }
   elsif ($cardtype eq 'smartarray') {
-    $baseoid = "1.3.6.1.4.1.232" if $baseoid eq "";        # SmartArray base oid
+    $baseoid = "1.3.6.1.4.1.232" if $baseoid eq "";        # HP (SmartArray) base oid
     $logdrv_status_tableoid = $baseoid . ".3.2.3.1.1.4";
     $phydrv_status_tableoid = $baseoid . ".3.2.5.1.1.6";
     %LOGDRV_CODES = (
@@ -472,6 +472,45 @@ sub set_oids {
             3 => ['failure', 'failure', 'CRITICAL'], 
             4 => ['warning', 'warning', 'WARNING'], 	# predictive failure
     );   
+  }
+  elsif ($cardtype eq 'ultrastore') {
+    $baseoid = "1.3.6.1.4.1.22274" if $baseoid eq "";		     # ETI base oid
+    $logdrv_status_tableoid = $baseoid . ".1.2.3.1.6";       	     # sasraid volume status
+    # $voldrv_status_tableoid = $baseoid . ".1.2.2.1.6";           # sasraid volume status (volumes not supported yet)
+    $phydrv_status_tableoid = $baseoid . ".1.2.1.1.5";      	     # sasraid physical status
+    $phydrv_vendor_tableoid = $baseoid . ".1.2.1.1.8";		     # sasraid drive vendor
+    $phydrv_product_tableoid = $baseoid . ".1.2.1.1.15";     	     # sasraid drive model
+
+    %LOGDRV_CODES = ( 
+        0 => ['offline', 'volume is offline', 'NONE' ],
+        1 => ['degraded', 'parially degraded', 'CRITICAL' ],
+        2 => ['degraded', 'fully degraded', 'CRITICAL' ],
+        3 => ['optimal', 'functioning properly', 'OK' ]
+    );
+    ## Status codes for phyisical drives
+    %PHYDRV_CODES = (
+        0 => ['unconfigured_good', 'unconfigured_good', 'OK'],
+        1 => ['unconfigured_bad', 'unconfigured_bad', 'CRITICAL'],
+        2 => ['hotspare', 'hotspare', 'OK'],
+        16 => ['offline', 'offline', 'OK'],
+        17 => ['failed', 'failed', 'CRITICAL'],
+        20 => ['rebuild', 'rebuild', 'WARNING'],
+        24 => ['online', 'online', 'OK'],
+    );
+    ## Controller Status OIDs - only for ultrastore right now
+    %controller_status_oids = {
+       "general" => $baseoid . ".1.1.1",
+       "temperature" => $baseoid . ".1.1.2",
+       "voltage" => $baseoid . ".1.1.3",
+       "ups" => $baseoid . ".1.1.4",
+       "fan" => $baseoid . ".1.1.5",
+       "powersupply" => $baseoid . ".1.1.6",
+       "dualcontroller" => $baseoid . ".1.1.7",
+    };    
+    %controller_status_codes = {
+        0 => ['good', 'good', 'NONE' ],
+        1 => ['bad', 'bad', 'CRITICAL' ],
+    );
   }
   else {
     usage("Specified card type $cardtype is not supported\n");
@@ -539,11 +578,11 @@ sub help {
 	print "  -b, --check_battery\n";
 	print "    Check and print information on hard drive batteries (BBU). Currently only 'sasraid' card types\n"; 
 	print "  -i, --extra_info\n";
-	print "    Extra information in output. This includes rebuild rate, product & drive vendor names, etc\n";
+	print "    Extra information in output. This may include rebuild rate, product & drive vendor names, etc\n";
 	print "  -g, --good_drive <number>\n";
 	print "    How many good drives should the system have. If its less than this, error alert is issued\n";
 	print "  -e, --drive_errors\n";
-	print "    Do additonal checks for medium and other errors on each drive.\n";
+	print "    Do additonal checks for medium and other errors on each drive (only megaraid cards).\n";
 	print "    This is about 2x as many SNMP check and so can slow plugin down.\n";
 	print "    !! You will need to pass to plugin previous PERF data and STATE with -P and -S options !!\n";
 	print "  -P, --perf <performance data>\n";
@@ -705,6 +744,9 @@ sub check_options {
      }
      elsif ($opt_cardtype eq 'hp' || $opt_cardtype eq 'smartarray') {
         $cardtype='smartarray';
+     }
+     elsif ($opt_cardtype eq 'eti' || $opt_cardtype eq 'ultrastore') {
+        $cardtype='ultrastore';
      }
      else {
 	usage("Invalid controller type specified");

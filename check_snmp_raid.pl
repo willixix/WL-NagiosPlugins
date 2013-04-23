@@ -418,15 +418,15 @@ sub set_oids {
   }
   elsif ($cardtype eq 'adaptec') {
     $baseoid = "1.3.6.1.4.1.795" if $baseoid eq "";		   # Adaptec base oid
-    $logdrv_status_tableoid = $baseoid . ".14.1.1000.1.1.12";
-    $phydrv_status_tableoid = $baseoid . ".14.1.400.1.1.11";
-    $battery_status_tableoid = $baseoid . ".14.1.201.1.1.14";	   # battery status
-    $phydrv_vendor_tableoid = $baseoid . ".14.1.400.1.1.6";        # adaptec drive vendor
-    $phydrv_product_tableoid = $baseoid . ".14.1.400.1.1.7";       # adaptec drive model
+    $logdrv_status_tableoid = $baseoid . ".14.1.1000.1.1.12";    # adaptec logical drives status
+    $phydrv_status_tableoid = $baseoid . ".14.1.400.1.1.11";     # adaptec physical drive status
+    $battery_status_tableoid = $baseoid . ".14.1.201.1.1.14";	   # adaptec battery status
+    $phydrv_vendor_tableoid = $baseoid . ".14.1.400.1.1.6";      # adaptec drive vendor
+    $phydrv_product_tableoid = $baseoid . ".14.1.400.1.1.7";     # adaptec drive model
 
     %LOGDRV_CODES = (
             1 => ['unknown', 'array state is unknown', 'UNKNOWN'],
-            2 => ['unknown', 'array state is other/unknown', 'UNKNOWN'],
+            2 => ['unknown', 'array state is other or unknown', 'UNKNOWN'],
             3 => ['optimal', 'array is funtioning properly', 'OK'],
             4 => ['optimal', 'array is funtioning properly', 'OK'],
             5 => ['degraded', 'array is impacted', 'CRITICAL'],
@@ -494,7 +494,7 @@ sub set_oids {
             1 => ['other', 'other/unknown error', 'UNKNOWN'],   # unknown, maybe this should be critical in nagios
             2 => ['okay', 'okay', 'OK'],
             3 => ['failure', 'failure', 'CRITICAL'], 
-            4 => ['warning', 'predictive failure', 'WARNING'],  # predictive failure
+            4 => ['warning', 'warning on predictive failure', 'WARNING'],  # predictive failure
     );   
   }
   elsif ($cardtype eq 'ultrastor') {
@@ -569,10 +569,10 @@ sub print_version {
 # display usage information
 sub print_usage {
         print "Usage:\n";
-        print "$0 [-s <snmp_version>] -H <host> (-C <snmp_community>) | (-l login -x passwd [-X pass -L <authp>,<privp>) [-p <port>] [-t <timeout>] [-O <base oid>] [-a <alert level>] [--extra_info] [--check_battery] [-g <num good drives>] [--drive_errors -P <previous performance data> -S <previous state>] [-v [DebugLogFile] || -d DebugLogFile] [--debug_time] [--snmp_optimize] -T megaraid|sasraid|perc3|perc4|perc5|perc6|mptfusion|sas6ir|sas6|adaptec|smartarray|eti|ultrastor\n";
+        print "$0 [-s <snmp_version>] -H <host> (-C <snmp_community>) | (-l login -x passwd [-X pass -L <authp>,<privp>) [-p <port>] [-t <timeout>] [-O <base oid>] [-a <alert level>] [--extra_info] [--check_battery] [-g <num good drives>] [--drive_errors -P <previous performance data> -S <previous state>] [-v [DebugLogFile] || -d DebugLogFile] [--debug_time] [--snmp_optimize] -T megaraid|sasraid|perc3|perc4|perc5|perc6|mptfusion|sas6ir|sas6|adaptec|smartarray|eti|ultrastor\n OR \n";
         print "$0 --version | $0 --help (use this to see get more detailed documentation of above options)\n";
 }
-s
+
 sub usage {
 	print $_."\n" foreach @_;
 	print_usage();

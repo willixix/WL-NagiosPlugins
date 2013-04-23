@@ -8,8 +8,8 @@
 # Author  : William Leibzon - william@leibzon.org
 # Copyright: (C) 2006-2013 William Leibzon
 # Summary : This is a nagios plugin to monitor Raid controller cards with SNMP
-#           and report status of the physical drives and logical valumes and
-#	    any reported disk and volume errors.
+#           and report status of the physical drives and logical volumes and
+#	    additional information such as battery status, disk and volume errors.
 # Licence : GPL 3 - summary below, full text at http://www.fsf.org/licenses/gpl.txt
 # =========================== PROGRAM LICENSE ================================
 #
@@ -31,17 +31,17 @@
 #
 # check_snmp_raid | check_sasraid_megaraid | check_megaraid | check_sasraid
 #
-# This is a SNMP Nagios plugin for RAID cards, that checks status of physical
-# drives and logical volumes, and reports any disk and volume errors.
+# This is a Nagios plugin that uses SNMP to monitor several types of RAID cards.
+# It can check status of physical drives and logical volumes, and check for disk errors.
 #
-# It was originally written to monitor LSI MegaRAID, sold directly by LSI and
-# more commonly found in Dell systems under their brand name 'PERC' (PERC3-PERC6),
-# some are SCSI RAID cards and newer are SAS RAID cards. New cards sold directly
-# are now called MTPFusion and are supported too. It has also been found that some
-# Adaptec cards can be monitored with this plugin and the way its written is general
-# enough that it maybe extended to other RAID controllers if people look at the MIBS
-# and are willing to contribute settings for them. HP SmartArray has now been added
-# to list of support RAID controllers as well.
+# This was originally written to monitor LSI MegaRAID series of cards, sold by LSI and
+# more commonly found in Dell systems under their brand name 'PERC' (PERC3-PERC6).
+# Older ones are SCSI RAID cards and newer are SAS RAID cards. New cards sold directly
+# are now called MTPFusion and supported by plugin too. The plugin code is general
+# enough that it was possible to add support for Adaptec and HP SmartArray cards.
+# This was added to 2.x version of this plugin when it was also renamed check_snmp_raid
+# Support for more controllers maybe added if you look at the MIBS are willing to
+# contribute settings for them.
 #
 # This plugin requires that Net::SNMP be installed on the machine performing the
 # monitoring and that snmp agent be set up on the machine to be monitored.
@@ -51,16 +51,18 @@
 #
 # =============================== SETUP NOTES ================================
 # 
-# Recommended that you run this with '-h' to see all avaiable options.
+# Run this plugin with '-h' to see all avaiable options.
 #
 # This originally started as check_megaraid plugin but now has been extended
-# to work with various other cards. You must specify what card you have with
-# '-T' option. The following are acceptable types:
-#   megaraid|sasraid|perc3|perc4|perc5|perc6|mptfusion|sas6ir|sas6|adaptec|smartarray
+# to work with various cards. You must specify what card with '-T' option.
+# The following are acceptable types as of Apr 2013:
+#   megaraid|sasraid|perc3|perc4|perc5|perc6|mptfusion|sas6ir|sas6|
+#   adaptec|hp|smartarray|eti|ultrastor
 #
 # You will need to have SNMP package installed appropriate for your card.
-# If you have SASRaid (also known as PERC5, PERC6) you will need
-# sasraid LSI package (lsi_mrdsnmpd unix service). This driver is available at
+#
+# If you have SASRaid (also known as PERC5, PERC6) you need sasraid LSI package
+# (lsi_mrdsnmpd unix service). This driver is available at
 #   http://www.lsi.com/storage_home/products_home/internal_raid/megaraid_sas/megaraid_sas_8480e/index.html
 #
 # For LSI Megaraid (Dell PERC3 and PERC4 cards) the driver package is
@@ -70,7 +72,7 @@
 # For other cards please check with vendor you bought the card from for
 # an appropriate SNMP driver package.
 #
-#  Here is an example of how to specify that in nagios config
+# This is a very old example of nagios config for Megarad card check:
 #  (note that $USER1$ and $USER6$ are defined in resource.cfg,
 #   $USER1$ is path to plugin directory and $USER6$ is community string
 #   also "" around macros in commands.cfg are on purpose, don't forget them):
@@ -181,7 +183,7 @@
 #        b. applied patch from Robert Wikman (sent by email) that adds checks on status of
 #           batteries (BBU data) enabled with a new -b (--check_battery) option
 #        c. code cleanup and refactoring - functions moved to top and option variables renamed
-#        d. list of contributors section added       
+#        d. list of contributors section added
 #       [2.0 - Oct 2012] The version was originaly to be released as 1.95 but with two patches
 #        and all the code cleanup, the number of changes is more than sub-minor and I released
 #        it as 2.0. However I later downgraded it back to 1.95 because for 2.0 release the plugin
@@ -198,10 +200,11 @@
 #	 e. Documentation updates related to plugin renaming and many other small
 #           code updates
 #        f. Starting with 2.x the plugin is licensed under GPL 3.0 licence (was 2.0 before)
-#    22.[2.15 - Apr 22, 2013] The following are additions in this version:
+#   22. [2.15 - Apr 22, 2013] The following are additions in this version:
 #        a. Added limited support for ETI UtraStor ES1660SS (this was in dev from February)
-#           (controller and volume checks are not written right now despite adding OIDs in)
-#	 b. Added support for battery status for Adaptec cards, contributed by Stanislav GE (giner)
+#           Controller and volume checks are not written right now despite adding OIDs in.
+#	 b. Added support for battery status and drive vendor and model information for Adaptec cards,
+#           this is contributed by Stanislav German-Evtusheno (giner on github)
 #           based on http://www.circitor.fr/Mibs/Html/ADAPTEC-UNIVERSAL-STORAGE-MIB.php#BatteryStatus
 #			      
 # ========================== LIST OF CONTRIBUTORS =============================
@@ -209,13 +212,13 @@
 # The following individuals have contributed code, patches, bug fixes and ideas to
 # this plugin (listed in last-name alphabetical order):
 #
+#    Stanislav German-Evtushenko
 #    Joe Gooch
 #    William Leibzon
 #    Vitaly Percharsky
 #    John Reuning
 #    Khanh Truong
 #    Robert Wikman
-#    Stanislav GE (giner)
 #
 # Open source community is grateful for all your contributions.
 #
@@ -244,12 +247,12 @@ if ($@) {
 }
 
 # some defaults, most can be overriden by input parameters too
-my $cardtype="sasraid";    # default card type, can be "megaraid", "mptfusion" or "sasraid"
-my $baseoid="";		   # if not specified here, it will use default ".1.3.6.1.4.1.3582"
+my $cardtype="sasraid";    # default card type. Note: there will not be any default in future versions
+my $baseoid="";		    # if not specified here, it will use default ".1.3.6.1.4.1.3582"
 my $timeout=$TIMEOUT;      # default is nagios exported $TIMEOUT variable
 my $DEBUG = 0;             # to print debug messages, set this to 1
 my $MAX_OUTPUTSTR = 2048;  # maximum number of characters in otput
-my $alert = "CRITICAL";	   # default alert type if error condition is found
+my $alert = "CRITICAL";	    # default alert type if error condition is found
 
 # SNMP authentication options and their derfault values
 my $o_port=               161;  # SNMP port
@@ -260,8 +263,8 @@ my $v3protocols=        undef;  # V3 protocol list.
 my $o_authproto=        'md5';  # Auth protocol
 my $o_privproto=        'des';  # Priv protocol
 my $o_privpass=         undef;  # priv password
-my $opt_snmpversion=	undef;  # SNMP version option, default "1" when undef
-my $opt_baseoid=	undef;	# allows to override default $baseoid above
+my $opt_snmpversion=	undef;   # SNMP version option, default "1" when undef
+my $opt_baseoid=	undef;	 # allows to override default $baseoid above
 
 ########## CORE PLUGIN CODE (do not change below this line) ##################
 
@@ -365,7 +368,7 @@ sub set_oids {
         2 => ['degraded', 'fully degraded', 'CRITICAL' ],
         3 => ['optimal', 'functioning properly', 'OK' ]
     );
-    ## Status codes for phyisical drives - these are specifically for MPTFUSION
+    ## Status codes for physical drives - these are for MPTFUSION
     %PHYDRV_CODES = (
         0 => ['unconfigured_good', 'unconfigured_good', 'OK'],
         1 => ['unconfigured_bad', 'unconfigured_bad', 'CRITICAL'],
@@ -397,7 +400,7 @@ sub set_oids {
         2 => ['degraded', 'fully degraded', 'CRITICAL' ],
         3 => ['optimal', 'functioning properly', 'OK' ]
     );
-    ## Status codes for phyisical drives - these are specifically for SASRAID
+    ## Status codes for physical drives - these are for SASRAID
     %PHYDRV_CODES = (
         0 => ['unconfigured_good', 'unconfigured_good', 'OK'],
         1 => ['unconfigured_bad', 'unconfigured_bad', 'CRITICAL'],
@@ -407,7 +410,7 @@ sub set_oids {
         20 => ['rebuild', 'rebuild', 'WARNING'],
         24 => ['online', 'online', 'OK'],
     );
-    ## Status codes for battery replacement - these are specifically for SASRAID
+    ## Status codes for battery replacement - these are for SASRAID
     %BATTERY_CODES = (
 	0 => ['ok', 'Battery OK', 'OK'],
 	1 => ['fail', 'Battery needs replacement', 'WARNING']
@@ -436,7 +439,7 @@ sub set_oids {
             4 => ['warning', 'warning', 'WARNING'],
             5 => ['failure', 'failure', 'CRITICAL'],
     );
-    ## Status codes for batteries - these are specifically for ADAPTEC
+    ## Status codes for batteries - these code are for ADAPTEC
     %BATTERY_CODES = (
 	1 => ['unknown', 'unknown', 'UNKNOWN'],
 	2 => ['other', 'other', 'WARNING'],
@@ -486,19 +489,19 @@ sub set_oids {
     );   
 
     %PHYDRV_CODES = (
-            1 => ['other', 'other', 'UNKNOWN'], 	# unknown, maybe this should be critical in nagios
+            1 => ['other', 'other/unknown error', 'UNKNOWN'],   # unknown, maybe this should be critical in nagios
             2 => ['okay', 'okay', 'OK'],
             3 => ['failure', 'failure', 'CRITICAL'], 
-            4 => ['warning', 'warning', 'WARNING'], 	# predictive failure
+            4 => ['warning', 'predictive failure', 'WARNING'],  # predictive failure
     );   
   }
   elsif ($cardtype eq 'ultrastor') {
     $baseoid = "1.3.6.1.4.1.22274" if $baseoid eq "";		     # ETI base oid
-    $logdrv_status_tableoid = $baseoid . ".1.2.3.1.6";       	     # sasraid volume status
-    # $voldrv_status_tableoid = $baseoid . ".1.2.2.1.6";           # sasraid volume status (volumes not supported yet)
-    $phydrv_status_tableoid = $baseoid . ".1.2.1.1.5";      	     # sasraid physical status
-    $phydrv_vendor_tableoid = $baseoid . ".1.2.1.1.8";		     # sasraid drive vendor
-    $phydrv_product_tableoid = $baseoid . ".1.2.1.1.15";     	     # sasraid drive model
+    $logdrv_status_tableoid = $baseoid . ".1.2.3.1.6";       	     # logical volume status
+    # $voldrv_status_tableoid = $baseoid . ".1.2.2.1.6";           # ETI volume status (volumes not supported yet)
+    $phydrv_status_tableoid = $baseoid . ".1.2.1.1.5";      	     # physical status
+    $phydrv_vendor_tableoid = $baseoid . ".1.2.1.1.8";		     # drive vendor
+    $phydrv_product_tableoid = $baseoid . ".1.2.1.1.15";     	     # drive model
 
     %LOGDRV_CODES = ( 
         0 => ['offline', 'volume is offline', 'NONE' ],
@@ -506,7 +509,7 @@ sub set_oids {
         2 => ['degraded', 'fully degraded', 'CRITICAL' ],
         3 => ['optimal', 'functioning properly', 'OK' ]
     );
-    ## Status codes for phyisical drives
+    ## Status codes for physical drives
     %PHYDRV_CODES = (
         0 => ['unconfigured_good', 'unconfigured_good', 'OK'],
         1 => ['unconfigured_bad', 'unconfigured_bad', 'CRITICAL'],
@@ -564,10 +567,10 @@ sub print_version {
 # display usage information
 sub print_usage {
         print "Usage:\n";
-        print "$0 [-s <snmp_version>] -H <host> (-C <snmp_community>) | (-l login -x passwd [-X pass -L <authp>,<privp>) [-p <port>] [-t <timeout>] [-O <base oid>] [-a <alert level>] [--extra_info] [--check_battery] [-g <num good drives>] [--drive_errors -P <previous performance data> -S <previous state>] [-v [DebugLogFile] || -d DebugLogFile] [--debug_time] [--snmp_optimize] [-T megaraid|sasraid|perc3|perc4|perc5|perc6|mptfusion|sas6ir|sas6|adaptec|smartarray]\n";
-        print "$0 --version | $0 --help (use this to see better documentation of above options)\n";
+        print "$0 [-s <snmp_version>] -H <host> (-C <snmp_community>) | (-l login -x passwd [-X pass -L <authp>,<privp>) [-p <port>] [-t <timeout>] [-O <base oid>] [-a <alert level>] [--extra_info] [--check_battery] [-g <num good drives>] [--drive_errors -P <previous performance data> -S <previous state>] [-v [DebugLogFile] || -d DebugLogFile] [--debug_time] [--snmp_optimize] -T megaraid|sasraid|perc3|perc4|perc5|perc6|mptfusion|sas6ir|sas6|adaptec|smartarray|eti|ultrastor\n";
+        print "$0 --version | $0 --help (use this to see get more detailed documentation of above options)\n";
 }
-
+s
 sub usage {
 	print $_."\n" foreach @_;
 	print_usage();
@@ -578,8 +581,8 @@ sub usage {
 sub help {
         print_version();
         print "GPL 3.0 license (c) 2006-2012 William Leibzon\n";
-        print "This plugin uses SNMP to check logical and physical drive status of a RAID controllers\n";
-	print "sold by LSI, MPTFusion, Dell PERC, Adaptec, HP SmartArray and other brands.\n";
+        print "This plugin uses SNMP to check state of RAID controllers and attached drives.\n";
+	print "Supported brands are: LSI, MPTFusion, Dell PERC, Adaptec, HP SmartArray and more.\n";
 	print "\n";
         print_usage();
         print "\n";
@@ -589,14 +592,17 @@ sub help {
 	print "  -V, --version\n";
 	print "    Display version\n";
 	print "  -T, --controller_type <type>\n";
-	print "    Type of controller - can be:\n";
-	print "       megaraid|sasraid|perc3|perc4|perc5|perc6|perch700|mptfusion|sas6ir|sas6|adaptec|hp|smartarray|ultrastor\n";
+	print "    Type of controller, specify one of:\n";
+	print "       megaraid|sasraid|perc3|perc4|perc5|perc6|perch700|mptfusion|sas6ir|sas6|adaptec|hp|smartarray|eti|ultrastor\n";
 	print "       (megaraid=perc3,perc4; sasraid=perc5,perc6,perch700; mptfusion=sas6ir,sas6; smartarray=hp; eti=ultrastor)\n";
+	print "	   Note: currently 'sasraid' is default type if not specified as has been the case for 1.x versions\n";
+	print "		 but this will be removed and specifying controller type will be required in the future\n"; 
 	print "  -a, --alert <alert level>\n";
 	print "    Alert status to use if an error condition is found\n";
 	print "    Accepted values are: \"crit\" and \"warn\" (defaults to crit)\n";
 	print "  -b, --check_battery\n";
-	print "    Check and print information on hard drive batteries (BBU). Currently only 'sasraid' card types\n"; 
+	print "    Check and output information on hard drive batteries (BBU) for supported cards\n";
+	print "    'sasraid' and 'adaptec' card types are currently supported, more maybe added later\n"; 
 	print "  -i, --extra_info\n";
 	print "    Extra information in output. This may include rebuild rate, product & drive vendor names, etc\n";
 	print "  -g, --good_drive <number>\n";
@@ -652,7 +658,7 @@ sub help {
 	print "\n";
 }
 
-# process previous performance data - William
+# process previous performance data
 sub process_perf {
  my %pdh;
  foreach (split(' ',$_[0])) {
@@ -686,8 +692,8 @@ sub check_options {
 	'T:s'	=> \$opt_cardtype,	'controller_type:s' => \$opt_cardtype,
         'C:s'   => \$o_community,       'community:s'   => \$o_community,
         's:s'   => \$opt_snmpversion,   'snmp_version:s' => \$opt_snmpversion,
-	'H:s'	=> \$o_host,		'hostname:s'	=> \$o_host,
-	'p:i'	=> \$o_port,		'port:i'	=> \$o_port,
+	'H:s'	=> \$o_host,		 'hostname:s'	=> \$o_host,
+	'p:i'	=> \$o_port,		 'port:i'	=> \$o_port,
         'l:s'   => \$o_login,           'login:s'       => \$o_login,
         'x:s'   => \$o_passwd,          'passwd:s'      => \$o_passwd,
         'X:s'   => \$o_privpass,        'privpass:s'    => \$o_privpass,
@@ -748,7 +754,7 @@ sub check_options {
           { usage("Put snmp V3 priv login info with priv protocols!\n"); }
   }
 
-  # cart type parameter
+  # card type parameter
   if (defined($opt_cardtype)) {
      if ($opt_cardtype eq 'megaraid' || $opt_cardtype eq 'perc3' || $opt_cardtype eq 'perc4') {
 	$cardtype='megaraid';
@@ -1317,9 +1323,7 @@ sub print_output {
 
    print "Raid $out_status";
 
-   # netsaint doesn't like output strings larger than 256 chars
-   # [William: modified it so that number of characters is now $MAX_OUTPUTSTR
-   #           defined top of the file, if you set it to undef this is not checked]
+   # max number of characters is $MAX_OUTPUTSTR defined at the top, if its set it to undef this is not checked
    if (defined($out_str) && $out_str) {
 	$out_str = substr($out_str,0,$MAX_OUTPUTSTR) if defined($MAX_OUTPUTSTR) && length($out_str) > $MAX_OUTPUTSTR;
 	print " - $out_str";

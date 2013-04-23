@@ -418,6 +418,8 @@ sub set_oids {
     $logdrv_status_tableoid = $baseoid . ".14.1.1000.1.1.12";
     $phydrv_status_tableoid = $baseoid . ".14.1.400.1.1.11";
     $battery_status_tableoid = $baseoid . ".14.1.201.1.1.14";	   # battery status
+    $phydrv_vendor_tableoid = $baseoid . ".14.1.400.1.1.6";        # adaptec drive vendor
+    $phydrv_product_tableoid = $baseoid . ".14.1.400.1.1.7";       # adaptec drive model
 
     %LOGDRV_CODES = (
             1 => ['unknown', 'array state is unknown', 'UNKNOWN'],
@@ -1150,7 +1152,7 @@ foreach $line (Net::SNMP::oid_lex_sort(keys(%{$phydrv_data_in}))) {
 		# if ($PHYDRV_CODES{$code}[0] eq 'failed' || $PHYDRV_CODES{$code}[0] eq 'rebuild' || $PHYDRV_CODES{$code}[0] eq 'unconfigured_bad') {
 			$output_data .= ", " if $output_data;
 			$output_data .= "phy drv($phydrv_id) ".$PHYDRV_CODES{$code}[1];
-			$phd_nagios_status = $PHYDRV_CODES{$code}[1] if $phd_nagios_status ne 'CRITICAL';
+			$phd_nagios_status = $PHYDRV_CODES{$code}[2] if $phd_nagios_status ne 'CRITICAL';
 			# optionally check rate of rebuild
 			if ($PHYDRV_CODES{$code}[0] eq 'rebuild' && defined($opt_extrainfo)) {
 				my $eoid = $phydrv_rebuildstats_tableoid.'.'.$line;

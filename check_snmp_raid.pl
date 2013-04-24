@@ -192,21 +192,21 @@
 #        first new 2.x release (see above on first released 2.0 being downgraded back to 1.95).
 #        Release notes for this version:
 #        a. Adding limited support for Adaptec RAID cards contributed by K Truong
-#         b. Adding limited support for HP Smart Array RAID, also contributed by K Truong
+#        b. Adding limited support for HP Smart Array RAID, also contributed by K Truong
 #        c  Code updates to make it easier to support more cards and vendors in the future
 #        d. Making both PHYDRV_CODES and BATTERY_CODES array contain 3 parameters as has
 #           been the case with LOGDRV_CODES. The first one is short code name,
 #           2nd is human-readable text, and 3rd is nagios status it corresponds to.
-#         e. Documentation updates related to plugin renaming and many other small
+#        e. Documentation updates related to plugin renaming and many other small
 #           code updates
 #        f. Starting with 2.x the plugin is licensed under GPL 3.0 licence (was 2.0 before)
-#   22. [2.15 - Apr 22, 2013] The following are additions in this version:
+#   22. [2.2 - Apr 25, 2013] The following are additions in this version:
 #        a. Added limited support for ETI UtraStor ES1660SS (this was in dev from February)
 #           Controller and volume checks are not written right now despite adding OIDs in.
-#         b. Added support for battery status and drive vendor and model information for Adaptec cards,
+#        b. Added support for battery status and drive vendor and model information for Adaptec cards,
 #           this is contributed by Stanislav German-Evtushenko (giner on github)
 #           based on http://www.circitor.fr/Mibs/Html/ADAPTEC-UNIVERSAL-STORAGE-MIB.php#BatteryStatus
-#         c. Fix debubbing. Old DEBUG printfs are replaced with calls to verb() function
+#        c. Fix debubbing. Old DEBUG printfs are replaced with calls to verb() function
 #              
 # ========================== LIST OF CONTRIBUTORS =============================
 #
@@ -225,7 +225,7 @@
 #
 # ========================== START OF PROGRAM CODE ===========================
 
-my $version = "2.15";
+my $version = "2.2";
 
 use strict;
 use Getopt::Long;

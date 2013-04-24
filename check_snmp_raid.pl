@@ -206,7 +206,8 @@
 #	 b. Added support for battery status and drive vendor and model information for Adaptec cards,
 #           this is contributed by Stanislav German-Evtusheno (giner on github)
 #           based on http://www.circitor.fr/Mibs/Html/ADAPTEC-UNIVERSAL-STORAGE-MIB.php#BatteryStatus
-#			      
+#	 c. Fix or debubbing. Old DEBUG printfs are replaced with calls to verb() function
+#	      
 # ========================== LIST OF CONTRIBUTORS =============================
 #
 # The following individuals have contributed code, patches, bug fixes and ideas to
@@ -545,13 +546,13 @@ sub set_oids {
 # For verbose output (updated 06/06/12 to write to debug file if specified)
 sub verb {
     my $t=shift;
-    if (defined($opt_debug)) {
+    if ($DEBUG) {
         if ($opt_debug eq "") {
-                print $t;
+                print $t, "\n";
         }
         else {
             if (!open (DEBUGFILE, ">>$opt_debug")) {
-                print $t;
+                print $t, "\n";
             }
             else {
                 print DEBUGFILE $t,"\n";
@@ -665,7 +666,7 @@ sub process_perf {
  my %pdh;
  foreach (split(' ',$_[0])) {
    if (/(.*)=(\d+)/) {
-	print "prev_perf: $1 = $2\n" if $DEBUG;
+	verb("prev_perf: $1 = $2");
 	$pdh{$1}=$2 if $1 !~ /^time_/;
    }
  }
@@ -806,7 +807,7 @@ sub check_options {
   %prev_perf=process_perf($opt_perfdata) if $opt_perfdata;
   @prev_state=split(',',$opt_prevstate) if $opt_prevstate;
 
-  $DEBUG=$opt_debug if defined($opt_debug) && $opt_debug;
+  $DEBUG=1 if defined($opt_debug);
   $debug_time{plugin_start}=time() if $opt_debugtime;
   if ($DEBUG) {
 	print "hostname: $o_host\n";
@@ -966,9 +967,7 @@ if (defined($opt_drverrors) && defined($opt_perfdata) && !defined($opt_optimize)
 }
 
 if ($error) {
-	if ($DEBUG) {
-		printf("snmp error: %s\n", $session->error());
-	}
+	verb("snmp error: "+$session->error());
 	$session->close;
 	print_output("UNKNOWN",$error);
 	exit $ERRORS{'UNKNOWN'};
@@ -982,16 +981,16 @@ my $output_data = "";
 my $output_data_end = "";
 
 if ($DEBUG && $cardtype eq 'megaraid') {
-	print "adpt_readfail: ". $adpt_readfail_oid ." = ". $snmp_result->{$adpt_readfail_oid} ."\n" if exists($snmp_result->{$adpt_readfail_oid});
-	print "adpt_writefail: ". $adpt_writefail_oid ." = ". $snmp_result->{$adpt_writefail_oid} ."\n" if exists($snmp_result->{$adpt_writefail_oid});
-	print "readfail_sec: ". $readfail_oid ." = ". $snmp_result->{$readfail_oid} ."\n" if exists($snmp_result->{$readfail_oid});
-	print "writefail_sec: ". $writefail_oid ." = ". $snmp_result->{$writefail_oid} ."\n" if exists($snmp_result->{$writefail_oid});
+	verb("adpt_readfail: ". $adpt_readfail_oid ." = ". $snmp_result->{$adpt_readfail_oid}) if exists($snmp_result->{$adpt_readfail_oid});
+	verb("adpt_writefail: ". $adpt_writefail_oid ." = ". $snmp_result->{$adpt_writefail_oid}) if exists($snmp_result->{$adpt_writefail_oid});
+	verb("readfail_sec: ". $readfail_oid ." = ". $snmp_result->{$readfail_oid}) if exists($snmp_result->{$readfail_oid});
+	verb("writefail_sec: ". $writefail_oid ." = ". $snmp_result->{$writefail_oid}) if exists($snmp_result->{$writefail_oid});
 }
 if ($DEBUG && $cardtype eq 'sasraid') {
-	print "phydrv_count_oid: ".$phydrv_count_oid." = ". $snmp_result->{$phydrv_count_oid} ."\n" if exists($snmp_result->{$phydrv_count_oid});
-	print "phydrv_goodcount_oid: ".$phydrv_goodcount_oid." = ". $snmp_result->{$phydrv_goodcount_oid} ."\n" if exists($snmp_result->{$phydrv_goodcount_oid});
-	print "phydrv_badcount_oid: ".$phydrv_badcount_oid." = ". $snmp_result->{$phydrv_badcount_oid} ."\n" if exists($snmp_result->{$phydrv_badcount_oid});
-	print "phydrv_bad2count_oid: ".$phydrv_bad2count_oid." = ". $snmp_result->{$phydrv_bad2count_oid} ."\n" if exists($snmp_result->{$phydrv_bad2count_oid});
+	verb("phydrv_count_oid: ".$phydrv_count_oid." = ". $snmp_result->{$phydrv_count_oid}) if exists($snmp_result->{$phydrv_count_oid});
+	verb("phydrv_goodcount_oid: ".$phydrv_goodcount_oid." = ". $snmp_result->{$phydrv_goodcount_oid}) if exists($snmp_result->{$phydrv_goodcount_oid});
+	verb("phydrv_badcount_oid: ".$phydrv_badcount_oid." = ". $snmp_result->{$phydrv_badcount_oid}) if exists($snmp_result->{$phydrv_badcount_oid});
+	verb("phydrv_bad2count_oid: ".$phydrv_bad2count_oid." = ". $snmp_result->{$phydrv_bad2count_oid}) if exists($snmp_result->{$phydrv_bad2count_oid});
 }
 if (defined($opt_drverrors) && $cardtype ne 'sasraid' && $cardtype ne 'mptfusion') {
     if (exists($snmp_result->{$adpt_readfail_oid}) && $snmp_result->{$adpt_readfail_oid}>0) {
@@ -1019,7 +1018,7 @@ if ($cardtype eq 'sasraid') {
 	my $total = $snmp_result->{$phydrv_count_oid};
 	my $good = $snmp_result->{$phydrv_goodcount_oid}||0;
 	my $bad = ($snmp_result->{$phydrv_badcount_oid}||0)+($snmp_result->{$phydrv_bad2count_oid}||0);
-	if ($DEBUG) {print "Good $good $bad $bad Total $total \n";}
+	verb("Good $good $bad $bad Total $total \n");
 	if (defined($opt_gooddrives) and $opt_gooddrives>0) {
 	    $output_data.= ", " if $output_data;
 	    if ($good<$opt_gooddrives) {
@@ -1044,7 +1043,7 @@ my $phydrv_total=0;
 # first loop to load data (and find controller, channel, drive ids) for all drives into our hash
 foreach $line (Net::SNMP::oid_lex_sort(keys(%{$phydrv_data_in}))) {
 	$code = $phydrv_data_in->{$line};
-	  print "phydrv_status: $line = $code" if $DEBUG;
+	verb("phydrv_status: $line = $code");
 	$line = substr($line,length($phydrv_status_tableoid)+1);
 	($controller_id,$channel_id,$drive_id,$lun_id) = split(/\./,$line,4);
 	if (!$drive_id) {
@@ -1066,7 +1065,7 @@ foreach $line (Net::SNMP::oid_lex_sort(keys(%{$phydrv_data_in}))) {
 		}
 	}
 	$lun_id = 0 if !defined($lun_id);
-	  print " | suffix = $line, controller = $controller_id, channel = $channel_id, drive = $drive_id, lun = $lun_id\n" if $DEBUG;
+	verb("   suffix = $line, controller = $controller_id, channel = $channel_id, drive = $drive_id, lun = $lun_id");
 	$h_controllers{$controller_id}=1;
 	$h_channels{$controller_id.'_'.$channel_id}=1;
 	if (!$pdrv_status{$line}) {
@@ -1097,10 +1096,10 @@ my $models="";
 if (defined($opt_extrainfo)) {
     foreach $line (Net::SNMP::oid_lex_sort(keys(%{$phydrv_product_in}))) {
 	$code = $phydrv_product_in->{$line};
-	  print "phydrv_product: $line = $code\n" if $DEBUG;
+	verb("phydrv_product: $line = $code");
 	my $index = substr($line,length($phydrv_product_tableoid)+1);
 	my $vendor = $phydrv_vendor_tableoid?$phydrv_vendor_in->{$phydrv_vendor_tableoid.".".$index}:"";
-	  print "phydrv_vendor: $line = $vendor\n" if ($vendor and $DEBUG);
+	verb("phydrv_vendor: $line = $vendor") if $vendor;
 	$vendor =~ s/^\s+|\s+$//g;
 	$code =~ s/^\s+|\s+$//g;
 	$pdrv_status{$index}->{drivetype} = ($vendor." "||"").$code;
@@ -1184,16 +1183,11 @@ foreach $line (Net::SNMP::oid_lex_sort(keys(%{$phydrv_data_in}))) {
 if (defined($opt_battery)) {
     foreach $line (Net::SNMP::oid_lex_sort(keys(%{$battery_data_in}))) {
         $code = $battery_data_in->{$line};
-        if ($DEBUG) {
-                print "battery_status: $line = $code";
-        }
+        verb("battery_status: $line = $code");
         $line = substr($line,length($battery_status_tableoid)+1);
         ($foo,$battery_id) = split(/\./,$line,2);
 	$battery_id=$foo if !$battery_id;
-        if ($DEBUG) {
-                print " | battery_id = $battery_id\n";
-        }
-
+	verb("| battery_id = $battery_id");
         if (!defined($BATTERY_CODES{$code})) {
                 $output_data.=", " if $output_data;
                 $output_data.= "battery status($battery_id) unknown code $code";
@@ -1210,15 +1204,11 @@ if (defined($opt_battery)) {
 # check logical drive status
 foreach $line (Net::SNMP::oid_lex_sort(keys(%{$logdrv_data_in}))) {
         $code = $logdrv_data_in->{$line};
-        if ($DEBUG) {
-                print "logdrv_status: $line = $code";
-        }
+        verb("logdrv_status: $line = $code");
         $line = substr($line,length($logdrv_status_tableoid)+1);
         ($foo,$logdrv_id) = split(/\./,$line,2);
 	$logdrv_id=$foo if !$logdrv_id;
-        if ($DEBUG) {
-                print " | logdrv_id = $logdrv_id\n";
-        }
+        verb(" | logdrv_id = $logdrv_id\n");
         # check status (catch if status is not "optimal" (2))
         if (!defined($LOGDRV_CODES{$code})) {
                 $output_data.=", " if $output_data;
@@ -1254,16 +1244,16 @@ if (defined($opt_perfdata)) {
 	# first process medium errors
 	if (defined($phydrv_mediumerrors_tableoid)) {
 	  $nerr = $phydrv_merr_in->{$phydrv_mediumerrors_tableoid.'.'.$line};
-	    print "phydrv_mediumerr: $phydrv_mediumerrors_tableoid.$line = $nerr" if $DEBUG;
+	  verb("phydrv_mediumerr: $phydrv_mediumerrors_tableoid.$line = $nerr");
 	}
 	if ($pdrv_status{$line}{status_str} ne 'nondisk' && ($cardtype ne 'sasraid' || $cardtype ne 'mptfusion' || $pdrv_status{$line}{status}>0)) {
-		  print " | suffix = $line, phydrv_id = ".$pdrv_status{$line}{phydrv_id} if $DEBUG;
+		verb(" | suffix = $line, phydrv_id = ".$pdrv_status{$line}{phydrv_id});
 		$curr_perf{'merr_'.$line}=$nerr;
 		if ($nerr!=0 && (!defined($prev_perf{'merr_'.$line}) || $prev_perf{'merr_'.$line} < $nerr)) {
 			$ndiff=$nerr;
 			$ndiff-=$prev_perf{'merr_'.$line} if defined($prev_perf{'merr_'.$line});
 			$output_data .= ", " if $output_data;
-                        $output_data .= "phy drv(".$pdrv_status{$line}{phydrv_id}.") +$ndiff medium errors";
+                       $output_data .= "phy drv(".$pdrv_status{$line}{phydrv_id}.") +$ndiff medium errors";
 			$phd_nagios_status = 'WARNING' if $phd_nagios_status eq 'OK';
 		}
                 if ($nerr!=0) {
@@ -1272,15 +1262,14 @@ if (defined($opt_perfdata)) {
                         $output_data_end .= "phy drv(".$pdrv_status{$line}{phydrv_id}.") $nerr medium errors";
                 }
 	}
-	  print "\n" if $DEBUG;
 	# now process other errors 
 	$nerr = 0;
 	if (defined($phydrv_othererrors_tableoid)) {
 	  $nerr = $phydrv_oerr_in->{$phydrv_othererrors_tableoid.'.'.$line};
-	    print "phydrv_othererr: $phydrv_othererrors_tableoid.$line = $nerr" if $DEBUG;
+	  verb("phydrv_othererr: $phydrv_othererrors_tableoid.$line = $nerr");
 	}
 	if ($pdrv_status{$line}{status_str} ne 'nondisk' && ($cardtype ne 'sasraid' ||$pdrv_status{$line}{status}>0)) {
-		  print " | suffix = $line, phydrv_id = ".$pdrv_status{$line}{phydrv_id} if $DEBUG;
+		verb(" | suffix = $line, phydrv_id = ".$pdrv_status{$line}{phydrv_id});
 		$curr_perf{'oerr_'.$line}=$nerr;
 		if ($nerr!=0 && (!defined($prev_perf{'oerr_'.$line}) || $prev_perf{'oerr_'.$line} < $nerr)) {
 			$ndiff=$nerr;
@@ -1295,7 +1284,6 @@ if (defined($opt_perfdata)) {
                         $output_data_end .= "phy drv(".$pdrv_status{$line}{phydrv_id}.") $nerr other errors";
                 }
 	}
-	print "\n" if $DEBUG;
     }
 }
 

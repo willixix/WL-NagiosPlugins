@@ -515,7 +515,7 @@ sub set_oids {
     );   
 
     %PHYDRV_CODES = (
-            1 => ['other', 'other/unknown error', 'UNKNOWN'],   # unknown, maybe this should be critical in nagios
+            1 => ['other', 'other unknown error', 'UNKNOWN'],   # maybe this should be critical in nagios?
             2 => ['okay', 'okay', 'OK'],
             3 => ['failure', 'failure', 'CRITICAL'], 
             4 => ['warning', 'warning on predictive failure', 'WARNING'],  # predictive failure
@@ -531,7 +531,7 @@ sub set_oids {
 
     %LOGDRV_CODES = ( 
         0 => ['offline', 'volume is offline', 'NONE' ],
-        1 => ['degraded', 'parially degraded', 'CRITICAL' ],
+        1 => ['degraded', 'partially degraded', 'WARNING' ],
         2 => ['degraded', 'fully degraded', 'CRITICAL' ],
         3 => ['optimal', 'functioning properly', 'OK' ]
     );
@@ -566,6 +566,7 @@ sub set_oids {
   }
 }
 
+# get descriptive text for type of error from config arrays
 sub code_to_description {
     my($CODES, $code) = @_;
     my %CODES = %{$CODES};
@@ -853,6 +854,7 @@ sub check_options {
   }
 }
 
+# open snmp session and return handle to SNNP object
 sub create_snmp_session {
   my ($session,$error);
 
@@ -925,12 +927,13 @@ $SIG{'ALRM'} = sub {
 alarm($timeout);
 
 my $snmp_result = undef;
-my ($logdrv_data_in, $logdrv_task_status_in, $logdrv_task_completion_in, $phydrv_data_in, $phydrv_merr_in) = (undef,undef,undef,undef,undef);
-my ($phydrv_oerr_in, $phydrv_vendor_in, $phydrv_product_in, $battery_data_in) = (undef,undef,undef,undef);
+my ($logdrv_data_in, $logdrv_task_status_in, $logdrv_task_completion_in) = (undef,undef,undef);
+my ($phydrv_data_in, $phydrv_merr_in, $phydrv_oerr_in) = (undef,undef,undef);
+my ($phydrv_vendor_in, $phydrv_product_in, $battery_data_in) = (undef,undef,undef);
 
 $session = create_snmp_session();
 
-# fetch snmp data, first optional readfail & writefail values - SASRAID MIB does not have this
+# fetch snmp data, first optional readfail & writefail values for megaraid and good/bad drives count for sasraid
 if ($cardtype eq 'megaraid' && defined($opt_drverrors)) {
         $debug_time{snmpretrieve_readwritefailoids}=time() if $opt_debugtime;
         $snmp_result=$session->get_request(-Varbindlist => [ $readfail_oid, $writefail_oid, $adpt_readfail_oid, $adpt_writefail_oid ]);
@@ -944,7 +947,7 @@ if ($cardtype eq 'sasraid') {
         $error.="could not retrieve snmp data OIDs" if !$snmp_result;
 }
 
-# 2nd are logical disk drive status
+# check status of logical disk drive status - this applies to all card types
 $debug_time{snmpgettable_logdrvstatus}=time() if $opt_debugtime;
 $logdrv_data_in = $session->get_table(-baseoid => $logdrv_status_tableoid) if !$error;
 $debug_time{snmpgettable_logdrvstatus}=time()-$debug_time{snmpgettable_logdrvstatus} if $opt_debugtime;
@@ -954,13 +957,13 @@ if ($cardtype ne 'mptfusion') {
         $error.= "could not retrieve logdrv_status snmp table $logdrv_status_tableoid" if !$logdrv_data_in && !$error;
 }
 
-# 3rd are physical disk drive status
+# get physical disk drive status - all card types
 $debug_time{snmpgettable_phydrvstatus}=time() if $opt_debugtime;
 $phydrv_data_in = $session->get_table(-baseoid => $phydrv_status_tableoid) if !$error;
 $debug_time{snmpgettable_phydrvstatus}=time()-$debug_time{snmpgettable_phydrvstatus} if $opt_debugtime;
 $error.= "could not retrieve phydrv_status snmp table $phydrv_status_tableoid" if !$phydrv_data_in && !$error;
 
-# Drive models
+# get drive models (supported types when -i option is used)
 if (defined($opt_extrainfo)) {
     if (defined($phydrv_product_tableoid) && $phydrv_product_tableoid) {
         $debug_time{snmpgettable_phydrvproduct}=time() if $opt_debugtime;
@@ -976,23 +979,23 @@ if (defined($opt_extrainfo)) {
     }
 }
 
-# Logical drive task
+# logical drive task (adaptec card has this)
 if (defined($opt_extrainfo)) {
     if (defined($logdrv_task_status_tableoid) && $logdrv_task_status_tableoid) {
-  $debug_time{snmpgettable_logdrvtaskstatus}=time() if $opt_debugtime;
-  $logdrv_task_status_in = $session->get_table(-baseoid => $logdrv_task_status_tableoid) if !$error;
-  $debug_time{snmpgettable_logdrvtaskstatus}=time()-$debug_time{snmpgettable_logdrvtaskstatus} if $opt_debugtime;
-  $error.= "could not retrieve logdrv_task_status snmp table $logdrv_task_status_tableoid" if !$logdrv_task_status_in && !$error;
+        $debug_time{snmpgettable_logdrvtaskstatus}=time() if $opt_debugtime;
+        $logdrv_task_status_in = $session->get_table(-baseoid => $logdrv_task_status_tableoid) if !$error;
+        $debug_time{snmpgettable_logdrvtaskstatus}=time()-$debug_time{snmpgettable_logdrvtaskstatus} if $opt_debugtime;
+        $error.= "could not retrieve logdrv_task_status snmp table $logdrv_task_status_tableoid" if !supported $logdrv_task_status_in && !$error;
     }
     if(defined($logdrv_task_completion_tableoid) && $logdrv_task_completion_tableoid) {
-  $debug_time{snmpgettable_logdrvtaskcompletion}=time() if $opt_debugtime;
-  $logdrv_task_completion_in = $session->get_table(-baseoid => $logdrv_task_completion_tableoid) if !$error;
-  $debug_time{snmpgettable_logdrvtaskcompletion}=time()-$debug_time{snmpgettable_logdrvtaskcompletion} if $opt_debugtime;
-  $error.= "could not retrieve logdrv_task_completion snmp table $logdrv_task_completion_tableoid" if !$logdrv_task_completion_in && !$error;
+        $debug_time{snmpgettable_logdrvtaskcompletion}=time() if $opt_debugtime;
+        $logdrv_task_completion_in = $session->get_table(-baseoid => $logdrv_task_completion_tableoid) if !$error;
+        $debug_time{snmpgettable_logdrvtaskcompletion}=time()-$debug_time{snmpgettable_logdrvtaskcompletion} if $opt_debugtime;
+        $error.= "could not retrieve logdrv_task_completion snmp table $logdrv_task_completion_tableoid" if !$logdrv_task_completion_in && !$error;
     }
 }
 
-# 4th are battery checks (only for sasraid and adaptec right now)
+# battery checks (only for sasraid and adaptec right now)
 if (defined($opt_battery) && defined($battery_status_tableoid) && $battery_status_tableoid) {
         $debug_time{snmpgettable_batterystatus}=time() if $opt_debugtime;
         $battery_data_in = $session->get_table(-baseoid => $battery_status_tableoid) if !$error;
@@ -1000,7 +1003,7 @@ if (defined($opt_battery) && defined($battery_status_tableoid) && $battery_statu
         $error.= "could not retrieve snmp table $battery_status_tableoid" if !$battery_data_in && !$error;
 }
 
-# last are medium and "other" errors reported for physical drives
+# last are medium and "other" errors reported for physical drives (only old megaraid has this)
 if (defined($opt_drverrors) && defined($opt_perfdata) && !defined($opt_optimize) &&
     (defined($phydrv_mediumerrors_tableoid) || defined($phydrv_othererrors_tableoid))) {
         if (defined($phydrv_mediumerrors_tableoid) && $phydrv_mediumerrors_tableoid) {
@@ -1118,7 +1121,7 @@ foreach $line (Net::SNMP::oid_lex_sort(keys(%{$phydrv_data_in}))) {
                 }
         }
         $lun_id = 0 if !defined($lun_id);
-        verb("   suffix = $line, controller = $controller_id, channel = $channel_id, drive = $drive_id, lun = $lun_id");
+        verb("| suffix = $line, controller = $controller_id, channel = $channel_id, drive = $drive_id, lun = $lun_id");
         $h_controllers{$controller_id}=1;
         $h_channels{$controller_id.'_'.$channel_id}=1;
         if (!$pdrv_status{$line}) {
@@ -1144,7 +1147,7 @@ foreach $line (Net::SNMP::oid_lex_sort(keys(%{$phydrv_data_in}))) {
 my $num_controllers = scalar(keys %h_controllers);
 my $num_channels = scalar(keys %h_channels);
 
-# This brings in the drive vendor/product information
+# this brings in the drive vendor/product information
 my $models="";
 if (defined($opt_extrainfo)) {
     foreach $line (Net::SNMP::oid_lex_sort(keys(%{$phydrv_product_in}))) {
@@ -1162,24 +1165,24 @@ if (defined($opt_extrainfo)) {
     $models = " [" . $models . "]" if $models;
 }
 
-# Logical drive task information
+# logical drive task information
 my $logdrv_task_info="";
 if (defined($opt_extrainfo)) {
     foreach $line (Net::SNMP::oid_lex_sort(keys(%{$logdrv_task_status_in}))) {
-  $code = $logdrv_task_status_in->{$line};
-    print "logdrv_task_status: $line = $code\n" if $DEBUG;
-  my $index = substr($line,length($logdrv_task_status_tableoid)+1);
-  my $task_completion = $logdrv_task_completion_in->{$logdrv_task_completion_tableoid.".".$index};
-    print "logdrv_task_completion: $line = $task_completion\n" if ($task_completion and $DEBUG);
+        $code = $logdrv_task_status_in->{$line};
+        verb("logdrv_task_status: $line = $code");
+        my $index = substr($line,length($logdrv_task_status_tableoid)+1);
+        my $task_completion = $logdrv_task_completion_in->{$logdrv_task_completion_tableoid.".".$index};
+        verb("logdrv_task_completion: $line = $task_completion") if ($task_completion);
         # Go next if no tasks running for the current logical drive
         next if ($task_completion == 100);
-  $logdrv_task_info .= ", " if ($logdrv_task_info);
+        $logdrv_task_info .= ", " if ($logdrv_task_info);
         $logdrv_task_info .= "LD $index - ".code_to_description(\%LOGDRV_TASK_CODES, $code)." - ".$task_completion."%";
     }
     $logdrv_task_info = " [" . $logdrv_task_info. "]" if $logdrv_task_info;
 }
 
-# Now we can do additional SNMP queries
+# now we can do additional SNMP queries
 if (defined($opt_optimize) && scalar(@extra_oids)>0) {
     $error="";
     $debug_time{snmpretrieve_extraoids}=time() if $opt_debugtime;
@@ -1197,7 +1200,7 @@ if (defined($opt_optimize) && scalar(@extra_oids)>0) {
     }
 }
 
-# 2nd loop as we now can find what physical id to use
+# second loop as we now can find what physical id to use
 my $phd_nagios_status = $nagios_status;
 foreach $line (Net::SNMP::oid_lex_sort(keys(%{$phydrv_data_in}))) {
         $line = substr($line,length($phydrv_status_tableoid)+1);
@@ -1229,13 +1232,14 @@ foreach $line (Net::SNMP::oid_lex_sort(keys(%{$phydrv_data_in}))) {
                         $output_data .= "phy drv($phydrv_id) ".$PHYDRV_CODES{$code}[1];
                         $phd_nagios_status = $PHYDRV_CODES{$code}[2] if $phd_nagios_status ne 'CRITICAL';
                         # optionally check rate of rebuild
-                        if ($PHYDRV_CODES{$code}[0] eq 'rebuild' && defined($opt_extrainfo)) {
+                        if ($PHYDRV_CODES{$code}[0] eq 'rebuild' && defined($opt_extrainfo) && 
+                        defined($phydrv_rebuildstats_tableoid)) {
                                 my $eoid = $phydrv_rebuildstats_tableoid.'.'.$line;
                                 if (!defined($opt_optimize)) {
                                           $debug_time{'snmpretrieve_rebuild_'.$phydrv_id}=time() if $opt_debugtime;
                                           $snmp_result=$session->get_request(-Varbindlist => [ $eoid ]);
                                           $debug_time{'snmpretrieve_rebuild_'.$phydrv_id}=time()-$debug_time{'snmpretrieve_rebuild_'.$phydrv_id} if $opt_debugtime;
-                                        if (!$snmp_result) {
+                                          if (!$snmp_result) {
                                                 $error=sprintf("could not retrieve OID $eoid: %s\n", $session->error());
                                                 $session->close;
                                                 print_output('UNKNOWN',$error);
@@ -1267,7 +1271,7 @@ if (defined($opt_battery)) {
                 $output_data.= ", " if $output_data;
                 $output_data .= "battery status($battery_id) ".$BATTERY_CODES{$code}[1];
                 $nagios_status = $BATTERY_CODES{$code}[2] if $nagios_status ne "CRITICAL";
-               }
+        }
     }
 }
 
@@ -1313,17 +1317,17 @@ if (defined($opt_perfdata)) {
     foreach $line (keys %pdrv_status) {
         # first process medium errors
         if (defined($phydrv_mediumerrors_tableoid)) {
-          $nerr = $phydrv_merr_in->{$phydrv_mediumerrors_tableoid.'.'.$line};
-          verb("phydrv_mediumerr: $phydrv_mediumerrors_tableoid.$line = $nerr");
+                $nerr = $phydrv_merr_in->{$phydrv_mediumerrors_tableoid.'.'.$line};
+                verb("phydrv_mediumerr: $phydrv_mediumerrors_tableoid.$line = $nerr");
         }
-        if ($pdrv_status{$line}{status_str} ne 'nondisk' && ($cardtype ne 'sasraid' || $cardtype ne 'mptfusion' || $pdrv_status{$line}{status}>0)) {
+        if ($pdrv_status{$line}{status_str} ne 'nondisk' && ($cardtype ne 'sasraid' || $cardtype ne 'mptfusion' ||     $pdrv_status{$line}{status}>0)) {
                 verb(" | suffix = $line, phydrv_id = ".$pdrv_status{$line}{phydrv_id});
                 $curr_perf{'merr_'.$line}=$nerr;
                 if ($nerr!=0 && (!defined($prev_perf{'merr_'.$line}) || $prev_perf{'merr_'.$line} < $nerr)) {
                         $ndiff=$nerr;
                         $ndiff-=$prev_perf{'merr_'.$line} if defined($prev_perf{'merr_'.$line});
                         $output_data .= ", " if $output_data;
-                       $output_data .= "phy drv(".$pdrv_status{$line}{phydrv_id}.") +$ndiff medium errors";
+                        $output_data .= "phy drv(".$pdrv_status{$line}{phydrv_id}.") +$ndiff medium errors";
                         $phd_nagios_status = 'WARNING' if $phd_nagios_status eq 'OK';
                 }
                 if ($nerr!=0) {
@@ -1335,8 +1339,8 @@ if (defined($opt_perfdata)) {
         # now process other errors 
         $nerr = 0;
         if (defined($phydrv_othererrors_tableoid)) {
-          $nerr = $phydrv_oerr_in->{$phydrv_othererrors_tableoid.'.'.$line};
-          verb("phydrv_othererr: $phydrv_othererrors_tableoid.$line = $nerr");
+                $nerr = $phydrv_oerr_in->{$phydrv_othererrors_tableoid.'.'.$line};
+                verb("phydrv_othererr: $phydrv_othererrors_tableoid.$line = $nerr");
         }
         if ($pdrv_status{$line}{status_str} ne 'nondisk' && ($cardtype ne 'sasraid' ||$pdrv_status{$line}{status}>0)) {
                 verb(" | suffix = $line, phydrv_id = ".$pdrv_status{$line}{phydrv_id});

@@ -301,6 +301,8 @@ sub print_output;
 # These variables are set by set_oids() function based on $cardtype
 my(
     $logdrv_status_tableoid,
+    $logdrv_task_status_tableoid,
+    $logdrv_task_completion_tableoid,
     $phydrv_status_tableoid,
     $phydrv_mediumerrors_tableoid,
     $phydrv_othererrors_tableoid,
@@ -319,6 +321,7 @@ my(
     %controller_status_oids,
     %controller_status_codes,
     %LOGDRV_CODES,
+    %LOGDRV_TASK_CODES,
     %PHYDRV_CODES,
     %BATTERY_CODES
 );
@@ -418,12 +421,14 @@ sub set_oids {
     );
   }
   elsif ($cardtype eq 'adaptec') {
-    $baseoid = "1.3.6.1.4.1.795" if $baseoid eq "";              # Adaptec base oid
-    $logdrv_status_tableoid = $baseoid . ".14.1.1000.1.1.12";    # adaptec logical drives status
-    $phydrv_status_tableoid = $baseoid . ".14.1.400.1.1.11";     # adaptec physical drive status
-    $battery_status_tableoid = $baseoid . ".14.1.201.1.1.14";    # adaptec battery status
-    $phydrv_vendor_tableoid = $baseoid . ".14.1.400.1.1.6";      # adaptec drive vendor
-    $phydrv_product_tableoid = $baseoid . ".14.1.400.1.1.7";     # adaptec drive model
+    $baseoid = "1.3.6.1.4.1.795" if $baseoid eq "";                      # Adaptec base oid
+    $logdrv_status_tableoid = $baseoid . ".14.1.1000.1.1.12";            # adaptec logical drives status
+    $logdrv_task_status_tableoid = $baseoid . ".14.1.1000.1.1.6";        # adaptec logical drive task status
+    $logdrv_task_completion_tableoid = $baseoid . ".14.1.1000.1.1.7";    # adaptec logical drive task completion
+    $phydrv_status_tableoid = $baseoid . ".14.1.400.1.1.11";             # adaptec physical drive status
+    $battery_status_tableoid = $baseoid . ".14.1.201.1.1.14";            # adaptec battery status
+    $phydrv_vendor_tableoid = $baseoid . ".14.1.400.1.1.6";              # adaptec drive vendor
+    $phydrv_product_tableoid = $baseoid . ".14.1.400.1.1.7";             # adaptec drive model
 
     %LOGDRV_CODES = (
             1 => ['unknown', 'array state is unknown', 'UNKNOWN'],
@@ -433,6 +438,24 @@ sub set_oids {
             5 => ['degraded', 'array is impacted', 'CRITICAL'],
             6 => ['degraded', 'array is degraded', 'CRITICAL'],
             7 => ['failed', 'array failed', 'CRITICAL'],
+            8 => ['compacted', 'array is compacted', 'UNKNOWN'],         # Does anybody know what "compacted" means?
+    );
+
+    ## Status codes for logical drives - these code are for ADAPTEC
+    ## 1st and 3d columns are not used so far
+    %LOGDRV_TASK_CODES = (
+            1  => ['unknown', 'array task status is unknown', 'UNKNOWN'],
+            2  => ['other', 'other', 'UNKNOWN'],
+            3  => ['noTaskActive', 'noTaskActive', 'OK'],
+            4  => ['reconstruct', 'reconstruct', 'WARNING'],
+            5  => ['zeroInitialize', 'zeroInitialize', 'WARNING'],
+            6  => ['verify', 'verify', 'WARNING'],
+            7  => ['verifyWithFix', 'verifyWithFix', 'WARNING'],
+            8  => ['modification', 'modification', 'WARNING'],
+            9  => ['copyback', 'copyback', 'WARNING'],
+            10 => ['compaction', 'compaction', 'WARNING'],
+            11 => ['expansion', 'expansion', 'WARNING'],
+            12 => ['snapshotBackup', 'snapshotBackup', 'WARNING'],
     );
 
     %PHYDRV_CODES = (
@@ -541,6 +564,17 @@ sub set_oids {
   else {
     usage("Specified card type $cardtype is not supported\n");
   }
+}
+
+sub code_to_description {
+    my($CODES, $code) = @_;
+    my %CODES = %{$CODES};
+    if (defined($CODES{$code})) {
+        return $CODES{$code}[1];
+    }
+    else {
+        return "unknown code $code";
+    }
 }
 
 # verbose output for debugging (updated 06/06/12 to write to debug file if specified)
@@ -891,7 +925,7 @@ $SIG{'ALRM'} = sub {
 alarm($timeout);
 
 my $snmp_result = undef;
-my ($logdrv_data_in, $phydrv_data_in, $phydrv_merr_in) = (undef,undef,undef);
+my ($logdrv_data_in, $logdrv_task_status_in, $logdrv_task_completion_in, $phydrv_data_in, $phydrv_merr_in) = (undef,undef,undef,undef,undef);
 my ($phydrv_oerr_in, $phydrv_vendor_in, $phydrv_product_in, $battery_data_in) = (undef,undef,undef,undef);
 
 $session = create_snmp_session();
@@ -942,7 +976,23 @@ if (defined($opt_extrainfo)) {
     }
 }
 
-# 4th are battery checks (only for sasraid right now)
+# Logical drive task
+if (defined($opt_extrainfo)) {
+    if (defined($logdrv_task_status_tableoid) && $logdrv_task_status_tableoid) {
+  $debug_time{snmpgettable_logdrvtaskstatus}=time() if $opt_debugtime;
+  $logdrv_task_status_in = $session->get_table(-baseoid => $logdrv_task_status_tableoid) if !$error;
+  $debug_time{snmpgettable_logdrvtaskstatus}=time()-$debug_time{snmpgettable_logdrvtaskstatus} if $opt_debugtime;
+  $error.= "could not retrieve logdrv_task_status snmp table $logdrv_task_status_tableoid" if !$logdrv_task_status_in && !$error;
+    }
+    if(defined($logdrv_task_completion_tableoid) && $logdrv_task_completion_tableoid) {
+  $debug_time{snmpgettable_logdrvtaskcompletion}=time() if $opt_debugtime;
+  $logdrv_task_completion_in = $session->get_table(-baseoid => $logdrv_task_completion_tableoid) if !$error;
+  $debug_time{snmpgettable_logdrvtaskcompletion}=time()-$debug_time{snmpgettable_logdrvtaskcompletion} if $opt_debugtime;
+  $error.= "could not retrieve logdrv_task_completion snmp table $logdrv_task_completion_tableoid" if !$logdrv_task_completion_in && !$error;
+    }
+}
+
+# 4th are battery checks (only for sasraid and adaptec right now)
 if (defined($opt_battery) && defined($battery_status_tableoid) && $battery_status_tableoid) {
         $debug_time{snmpgettable_batterystatus}=time() if $opt_debugtime;
         $battery_data_in = $session->get_table(-baseoid => $battery_status_tableoid) if !$error;
@@ -1034,7 +1084,7 @@ if ($cardtype eq 'sasraid') {
 }
 
 my ($line, $code, $foo) = (undef,undef,undef);
-my ($phydrv_id, $logdrv_id, $battery_id, $controller_id, $channel_id, $drive_id, $lun_id) =
+my ($phydrv_id, $logdrv_id, $task_status, $battery_id, $controller_id, $channel_id, $drive_id, $lun_id) =
    (undef,undef,undef,undef,undef,undef,undef);
 my %pdrv_status=();
 my %h_controllers=();
@@ -1110,6 +1160,23 @@ if (defined($opt_extrainfo)) {
         $models .= ($vendor." "||"").$code;
     }
     $models = " [" . $models . "]" if $models;
+}
+
+# Logical drive task information
+my $logdrv_task_info="";
+if (defined($opt_extrainfo)) {
+    foreach $line (Net::SNMP::oid_lex_sort(keys(%{$logdrv_task_status_in}))) {
+  $code = $logdrv_task_status_in->{$line};
+    print "logdrv_task_status: $line = $code\n" if $DEBUG;
+  my $index = substr($line,length($logdrv_task_status_tableoid)+1);
+  my $task_completion = $logdrv_task_completion_in->{$logdrv_task_completion_tableoid.".".$index};
+    print "logdrv_task_completion: $line = $task_completion\n" if ($task_completion and $DEBUG);
+        # Go next if no tasks running for the current logical drive
+        next if ($task_completion == 100);
+  $logdrv_task_info .= ", " if ($logdrv_task_info);
+        $logdrv_task_info .= "LD $index - ".code_to_description(\%LOGDRV_TASK_CODES, $code)." - ".$task_completion."%";
+    }
+    $logdrv_task_info = " [" . $logdrv_task_info. "]" if $logdrv_task_info;
 }
 
 # Now we can do additional SNMP queries
@@ -1299,7 +1366,8 @@ $debug_time{plugin_totaltime}=$debug_time{plugin_finish}-$debug_time{plugin_star
 # output text results
 $output_data.= " - " if $output_data;
 $output_data.= sprintf("%d logical disks, %d physical drives, %d controllers found", scalar(keys %{$logdrv_data_in}), $phydrv_total, $num_controllers);
-$output_data.=$models if defined($opt_extrainfo);
+$output_data.=",".$logdrv_task_info if defined($opt_extrainfo) && $logdrv_task_info;
+$output_data.=",".$models if defined($opt_extrainfo);
 $output_data.= sprintf(", %d batteries found", scalar(keys %{$battery_data_in})) if defined($opt_battery);
 $output_data.= " - ". $output_data_end if $output_data_end;
 

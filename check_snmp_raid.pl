@@ -985,7 +985,7 @@ if (defined($opt_extrainfo)) {
         $debug_time{snmpgettable_logdrvtaskstatus}=time() if $opt_debugtime;
         $logdrv_task_status_in = $session->get_table(-baseoid => $logdrv_task_status_tableoid) if !$error;
         $debug_time{snmpgettable_logdrvtaskstatus}=time()-$debug_time{snmpgettable_logdrvtaskstatus} if $opt_debugtime;
-        $error.= "could not retrieve logdrv_task_status snmp table $logdrv_task_status_tableoid" if !supported $logdrv_task_status_in && !$error;
+        $error.= "could not retrieve logdrv_task_status snmp table $logdrv_task_status_tableoid" if !$logdrv_task_status_in && !$error;
     }
     if(defined($logdrv_task_completion_tableoid) && $logdrv_task_completion_tableoid) {
         $debug_time{snmpgettable_logdrvtaskcompletion}=time() if $opt_debugtime;

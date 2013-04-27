@@ -206,13 +206,14 @@
 #        b. Added support for battery status and drive vendor and model information for Adaptec cards,
 #           this is contributed by Stanislav German-Evtushenko (giner on github)
 #           based on http://www.circitor.fr/Mibs/Html/ADAPTEC-UNIVERSAL-STORAGE-MIB.php#BatteryStatus
-#        c. Fix debubbing. Old DEBUG printfs are replaced with calls to verb() function
+#        c. Fix debugging. Old DEBUG printfs are replaced with calls to verb() function
 #              
 # ========================== LIST OF CONTRIBUTORS =============================
 #
 # The following individuals have contributed code, patches, bug fixes and ideas to
 # this plugin (listed in last-name alphabetical order):
 #
+#    Michael Cook
 #    Stanislav German-Evtushenko
 #    Joe Gooch
 #    William Leibzon
@@ -287,7 +288,7 @@ my $opt_extrainfo=      undef;  # -i option that gives more info on drives and t
 my $opt_battery=        undef;  # -b option to check if RAID card batteries (BBU) are working
 
 # Other global variables
-my $nagios_status=      "OK";   # nagios return status code, starts with "OK"# nagios return status code, starts with "OK"
+my $nagios_status=       "OK";  # nagios return status code, starts with "OK"
 my $error=                 "";  # string that gets set if error is found
 my %curr_perf=             ();  # performance vars
 my %prev_perf=             ();  # previous performance data feed to plugin with -P
@@ -329,7 +330,7 @@ my(
 # Function to set values for OIDs that are used
 sub set_oids {
   if ($cardtype eq 'megaraid') {
-    $baseoid = "1.3.6.1.4.1.3582" if $baseoid eq "";                   # megaraid standard base oid
+    $baseoid = "1.3.6.1.4.1.3582" if $baseoid eq "";             # megaraid standard base oid
     $logdrv_status_tableoid = $baseoid . ".1.1.2.1.3";           # megaraid logical
     $phydrv_status_tableoid = $baseoid . ".1.1.3.1.4";           # megaraid physical
     $phydrv_mediumerrors_tableoid = $baseoid . ".1.1.3.1.12";    # megaraid medium errors
@@ -1021,7 +1022,7 @@ if (defined($opt_drverrors) && defined($opt_perfdata) && !defined($opt_optimize)
 }
 
 if ($error) {
-        verb("snmp error: "+$session->error());
+        verb("snmp error: ". $session->error());
         $session->close;
         print_output("UNKNOWN",$error);
         exit $ERRORS{'UNKNOWN'};

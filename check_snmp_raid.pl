@@ -255,6 +255,7 @@ my $timeout=$TIMEOUT;      # default is nagios exported $TIMEOUT variable
 my $DEBUG = 0;             # to print debug messages, set this to 1
 my $MAX_OUTPUTSTR = 2048;  # maximum number of characters in otput
 my $alert = "CRITICAL";    # default alert type if error condition is found
+my $label = "Raid";	    # Label to start output with
 
 # SNMP authentication options and their derfault values
 my $o_port=               161;  # SNMP port
@@ -286,6 +287,7 @@ my $opt_drverrors=      undef;  # -e option. megarad only. checks for new medium
 my $opt_optimize=       undef;  # -o experimental option to optimize SNMP queries for faster performance
 my $opt_extrainfo=      undef;  # -i option that gives more info on drives and their state at the expense of more queries
 my $opt_battery=        undef;  # -b option to check if RAID card batteries (BBU) are working
+my $opt_label=		 undef;  # text to start plugin output with which overrides default "Raid"
 
 # Other global variables
 my $nagios_status=       "OK";  # nagios return status code, starts with "OK"
@@ -315,9 +317,6 @@ my %cardtype_map = (
   'eti' => 'ultrastor',
   'synology' => 'synology',
 );
-
-# Declare any functions defined at the end
-sub print_output;
 
 # These variables are set by set_oids() function based on cardtype
 #   only $logdrv_status_tableoid, $phydrv_status_tableoid, %LOGDRV_CODES, %PHYDRV_CODES are required
@@ -821,6 +820,38 @@ sub process_perf {
  return %pdh;
 }
 
+# print output status and performance data and exit
+sub print_and_exit {
+   my ($out_status,$out_str)=@_;
+
+   print "$label $out_status";
+
+   # max number of characters is $MAX_OUTPUTSTR defined at the top, if its set it to undef this is not checked
+   if (defined($out_str) && $out_str) {
+        $out_str = substr($out_str,0,$MAX_OUTPUTSTR) if defined($MAX_OUTPUTSTR) && length($out_str) > $MAX_OUTPUTSTR;
+        print " - $out_str";
+   }
+
+   if (defined($opt_perfdata)) {
+        print " |";
+        # below is done to force notification on alert condition when you have notifications after 2 or more alerts
+        if (scalar(keys %curr_perf)!=0 && (!defined($opt_prevstate) || scalar(keys %prev_perf)==0 || (defined($prev_state[0]) && $prev_state[0] ne 'OK' && (!defined($prev_state[1]) || $prev_state[1] eq 'HARD')))) {
+                print " ". $_  ."=". $curr_perf{$_} foreach keys %curr_perf;
+        }
+        else {
+                print " ". $_  ."=". $prev_perf{$_} foreach keys %prev_perf;
+                print " total_merr=".$curr_perf{'total_merr'} if defined($curr_perf{'total_merr'});
+                print " total_merr=".$curr_perf{'total_oerr'} if defined($curr_perf{'total_oerr'});
+        }
+        if ($opt_debugtime) {
+                print " time_".$_ ."=". $debug_time{$_} foreach keys %debug_time;
+        }
+   }
+   print "\n";
+   
+   exit $ERRORS{$out_status};
+}
+
 # Function to parse command line arguments
 sub check_options {
   Getopt::Long::Configure('bundling', 'no_ignore_case');
@@ -828,6 +859,7 @@ sub check_options {
         'h'     => \$o_help,            'help'              => \$o_help,
         'V'     => \$o_version,         'version'           => \$o_version,
         't:s'   => \$o_timeout,         'timeout:s'         => \$o_timeout,
+        'A:s'   => \$opt_label,         'label:s'           => \$opt_label,
         'O:s'   => \$opt_baseoid,       'oid:s'             => \$opt_baseoid,
         'a:s'   => \$opt_alert,         'alert:s'           => \$opt_alert,
         'v:s'   => \$opt_debug,         'verbose:s'         => \$opt_debug,
@@ -936,6 +968,9 @@ sub check_options {
         }
   }
 
+  # set label
+  $label = $opt_label if defined($opt_label) && $opt_label;
+  
   # previos performance data string and previous state
   %prev_perf=process_perf($opt_perfdata) if $opt_perfdata;
   @prev_state=split(',',$opt_prevstate) if $opt_prevstate;
@@ -1019,8 +1054,7 @@ check_options();
 # set the timeout
 $SIG{'ALRM'} = sub {
         $session->close if defined($session);
-        print_output("UNKNOWN","snmp query timed out");
-        exit $ERRORS{"UNKNOWN"};
+        print_and_exit("UNKNOWN","snmp query timed out");
 };
 alarm($timeout);
 
@@ -1121,8 +1155,7 @@ if (defined($opt_drverrors) && defined($opt_perfdata) && !defined($opt_optimize)
 if ($error) {
         verb("snmp error: ". $session->error());
         $session->close;
-        print_output("UNKNOWN",$error);
-        exit $ERRORS{'UNKNOWN'};
+        print_and_exit("UNKNOWN",$error);
 }
 
 #--------------------------------------------------#
@@ -1226,8 +1259,7 @@ foreach $line (Net::SNMP::oid_lex_sort(keys(%{$phydrv_data_in}))) {
                 $pdrv_status{$line} = { 'status' => $code, 'controller' => $controller_id, 'channel' => $channel_id, 'drive' => $drive_id, 'lun' => $lun_id };
         }
         else {
-                print_output("UNKNOWN","processing error, physical drive $line found in SNMP result 2nd time");
-                exit $ERRORS{'UNKNOWN'};
+                print_and_exit("UNKNOWN","processing error, physical drive $line found in SNMP result 2nd time");
         }
         # find which additional OIDs should be queried if snmp query optimization is enabled
         if (defined($opt_optimize)) {
@@ -1289,8 +1321,7 @@ if (defined($opt_optimize) && scalar(@extra_oids)>0) {
     if (!$snmp_result) {
         $error.=sprintf("could not retrieve extra data snmp OIDs: %s\n", $session->error());
         $session->close;
-        print_output('UNKNOWN',$error);
-        exit $ERRORS{'UNKNOWN'};
+        print_and_exit('UNKNOWN',$error);
     }
     if (defined($opt_drverrors)) {
         $phydrv_merr_in = $snmp_result;
@@ -1340,8 +1371,7 @@ foreach $line (Net::SNMP::oid_lex_sort(keys(%{$phydrv_data_in}))) {
                                           if (!$snmp_result) {
                                                 $error=sprintf("could not retrieve OID $eoid: %s\n", $session->error());
                                                 $session->close;
-                                                print_output('UNKNOWN',$error);
-                                                exit $ERRORS{'UNKNOWN'};
+                                                print_and_exit('UNKNOWN',$error);
                                           }
                                 }
                                 $output_data.= ' ('.$snmp_result->{$eoid}.')' if defined($snmp_result->{$eoid});
@@ -1455,8 +1485,10 @@ if (defined($opt_perfdata)) {
                         $output_data_end .= ", " if $output_data_end;
                         $output_data_end .= "phy drv(".$pdrv_status{$line}{phydrv_id}.") $nerr other errors";
                 }
-        }
+        }       
     }
+    $curr_perf{'total_merr'}=$total_merr if defined($total_merr);
+    $curr_perf{'total_oerr'}=$total_oerr if defined($total_oerr);
 }
 
 # close SNMP session (before it was done a lot earlier)
@@ -1475,38 +1507,8 @@ $output_data.= " - ". $output_data_end if $output_data_end;
 
 # combine status from checking physical and logical drives and print everything
 $nagios_status = $phd_nagios_status if $ERRORS{$nagios_status}<$ERRORS{$phd_nagios_status};
-print_output($nagios_status,$output_data);
+print_and_exit($nagios_status,$output_data);
+# should never reach here
 exit $ERRORS{$nagios_status};
 
 ################## END OF MAIN CODE ######################################
-
-# print output and performance data
-sub print_output {
-   my ($out_status,$out_str)=@_;
-
-   print "Raid $out_status";
-
-   # max number of characters is $MAX_OUTPUTSTR defined at the top, if its set it to undef this is not checked
-   if (defined($out_str) && $out_str) {
-        $out_str = substr($out_str,0,$MAX_OUTPUTSTR) if defined($MAX_OUTPUTSTR) && length($out_str) > $MAX_OUTPUTSTR;
-        print " - $out_str";
-   }
-
-   if (defined($opt_perfdata)) {
-        print " |";
-        # below is done to force notification on alert condition when you have notifications after 2 or more alerts
-        if (scalar(keys %curr_perf)!=0 && (!defined($opt_prevstate) || scalar(keys %prev_perf)==0 || (defined($prev_state[0]) && $prev_state[0] ne 'OK' && (!defined($prev_state[1]) || $prev_state[1] eq 'HARD')))) {
-                print " ". $_  ."=". $curr_perf{$_} foreach keys %curr_perf;
-        }
-        else {
-                print " ". $_  ."=". $prev_perf{$_} foreach keys %prev_perf;
-        }
-        print " total_merr=".$total_merr if defined($total_merr);
-        print " total_oerr=".$total_oerr if defined($total_oerr);
-        if ($opt_debugtime) {
-                print " time_".$_ ."=". $debug_time{$_} foreach keys %debug_time;
-        }
-   }
-
-   print "\n";
-}

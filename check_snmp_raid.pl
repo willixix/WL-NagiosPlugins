@@ -1177,24 +1177,25 @@ if ($DEBUG && $cardtype eq 'sasraid') {
         verb("phydrv_badcount_oid: ".$phydrv_badcount_oid." = ". $snmp_result->{$phydrv_badcount_oid}) if exists($snmp_result->{$phydrv_badcount_oid});
         verb("phydrv_bad2count_oid: ".$phydrv_bad2count_oid." = ". $snmp_result->{$phydrv_bad2count_oid}) if exists($snmp_result->{$phydrv_bad2count_oid});
 }
-if (defined($opt_drverrors) && $cardtype ne 'sasraid' && $cardtype ne 'mptfusion') {
+if (defined($opt_drverrors) && $cardtype eq 'megaraid') {
     if (exists($snmp_result->{$adpt_readfail_oid}) && $snmp_result->{$adpt_readfail_oid}>0) {
-        $output_data=$snmp_result->{$adpt_readfail_oid}." adapter read failures";
+        $output_data.= ", " if $output_data;
+        $output_data.=$snmp_result->{$adpt_readfail_oid}." adapter read failures";
         $nagios_status=$alert;
     }
     if (exists($snmp_result->{$adpt_writefail_oid}) && $snmp_result->{$adpt_writefail_oid}>0) {
         $output_data.= ", " if $output_data;
-        $output_data=$snmp_result->{$adpt_writefail_oid}." adapter write failures";
+        $output_data.=$snmp_result->{$adpt_writefail_oid}." adapter write failures";
         $nagios_status=$alert;
     }
     if (exists($snmp_result->{$writefail_oid}) && $snmp_result->{$writefail_oid}>0) {
         $output_data.= ", " if $output_data;
-        $output_data=$snmp_result->{$writefail_oid}." write failures";
+        $output_data.=$snmp_result->{$writefail_oid}." write failures";
         $nagios_status=$alert;
     }
     if (exists($snmp_result->{$readfail_oid}) && $snmp_result->{$readfail_oid}>0) {
         $output_data.= ", " if $output_data;
-        $output_data=$snmp_result->{$readfail_oid}." read failures";
+        $output_data.=$snmp_result->{$readfail_oid}." read failures";
         $nagios_status=$alert;
     }
 }
@@ -1208,10 +1209,10 @@ if ($cardtype eq 'sasraid') {
             $output_data.= ", " if $output_data;
             if ($good<$opt_gooddrives) {
                 $output_data.= ", " if $output_data;
-                $output_data = "$good good drives (must have $opt_gooddrives)";
+                $output_data.= "$good good drives (must have $opt_gooddrives)";
                 $nagios_status = $alert;
             }  else {
-                $output_data = "$good good drives";
+                $output_data.= "$good good drives";
             }
         }
     }
@@ -1292,7 +1293,6 @@ if (defined($opt_extrainfo)) {
         $models .= ", " if ($models);
         $models .= ($vendor." "||"").$code;
     }
-    $models = " [" . $models . "]" if $models;
 }
 
 # logical drive task information
@@ -1309,11 +1309,15 @@ if (defined($opt_extrainfo)) {
         $logdrv_task_info .= ", " if ($logdrv_task_info);
         $logdrv_task_info .= "LD $index - ".code_to_description(\%LOGDRV_TASK_CODES, $code)." - ".$task_completion."%";
     }
-    $logdrv_task_info = " [" . $logdrv_task_info. "]" if $logdrv_task_info;
+}
+
+# additional controller status checks
+foreach (keys %controller_status_oids) {
+    push @extra_oids, $controller_status_oids{$_};
 }
 
 # now we can do additional SNMP queries
-if (defined($opt_optimize) && scalar(@extra_oids)>0) {
+if (scalar(@extra_oids)>0) {
     $error="";
     $debug_time{snmpretrieve_extraoids}=time() if $opt_debugtime;
     $snmp_result=$session->get_request(-Varbindlist => \@extra_oids);
@@ -1326,6 +1330,30 @@ if (defined($opt_optimize) && scalar(@extra_oids)>0) {
     if (defined($opt_drverrors)) {
         $phydrv_merr_in = $snmp_result;
         $phydrv_oerr_in = $snmp_result;
+    }
+}
+
+# additional controller status checks
+my $controller_status_info="";
+my $controller_nagios_status = $nagios_status;
+if (scalar(keys %controller_status_oids)>0) {
+    foreach $line (keys %controller_status_oids) {
+        $code = $snmp_result->{$controller_status_oids{$line}};
+        if (defined($code)) {
+           verb("controller_status ($line): $controller_status_oids{$line} = $code");
+           $controller_nagios_status = code_to_nagiosstatus(\%controller_status_codes, $code);
+           $controller_status_info .= "$line is ".code_to_description(\%controller_status_codes, $code);
+           if ($controller_nagios_status ne "OK") {
+                $nagios_status = code_to_nagiosstatus(\%controller_status_codes, $code, $nagios_status);
+                $output_data.= ", " if $output_data;
+                $output_data .= "$line ".code_to_description(\%controller_status_codes, $code);
+           }
+        }
+        else {
+            $error.=sprintf("expected data for %s at oid %s but its not there\n",$line,$controller_status_oids{$line});
+            $session->close;
+            print_and_exit('UNKNOWN',$error);
+        }
     }
 }
 
@@ -1499,10 +1527,12 @@ $debug_time{plugin_totaltime}=$debug_time{plugin_finish}-$debug_time{plugin_star
 
 # output text results
 $output_data.= " - " if $output_data;
-$output_data.= sprintf("%d logical disks, %d physical drives, %d controllers found", scalar(keys %{$logdrv_data_in}), $phydrv_total, $num_controllers);
-$output_data.=",".$logdrv_task_info if defined($opt_extrainfo) && $logdrv_task_info;
-$output_data.=",".$models if defined($opt_extrainfo);
-$output_data.= sprintf(", %d batteries found", scalar(keys %{$battery_data_in})) if defined($opt_battery);
+$output_data.= sprintf("%d logical disks, %d physical drives, %d controllers", scalar(keys %{$logdrv_data_in}), $phydrv_total, $num_controllers);
+$output_data.= sprintf(", %d batteries", scalar(keys %{$battery_data_in})) if defined($opt_battery);
+$output_data.= " found";
+$output_data.= $controller_status_info if $controller_status_info;
+$output_data.= ", tasks [".$logdrv_task_info."]" if defined($opt_extrainfo) && $logdrv_task_info;
+$output_data.= ", models [".$models."]" if defined($opt_extrainfo);
 $output_data.= " - ". $output_data_end if $output_data_end;
 
 # combine status from checking physical and logical drives and print everything

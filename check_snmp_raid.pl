@@ -4,12 +4,12 @@
 #
 # Program : check_snmp_raid / check_sasraid_megaraid / check_megaraid
 # Version : 2.2b1
-# Date    : Apr 30, 2013
+# Date    : Apr 28, 2013
 # Author  : William Leibzon - william@leibzon.org
 # Copyright: (C) 2006-2013 William Leibzon
 # Summary : This is a nagios plugin to monitor Raid controller cards with SNMP
 #           and report status of the physical drives and logical volumes and
-#            additional information such as battery status, disk and volume errors.
+#           additional information such as battery status, disk and volume errors.
 # Licence : GPL 3 - summary below, full text at http://www.fsf.org/licenses/gpl.txt
 # =========================== PROGRAM LICENSE ================================
 #
@@ -188,6 +188,7 @@
 #        and all the code cleanup, the number of changes is more than sub-minor and I released
 #        it as 2.0. However I later downgraded it back to 1.95 because for 2.0 release the plugin
 #        is being renamed as check_snmp_raid since it was possible to add support for Adaptec cards.
+#        * Code contributions for this release: John Gooch, William Leibzon, Robert Wikman *
 #   21. [2.1 - Nov 22, 2012] Plugin has been renamed check_snmp_raid. Essentially this is
 #        first new 2.x release (see above on first released 2.0 being downgraded back to 1.95).
 #        Release notes for this version:
@@ -200,7 +201,8 @@
 #        e. Documentation updates related to plugin renaming and many other small
 #           code updates
 #        f. Starting with 2.x the plugin is licensed under GPL 3.0 licence (was 2.0 before)
-#   22. [2.2 - Apr 30, 2013] The following are additions in this version:
+#        * Code contributions for this release: William Leibzon, Khanh Truong *
+#   22. [2.2 - May 3, 2013] The following are additions in this version:
 #        a. Added limited support for ETI UtraStor (ES1660SS and maybe others) and Synology contollers/devices
 #           - plugin now supports specifying and checking controller status OIDs for Fan, PowerSupply and similar
 #             these are all expected to have common simple ok/fail return codes
@@ -209,21 +211,19 @@
 #           this is contributed by Stanislav German-Evtushenko (giner on github)
 #           based on http://www.circitor.fr/Mibs/Html/ADAPTEC-UNIVERSAL-STORAGE-MIB.php#BatteryStatus
 #	 c. Bug fixes, code improvements & refactoring
-#	    - Possible bug - there could have been output data cut out for old megaraid when multiple drive failure occur
-#           - Fix debugging. Old DEBUG printfs are replaced with calls to verb() function
+#	    - Bug fixes. Fix for debugging. Old DEBUG printfs are replaced with calls to verb() function
 #           - code_to_description() and code_to_nagiosstatus() functions added
-#	    - %cardtype_map array added with a list of names supported for -T, this replaces set of if/elseif in check_options()
-#	    - partial rewrite of old code that decides nagios exit status for issues with logical and physical drives.
-#             I didn't want to touch this and introduce incompatible changes and bugs, but old code dates to workarounds for
-#             old scsi megaraid checks and doing manually what 3rd column of LOGDRV_CODES and PHYSDRV_CODES are for
+#	    - %cardtype_map with list of card types added replacing if/elseif in check_options
+#	    - partial rewrite exit status code for logical and physical drives. This may introduce small
+#             incompatible changes for megaraid - but old code dates workarounds for megaraid checks and
+#             doing manually what 3rd column of LOGDRV_CODES and PHYSDRV_CODES are now used for
 #	 d. New -A/--label option and changes in the nagios status output
 #	    - New -A/--label option allows to specify start of the plugin output in place of default 'Raid'
 #	    - print_output() function has been renamed print_and_exit() and now also exits with specified alert code
-#           - number of batteries is printed before model & task info instead of after
-#	    - additional controller status info is printed out whe this is checked, i.e. ', powersupply is ok"
-#	    - data collected for --extrainfo option goes last and labels 'tasks' and 'models'
-#             are added before [] bracketed text that contains models & tasks data
-#              
+#           - reordering of output: # of controllders, drives, batteries first, then new additional controller status
+#             such as 'powersupply is ok' and last model & tasks info which are now labeled as 'tasks []' before data
+#        * Code contributions for this release: Michael Cook, Stanislav German-Evtushenko, William Leibzon *
+#
 # ========================== LIST OF CONTRIBUTORS =============================
 #
 # The following individuals have contributed code, patches, bug fixes and ideas to
@@ -352,18 +352,18 @@ my $phydrv_count_oid = undef;                # used only by sasraid to verify nu
 my $phydrv_goodcount_oid = undef;            # only sasraid. number of good drives in the system. not a table
 my $phydrv_badcount_oid = undef;             # only sasraid. number of bad drives in the system. not a table
 my $phydrv_bad2count_oid = undef;            # only sasraid. number of bad drives in the system. not a table
-my $sys_temperature_oid = undef;	      # TODO: controller/system temperature
+my $sys_temperature_oid = undef;             # TODO: controller/system temperature
 my $readfail_oid = undef;                    # number of read fails. only old megaraid. not a table
 my $writefail_oid = undef;                   # number of write fails. only old megaraid. not a table
-my $adpt_readfail_oid = undef;	              # number of read fails. only megaraid. not sure of the difference from above any more
+my $adpt_readfail_oid = undef;               # number of read fails. only megaraid. not sure of the difference from above any more
 my $adpt_writefail_oid = undef;              # number of write fails. only megaraid. not sure of the difference from above
-my $battery_status_tableoid = undef;	      # table to check batteries and their status
-my %controller_status_oids = ();             # set of additional tables to check that report controller operating status
+my $battery_status_tableoid = undef;         # table to check batteries and their status
+my %controller_status_oids = ();             # set of additional oids to check that report controller operating status
 my %controller_status_codes = ();            # set of responses for above additional status tables (must be same for all tables)
 my %LOGDRV_CODES = ();                       # Logical Drive Status responses and corresponding description and Nagios exit code
-my %LOGDRV_TASK_CODES = ();	              # Logical Drive Task Status responses and corresponding Nagios exit code
+my %LOGDRV_TASK_CODES = ();                  # Logical Drive Task Status responses and corresponding Nagios exit code
 my %PHYDRV_CODES = ();                       # Physical Drives Status responses and corresponding descriptions and Nagios exit code
-my %BATTERY_CODES = ();		              # Raid Controller Battery status responses and corresponding Nagios exit codes
+my %BATTERY_CODES = ();                      # Raid Controller Battery status responses and corresponding Nagios exit codes
 
 # Function to set values for OIDs that are used
 sub set_oids {

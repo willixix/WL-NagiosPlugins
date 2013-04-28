@@ -1372,40 +1372,35 @@ foreach $line (Net::SNMP::oid_lex_sort(keys(%{$phydrv_data_in}))) {
         }
         $phydrv_id .= '.'.$pdrv_status{$line}{lun} if ($pdrv_status{$line}{lun} != 0);
         $pdrv_status{$line}{phydrv_id}=$phydrv_id;
-
         $code= $pdrv_status{$line}{status};
-        # check status (catch if state is either "failed" (4) or "rebuild" (5))
-        if (!defined($PHYDRV_CODES{$code})) {
-                $output_data.=", " if $output_data;
-                $output_data.= "phy drv($phydrv_id) unknown code $code";
-                $nagios_status = $alert; # maybe this should not be an alert???
-                $pdrv_status{$line}{'status_str'} = $code;
+        if (defined($PHYDRV_CODES{$code})) {
+             $pdrv_status{$line}{'status_str'} = $PHYDRV_CODES{$code}[1];
+             $phydrv_total++ if ($PHYDRV_CODES{$code}[0] ne 'nondisk' && ($cardtype ne 'sasraid' || $cardtype ne 'mptfusion' || $code>0));  # only count disks for output
         }
         else {
-                $pdrv_status{$line}{'status_str'} = $PHYDRV_CODES{$code}[1];
-                if ($PHYDRV_CODES{$code}[2] ne 'OK') {
-                # if ($PHYDRV_CODES{$code}[0] eq 'failed' || $PHYDRV_CODES{$code}[0] eq 'rebuild' || $PHYDRV_CODES{$code}[0] eq 'unconfigured_bad') {
-                        $output_data .= ", " if $output_data;
-                        $output_data .= "phy drv($phydrv_id) ".$PHYDRV_CODES{$code}[1];
-                        $phd_nagios_status = $PHYDRV_CODES{$code}[2] if $phd_nagios_status ne 'CRITICAL';
-                        # optionally check rate of rebuild
-                        if ($PHYDRV_CODES{$code}[0] eq 'rebuild' && defined($opt_extrainfo) && 
-                        defined($phydrv_rebuildstats_tableoid)) {
-                                my $eoid = $phydrv_rebuildstats_tableoid.'.'.$line;
-                                if (!defined($opt_optimize)) {
-                                          $debug_time{'snmpretrieve_rebuild_'.$phydrv_id}=time() if $opt_debugtime;
-                                          $snmp_result=$session->get_request(-Varbindlist => [ $eoid ]);
-                                          $debug_time{'snmpretrieve_rebuild_'.$phydrv_id}=time()-$debug_time{'snmpretrieve_rebuild_'.$phydrv_id} if $opt_debugtime;
-                                          if (!$snmp_result) {
-                                                $error=sprintf("could not retrieve OID $eoid: %s\n", $session->error());
-                                                $session->close;
-                                                print_and_exit('UNKNOWN',$error);
-                                          }
+             $pdrv_status{$line}{'status_str'} = $code;
+        }
+        # check status
+        if (code_to_nagiosstatus(\%PHYDRV_CODES,$code) ne 'OK') {
+                $output_data.=", " if $output_data;
+                $output_data.= "phy drv($phydrv_id) ".code_to_description(\%PHYDRV_CODES,$code);
+                $phd_nagios_status = code_to_nagiosstatus(\%PHYDRV_CODES,$code,$phd_nagios_status);
+                # optionally check rate of rebuild
+                if (defined($opt_extrainfo) && defined($phydrv_rebuildstats_tableoid) &&
+                    defined($PHYDRV_CODES{$code}) && $PHYDRV_CODES{$code}[0] eq 'rebuild') {
+                         my $eoid = $phydrv_rebuildstats_tableoid.'.'.$line;
+                         if (!defined($opt_optimize)) {
+                                $debug_time{'snmpretrieve_rebuild_'.$phydrv_id}=time() if $opt_debugtime;
+                                $snmp_result=$session->get_request(-Varbindlist => [ $eoid ]);
+                                $debug_time{'snmpretrieve_rebuild_'.$phydrv_id}=time()-$debug_time{'snmpretrieve_rebuild_'. $phydrv_id} if $opt_debugtime;
+                                if (!$snmp_result) {
+                                    $error=sprintf("could not retrieve OID $eoid: %s\n", $session->error());
+                                    $session->close;
+                                    print_and_exit('UNKNOWN',$error);
                                 }
-                                $output_data.= ' ('.$snmp_result->{$eoid}.')' if defined($snmp_result->{$eoid});
-                        }
+                         }
+                         $output_data.= ' ('.$snmp_result->{$eoid}.')' if defined($snmp_result->{$eoid});
                 }
-                $phydrv_total++ if ($PHYDRV_CODES{$code}[0] ne 'nondisk' && ($cardtype ne 'sasraid' || $cardtype ne 'mptfusion' || $code>0));  # only count disks for output
         }
 }
 
@@ -1418,15 +1413,10 @@ if (defined($opt_battery)) {
         ($foo,$battery_id) = split(/\./,$line,2);
         $battery_id=$foo if !$battery_id;
         verb("| battery_id = $battery_id");
-        if (!defined($BATTERY_CODES{$code})) {
+        if (code_to_nagiosstatus(\%BATTERY_CODES,$code) ne 'OK') {
                 $output_data.=", " if $output_data;
-                $output_data.= "battery status($battery_id) unknown code $code";
-                $nagios_status = $alert; # maybe this should not be an alert???
-        }
-        elsif ($BATTERY_CODES{$code}[2] ne 'OK') {
-                $output_data.= ", " if $output_data;
-                $output_data .= "battery status($battery_id) ".$BATTERY_CODES{$code}[1];
-                $nagios_status = $BATTERY_CODES{$code}[2] if $nagios_status ne "CRITICAL";
+                $output_data.= "battery status($battery_id) ".code_to_description(\%BATTERY_CODES,$code);
+                $nagios_status = code_to_nagiosstatus(\%BATTERY_CODES,$code,$nagios_status);
         }
     }
 }
@@ -1443,22 +1433,18 @@ foreach $line (Net::SNMP::oid_lex_sort(keys(%{$logdrv_data_in}))) {
         if (!defined($LOGDRV_CODES{$code})) {
                 $output_data.=", " if $output_data;
                 $output_data.= "log drv($logdrv_id) unknown code $code";
-                $nagios_status = $alert; # maybe this should not be an alert???
+                $nagios_status = code_to_nagiosstatus(\%LOGDRV_CODES,$code,$nagios_status);
         }
         elsif ($LOGDRV_CODES{$code}[0] ne 'optimal') {
                 $output_data.= ", " if $output_data;
-                $output_data .= "log drv($logdrv_id) ".$LOGDRV_CODES{$code}[0]." (".$LOGDRV_CODES{$code}[1].")";
-                if ($LOGDRV_CODES{$code}[0] eq 'checkconsistency' || $LOGDRV_CODES{$code}[0] eq 'initialize') {
-                        $nagios_status = "WARNING" if $nagios_status eq "OK";
+                $output_data .= "log drv($logdrv_id) ".$LOGDRV_CODES{$code}[0]." (".$LOGDRV_CODES{$code}[1].")";                
+                # below is to force WARNING in case when array is degraded but disk is already being rebuild
+                if ($LOGDRV_CODES{$code}[0] eq 'degraded' && $phd_nagios_status eq 'WARNING' &&
+                    code_to_nagiosstatus(\%LOGDRV_CODES,$code) ne 'WARNING') {
+                       $nagios_status='WARNING' if $nagios_status eq 'OK';
                 }
                 else {
-                        # below is to force WARNING in case when array is degraded but disk is already being rebuild
-                        if ($LOGDRV_CODES{$code}[0] eq 'degraded' && $phd_nagios_status eq 'WARNING' && $nagios_status ne $alert) {
-                                $nagios_status='WARNING';
-                        }
-                        else {
-                                $nagios_status = $alert;
-                        }
+                       $nagios_status = code_to_nagiosstatus(\%LOGDRV_CODES,$code,$nagios_status);
                 }
         }
 }
@@ -1513,10 +1499,8 @@ if (defined($opt_perfdata)) {
                         $output_data_end .= ", " if $output_data_end;
                         $output_data_end .= "phy drv(".$pdrv_status{$line}{phydrv_id}.") $nerr other errors";
                 }
-        }       
+        }
     }
-    $curr_perf{'total_merr'}=$total_merr if defined($total_merr);
-    $curr_perf{'total_oerr'}=$total_oerr if defined($total_oerr);
 }
 
 # close SNMP session (before it was done a lot earlier)

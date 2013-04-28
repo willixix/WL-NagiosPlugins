@@ -3,8 +3,8 @@
 # ============================== SUMMARY =====================================
 #
 # Program : check_snmp_raid / check_sasraid_megaraid / check_megaraid
-# Version : 2.2
-# Date    : Apr 25, 2013
+# Version : 2.2b1
+# Date    : Apr 30, 2013
 # Author  : William Leibzon - william@leibzon.org
 # Copyright: (C) 2006-2013 William Leibzon
 # Summary : This is a nagios plugin to monitor Raid controller cards with SNMP
@@ -299,33 +299,36 @@ my $session=            undef;  # SNMP session
 # Declare any functions defined at the end
 sub print_output;
 
-# These variables are set by set_oids() function based on $cardtype
-my(
-    $logdrv_status_tableoid,
-    $logdrv_task_status_tableoid,
-    $logdrv_task_completion_tableoid,
-    $phydrv_status_tableoid,
-    $phydrv_mediumerrors_tableoid,
-    $phydrv_othererrors_tableoid,
-    $phydrv_vendor_tableoid,
-    $phydrv_product_tableoid,
-    $phydrv_rebuildstats_tableoid,
-    $phydrv_count_oid,
-    $phydrv_goodcount_oid,
-    $phydrv_badcount_oid,
-    $phydrv_bad2count_oid,
-    $battery_status_tableoid,
-    $readfail_oid,
-    $writefail_oid,
-    $adpt_readfail_oid,
-    $adpt_writefail_oid,
-    %controller_status_oids,
-    %controller_status_codes,
-    %LOGDRV_CODES,
-    %LOGDRV_TASK_CODES,
-    %PHYDRV_CODES,
-    %BATTERY_CODES
-);
+# These variables are set by set_oids() function based on cardtype
+#   only $logdrv_status_tableoid, $phydrv_status_tableoid, %LOGDRV_CODES, %PHYDRV_CODES are required
+#   rest are optional and may only appear for specific card type
+my $logdrv_status_tableoid = undef;          # logical drives status. responses to that are in %LOGDRV_CODES tabbe
+my $logdrv_task_status_tableoid = undef;     # logical drive task status info. only adaptec. responses in %LOGDRV_TASK_CODES
+my $logdrv_task_completion_tableoid = undef; # logical drive task completion info. similar to rebuild rate for phydrv?
+my $phydrv_status_tableoid = undef;          # physical drives status. responses to that are in %PHYDRV_CODES table
+my $phydrv_mediumerrors_tableoid = undef;    # number of medium errors on physical drives. only old scsi megaraid
+my $phydrv_othererrors_tableoid = undef;     # number of 'other' errors on physical drives. only old scsi megaraid
+my $phydrv_vendor_tableoid = undef;          # drive vendor or drive type info on physical drives
+my $phydrv_product_tableoid = undef;         # specific drive model or combined vendor+model on each physical drives
+my $phydrv_rebuildstats_tableoid = undef;    # rebuild Task Stats. For when new drive is added to existing RAID array
+my $phydrv_assignedname_tableoid = undef;    # TODO: name of the drive configured in the system
+my $phydrv_temperature_tableoid = undef;     # TODO: drives temperature
+my $phydrv_count_oid = undef;                # used only by sasraid to verify number of drives in the system. not a table
+my $phydrv_goodcount_oid = undef;            # only sasraid. number of good drives in the system. not a table
+my $phydrv_badcount_oid = undef;             # only sasraid. number of bad drives in the system. not a table
+my $phydrv_bad2count_oid = undef;            # only sasraid. number of bad drives in the system. not a table
+my $sys_temperature_oid = undef;	      # TODO: controller/system temperature
+my $readfail_oid = undef;                    # number of read fails. only old megaraid. not a table
+my $writefail_oid = undef;                   # number of write fails. only old megaraid. not a table
+my $adpt_readfail_oid = undef;	              # number of read fails. only megaraid. not sure of the difference from above any more
+my $adpt_writefail_oid = undef;              # number of write fails. only megaraid. not sure of the difference from above
+my $battery_status_tableoid = undef;	      # table to check batteries and their status
+my %controller_status_oids = ();             # set of additional tables to check that report controller operating status
+my %controller_status_codes = ();            # set of responses for above additional status tables (must be same for all tables)
+my %LOGDRV_CODES = ();                       # Logical Drive Status responses and corresponding description and Nagios exit code
+my %LOGDRV_TASK_CODES = ();	              # Logical Drive Task Status responses and corresponding Nagios exit code
+my %PHYDRV_CODES = ();                       # Physical Drives Status responses and corresponding descriptions and Nagios exit code
+my %BATTERY_CODES = ();		              # Raid Controller Battery status responses and corresponding Nagios exit codes
 
 # Function to set values for OIDs that are used
 sub set_oids {
@@ -341,7 +344,11 @@ sub set_oids {
     $writefail_oid = $baseoid . ".1.1.1.1.14";
     $adpt_readfail_oid = $baseoid . ".1.1.1.1.15";
     $adpt_writefail_oid = $baseoid . ".1.1.1.1.16";
-
+    ## Status codes for logical drives
+    #  1st column has special meaning: 
+    #   'optimal' is for OK status,
+    #   'degraded' if it is CRITICAL is forced to WARNING if drive is being rebuild and has WARNING state
+    #   'initialize' & checkconsistency are just regular WARNING and no longer have special meaning
     %LOGDRV_CODES = (
         0 => ['offline', 'drive is offline', 'NONE' ],
         1 => ['degraded', 'array is degraded', 'CRITICAL' ],
@@ -349,6 +356,7 @@ sub set_oids {
         3 => ['initialize', 'currently initializing', 'WARNING' ],
         4 => ['checkconsistency', 'array is being checked', 'WARNING' ],
     );
+    ## Status codes for physical drives
     %PHYDRV_CODES = (
         1 => ['ready', 'ready', 'OK'],
         3 => ['online', 'online', 'OK'],
@@ -366,8 +374,12 @@ sub set_oids {
     $phydrv_othererrors_tableoid = $baseoid . ".5.1.4.2.1.2.1.8";  # mptfusion other errors
     $phydrv_vendor_tableoid = $baseoid . ".5.1.4.2.1.2.1.24";      # mptfusion drive vendor (this needs to be verified)
     $phydrv_product_tableoid = $baseoid . ".5.1.4.2.1.2.1.25";     # mptfusion drive model (this needs to be verified)
-
-    %LOGDRV_CODES = ( 
+    ## Status codes for logical drives
+    #  1st column has special meaning: 
+    #   'optimal' is for OK status,
+    #   'degraded' if it is CRITICAL is forced to WARNING if drive is being rebuild and has WARNING state
+    #   'initialize' & checkconsistency are just regular WARNING and no longer have special meaning
+    %LOGDRV_CODES = (
         0 => ['offline', 'volume is offline', 'NONE' ],
         1 => ['degraded', 'parially degraded', 'CRITICAL' ],
         2 => ['degraded', 'fully degraded', 'CRITICAL' ],
@@ -398,8 +410,12 @@ sub set_oids {
     $phydrv_badcount_oid = $baseoid . ".4.1.4.1.2.1.23";           # pdDiskPredFailureCount
     $phydrv_bad2count_oid = $baseoid . ".4.1.4.1.2.1.24";          # pdDiskFailureCount
     $battery_status_tableoid = $baseoid . ".4.1.4.1.6.2.1.27";     # battery replacement status
-
-    %LOGDRV_CODES = ( 
+    ## Status codes for logical drives
+    #  1st column has special meaning: 
+    #   'optimal' is for OK status,
+    #   'degraded' if it is CRITICAL is forced to WARNING if drive is being rebuild and has WARNING state
+    #   'initialize' & checkconsistency are just regular WARNING and no longer have special meaning
+    %LOGDRV_CODES = (
         0 => ['offline', 'volume is offline', 'NONE' ],
         1 => ['degraded', 'parially degraded', 'CRITICAL' ],
         2 => ['degraded', 'fully degraded', 'CRITICAL' ],
@@ -430,41 +446,44 @@ sub set_oids {
     $battery_status_tableoid = $baseoid . ".14.1.201.1.1.14";            # adaptec battery status
     $phydrv_vendor_tableoid = $baseoid . ".14.1.400.1.1.6";              # adaptec drive vendor
     $phydrv_product_tableoid = $baseoid . ".14.1.400.1.1.7";             # adaptec drive model
-
+    ## Status codes for logical drives
+    #  1st column has special meaning: 
+    #   'optimal' is for OK status,
+    #   'degraded' if it is CRITICAL is forced to WARNING if drive is being rebuild and has WARNING state
+    #   'initialize' & checkconsistency are just regular WARNING and no longer have special meaning
     %LOGDRV_CODES = (
-            1 => ['unknown', 'array state is unknown', 'UNKNOWN'],
-            2 => ['unknown', 'array state is other or unknown', 'UNKNOWN'],
-            3 => ['optimal', 'array is funtioning properly', 'OK'],
-            4 => ['optimal', 'array is funtioning properly', 'OK'],
-            5 => ['degraded', 'array is impacted', 'CRITICAL'],
-            6 => ['degraded', 'array is degraded', 'CRITICAL'],
-            7 => ['failed', 'array failed', 'CRITICAL'],
-            8 => ['compacted', 'array is compacted', 'UNKNOWN'],         # Does anybody know what "compacted" means?
+        1 => ['unknown', 'array state is unknown', 'UNKNOWN'],
+        2 => ['unknown', 'array state is other or unknown', 'UNKNOWN'],
+        3 => ['optimal', 'array is funtioning properly', 'OK'],
+        4 => ['optimal', 'array is funtioning properly', 'OK'],
+        5 => ['degraded', 'array is impacted', 'CRITICAL'],
+        6 => ['degraded', 'array is degraded', 'CRITICAL'],
+        7 => ['failed', 'array failed', 'CRITICAL'],
+        8 => ['compacted', 'array is compacted', 'UNKNOWN'],         # Does anybody know what "compacted" means?
     );
-
     ## Status codes for logical drives - these code are for ADAPTEC
     ## 1st and 3d columns are not used so far
     %LOGDRV_TASK_CODES = (
-            1  => ['unknown', 'array task status is unknown', 'UNKNOWN'],
-            2  => ['other', 'other', 'UNKNOWN'],
-            3  => ['noTaskActive', 'noTaskActive', 'OK'],
-            4  => ['reconstruct', 'reconstruct', 'WARNING'],
-            5  => ['zeroInitialize', 'zeroInitialize', 'WARNING'],
-            6  => ['verify', 'verify', 'WARNING'],
-            7  => ['verifyWithFix', 'verifyWithFix', 'WARNING'],
-            8  => ['modification', 'modification', 'WARNING'],
-            9  => ['copyback', 'copyback', 'WARNING'],
-            10 => ['compaction', 'compaction', 'WARNING'],
-            11 => ['expansion', 'expansion', 'WARNING'],
-            12 => ['snapshotBackup', 'snapshotBackup', 'WARNING'],
+        1  => ['unknown', 'array task status is unknown', 'UNKNOWN'],
+        2  => ['other', 'other', 'UNKNOWN'],
+        3  => ['noTaskActive', 'noTaskActive', 'OK'],
+        4  => ['reconstruct', 'reconstruct', 'WARNING'],
+        5  => ['zeroInitialize', 'zeroInitialize', 'WARNING'],
+        6  => ['verify', 'verify', 'WARNING'],
+        7  => ['verifyWithFix', 'verifyWithFix', 'WARNING'],
+        8  => ['modification', 'modification', 'WARNING'],
+        9  => ['copyback', 'copyback', 'WARNING'],
+        10 => ['compaction', 'compaction', 'WARNING'],
+        11 => ['expansion', 'expansion', 'WARNING'],
+        12 => ['snapshotBackup', 'snapshotBackup', 'WARNING'],
     );
-
+    ## Status codes for physical drives
     %PHYDRV_CODES = (
-            1 => ['unknown', 'unknown', 'WARNING'],
-            2 => ['other', 'other', 'OK'],
-            3 => ['okay', 'okay', 'OK'],
-            4 => ['warning', 'warning', 'WARNING'],
-            5 => ['failure', 'failure', 'CRITICAL'],
+        1 => ['unknown', 'unknown', 'WARNING'],
+        2 => ['other', 'other', 'OK'],
+        3 => ['okay', 'okay', 'OK'],
+        4 => ['warning', 'warning', 'WARNING'],
+        5 => ['failure', 'failure', 'CRITICAL'],
     );
     ## Status codes for batteries - these code are for ADAPTEC
     %BATTERY_CODES = (
@@ -483,55 +502,64 @@ sub set_oids {
     $baseoid = "1.3.6.1.4.1.232" if $baseoid eq "";        # HP (SmartArray) base oid
     $logdrv_status_tableoid = $baseoid . ".3.2.3.1.1.4";
     $phydrv_status_tableoid = $baseoid . ".3.2.5.1.1.6";
+    ## Status codes for logical drives
+    #  1st column has special meaning: 
+    #   'optimal' is for OK status,
+    #   'degraded' if it is CRITICAL is forced to WARNING if drive is being rebuild and has WARNING state
+    #   'initialize' & checkconsistency are just regular WARNING and no longer have special meaning
     %LOGDRV_CODES = (
-            # as taken from CPQIDA-MIB
-            # other(1),
-            # ok(2),
-            # failed(3),
-            # unconfigured(4),
-            # recovering(5),
-            # readyForRebuild(6),
-            # rebuilding(7),
-            # wrongDrive(8),
-            # badConnect(9),
-            # overheating(10),
-            # shutdown(11),
-            # expanding(12),
-            # notAvailable(13),
-            # queuedForExpansion(14)
-            1 => ['unknown', 'array state is unknown', 'UNKNOWN'],
-            2 => ['optimal', 'array is functioning properly', 'OK'],
-            3 => ['failed', 'array failed', 'CRITICAL'],
-            4 => ['degraded', 'array is unconfigured', 'WARNING'],
-            5 => ['degraded', 'array is recovering', 'WARNING'],
-            6 => ['degraded', 'array is ready for rebuild', 'WARNING'],
-            7 => ['degraded', 'array is rebuilding', 'WARNING'],
-            8 => ['degraded', 'array wrong drive', 'CRITICAL'],
-            9 => ['degraded', 'array bad connect', 'CRITICAL'],
-           10 => ['degraded', 'array is overheating', 'CRITICAL'],
-           11 => ['degraded', 'array is shutdown', 'CRITICAL'],
-           12 => ['degraded', 'array is expanding', 'WARNING'],
-           13 => ['unknown', 'array not available', 'CRITICAL'],
-           14 => ['degraded', 'array queued for expansion', 'WARNING'],
+        # as taken from CPQIDA-MIB
+        # other(1),
+        # ok(2),
+        # failed(3),
+        # unconfigured(4),
+        # recovering(5),
+        # readyForRebuild(6),
+        # rebuilding(7),
+        # wrongDrive(8),
+        # badConnect(9),
+        # overheating(10),
+        # shutdown(11),
+        # expanding(12),
+        # notAvailable(13),
+        # queuedForExpansion(14)
+        1 => ['unknown', 'array state is unknown', 'UNKNOWN'],
+        2 => ['optimal', 'array is functioning properly', 'OK'],
+        3 => ['failed', 'array failed', 'CRITICAL'],
+        4 => ['degraded', 'array is unconfigured', 'WARNING'],
+        5 => ['degraded', 'array is recovering', 'WARNING'],
+        6 => ['degraded', 'array is ready for rebuild', 'WARNING'],
+        7 => ['degraded', 'array is rebuilding', 'WARNING'],
+        8 => ['degraded', 'array wrong drive', 'CRITICAL'],
+        9 => ['degraded', 'array bad connect', 'CRITICAL'],
+        10 => ['degraded', 'array is overheating', 'CRITICAL'],
+        11 => ['degraded', 'array is shutdown', 'CRITICAL'],
+        12 => ['degraded', 'array is expanding', 'WARNING'],
+        13 => ['unknown', 'array not available', 'CRITICAL'],
+        14 => ['degraded', 'array queued for expansion', 'WARNING'],
     );   
-
+    ## Status codes for physical drives
     %PHYDRV_CODES = (
-            1 => ['other', 'other unknown error', 'UNKNOWN'],   # maybe this should be critical in nagios?
-            2 => ['okay', 'okay', 'OK'],
-            3 => ['failure', 'failure', 'CRITICAL'], 
-            4 => ['warning', 'warning on predictive failure', 'WARNING'],  # predictive failure
-    );   
+        1 => ['other', 'other unknown error', 'UNKNOWN'],   # maybe this should be critical in nagios?
+        2 => ['okay', 'okay', 'OK'],
+        3 => ['failure', 'failure', 'CRITICAL'], 
+        4 => ['warning', 'warning on predictive failure', 'WARNING'],  # predictive failure
+    );
   }
   elsif ($cardtype eq 'ultrastor') {
     $baseoid = "1.3.6.1.4.1.22274" if $baseoid eq "";       # ETI base oid
     $logdrv_status_tableoid = $baseoid . ".1.2.3.1.6";      # logical volume status
-    # $voldrv_status_tableoid = $baseoid . ".1.2.2.1.6";    # ETI volume status (volumes not supported yet)
+    # $voldrv_status_tableoid = $baseoid . ".1.2.2.1.6";    # ETI volume status (NOT SUPPORTED YET)
     $phydrv_status_tableoid = $baseoid . ".1.2.1.1.5";      # physical status
     $phydrv_vendor_tableoid = $baseoid . ".1.2.1.1.8";      # drive vendor
     $phydrv_product_tableoid = $baseoid . ".1.2.1.1.15";    # drive model
-
-    %LOGDRV_CODES = ( 
-        0 => ['offline', 'volume is offline', 'NONE' ],
+    ## Status codes for logical drives
+    #  1st column has special meaning: 
+    #   'optimal' is for OK status,
+    #   'degraded' if it is CRITICAL is forced to WARNING if drive is being rebuild and has WARNING state
+    #   'initialize' & checkconsistency are just regular WARNING and no longer have special meaning
+    %LOGDRV_CODES = ( # 1st column has special meaning when its 'optimal' and 'degraded'
+        0 => ['offline', 'volume is offline', 'OK' ],
         1 => ['degraded', 'partially degraded', 'WARNING' ],
         2 => ['degraded', 'fully degraded', 'CRITICAL' ],
         3 => ['optimal', 'functioning properly', 'OK' ]
@@ -546,9 +574,9 @@ sub set_oids {
         20 => ['rebuild', 'rebuild', 'WARNING'],
         24 => ['online', 'online', 'OK'],
     );
-    ## Controller Systems Status OIDs (For future. No support for any of these yet)
+    ## Controller Systems Status OIDs
     %controller_status_oids = (
-       "general" => $baseoid . ".1.1.1",
+       "generalstatus" => $baseoid . ".1.1.1",
        "temperature" => $baseoid . ".1.1.2",
        "voltage" => $baseoid . ".1.1.3",
        "ups" => $baseoid . ".1.1.4",
@@ -556,10 +584,59 @@ sub set_oids {
        "powersupply" => $baseoid . ".1.1.6",
        "dualcontroller" => $baseoid . ".1.1.7",
     );
-    ## Controller general status OID (For future. Not supported yet)
+    ## Controller general status OID
     %controller_status_codes = (
-        0 => ['good', 'good', 'NONE' ],
+        0 => ['good', 'ok', 'OK' ],
         1 => ['bad', 'bad', 'CRITICAL' ],
+    );
+  }
+  elsif ($cardtype eq 'synology') {
+    $baseoid = "1.3.6.1.4.1.6574" if $baseoid eq "";        # Synology base oid
+    $logdrv_status_tableoid = $baseoid . ".3.3";            # logical volume status
+    $phydrv_status_tableoid = $baseoid . ".2.5";            # physical status
+    $phydrv_vendor_tableoid = $baseoid . ".2.4";            # not drive vendor, rather drive type (SATA,SSD)
+    $phydrv_product_tableoid = $baseoid . ".2.5";           # drive model
+    $phydrv_assignedname_tableoid = $baseoid . ".2.2";	      # name of the drive configured in the system (NOT SUPPORTED YET)
+    $phydrv_temperature_tableoid = $baseoid . ".2.2";	      # drive temperature (NOT SUPPORTED YET)
+    $sys_temperature_oid = $baseoid . ".1.2";               # system temperature (NOT SUPPORTED YET)
+    ## Status codes for logical drives
+    #  1st column has special meaning: 
+    #   'optimal' is for OK status,
+    #   'degraded' if it is CRITICAL is forced to WARNING if drive is being rebuild and has WARNING state
+    #   'initialize' & checkconsistency are just regular WARNING and no longer have special meaning
+    %LOGDRV_CODES = ( # 1st column has special meaning when its 'optimal' and 'degraded'
+        1 => ['optimal', 'RAID is funtioning normally', 'OK' ],
+        2 => ['degraded', 'RAID is being repaired', 'CRITICAL' ],
+        3 => ['initialize', 'RAID is being migrated', 'WARNING' ],
+        4 => ['initialize', 'RAID is being expanded', 'WARNING' ],
+        5 => ['initialize', 'RAID is being deleted', 'WARNING' ],
+        6 => ['initialize', 'RAID is being created', 'WARNING' ],
+        7 => ['initialize', 'RAID is being synced', 'WARNING' ],
+        8 => ['checkconsistency', 'parity checking of RAID array', 'OK' ],
+        9 => ['initialize', 'RAID is being assembled', 'WARNING' ],
+        10 => ['initialize', 'cancel operation', 'WARNING' ],  # unsure what to put here for 1st column
+        11 => [ 'degraded', 'RAID array is degraded but failure is tolerable', 'WARNING' ],
+        12 => [ 'failed', 'RAID array has crashed and now in read-only', 'CRITICAL' ],
+   );
+    ## Status codes for physical drives
+    %PHYDRV_CODES = (
+        1 => ['normal', 'disk is ok', 'OK'],
+        2 => ['initialized', 'disk has partitions and no data', 'WARNING'],
+        3 => ['notinitialized', 'disk has not been initialized', 'WARNING'],
+        4 => ['partitionfailed', 'partitions on disk are damaged', 'CRITICAL'],
+        5 => ['crashed', 'the disk ha failed', 'CRITICAL'],
+    );
+    ## Controller Systems Status OIDs
+    %controller_status_oids = (
+       "systemstatus" => $baseoid . ".1.1",
+       "powersupply" => $baseoid . ".1.3",
+       "systemfan" => $baseoid . ".1.4.1",
+       "cpufan" => $baseoid . ".1.4.2",
+    );
+    ## Controller general status OID
+    %controller_status_codes = (
+        1 => ['good', 'ok', 'OK' ],
+        2 => ['bad', 'bad', 'CRITICAL' ],
     );
   }
   else {

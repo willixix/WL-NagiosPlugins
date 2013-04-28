@@ -200,13 +200,29 @@
 #        e. Documentation updates related to plugin renaming and many other small
 #           code updates
 #        f. Starting with 2.x the plugin is licensed under GPL 3.0 licence (was 2.0 before)
-#   22. [2.2 - Apr 25, 2013] The following are additions in this version:
-#        a. Added limited support for ETI UtraStor ES1660SS (this was in dev from February)
-#           Controller and volume checks are not written right now despite adding OIDs in.
+#   22. [2.2 - Apr 30, 2013] The following are additions in this version:
+#        a. Added limited support for ETI UtraStor (ES1660SS and maybe others) and Synology contollers/devices
+#           - plugin now supports specifying and checking controller status OIDs for Fan, PowerSupply and similar
+#             these are all expected to have common simple ok/fail return codes
+#	    - volume checks and temperature OIDs are specified but support for these is not written yet
 #        b. Added support for battery status and drive vendor and model information for Adaptec cards,
 #           this is contributed by Stanislav German-Evtushenko (giner on github)
 #           based on http://www.circitor.fr/Mibs/Html/ADAPTEC-UNIVERSAL-STORAGE-MIB.php#BatteryStatus
-#        c. Fix debugging. Old DEBUG printfs are replaced with calls to verb() function
+#	 c. Bug fixes, code improvements & refactoring
+#	    - Possible bug - there could have been output data cut out for old megaraid when multiple drive failure occur
+#           - Fix debugging. Old DEBUG printfs are replaced with calls to verb() function
+#           - code_to_description() and code_to_nagiosstatus() functions added
+#	    - %cardtype_map array added with a list of names supported for -T, this replaces set of if/elseif in check_options()
+#	    - partial rewrite of old code that decides nagios exit status for issues with logical and physical drives.
+#             I didn't want to touch this and introduce incompatible changes and bugs, but old code dates to workarounds for
+#             old scsi megaraid checks and doing manually what 3rd column of LOGDRV_CODES and PHYSDRV_CODES are for
+#	 d. New -A/--label option and changes in the nagios status output
+#	    - New -A/--label option allows to specify start of the plugin output in place of default 'Raid'
+#	    - print_output() function has been renamed print_and_exit() and now also exits with specified alert code
+#           - number of batteries is printed before model & task info instead of after
+#	    - additional controller status info is printed out whe this is checked, i.e. ', powersupply is ok"
+#	    - data collected for --extrainfo option goes last and labels 'tasks' and 'models'
+#             are added before [] bracketed text that contains models & tasks data
 #              
 # ========================== LIST OF CONTRIBUTORS =============================
 #
@@ -717,7 +733,7 @@ sub print_version {
 # display usage information
 sub print_usage {
         print "Usage:\n";
-        print "$0 [-s <snmp_version>] -H <host> (-C <snmp_community>) | (-l login -x passwd [-X pass -L <authp>,<privp>) [-p <port>] [-t <timeout>] [-O <base oid>] [-a <alert level>] [--extra_info] [--check_battery] [-g <num good drives>] [--drive_errors -P <previous performance data> -S <previous state>] [-v [DebugLogFile] || -d DebugLogFile] [--debug_time] [--snmp_optimize] -T megaraid|sasraid|perc3|perc4|perc5|perc6|mptfusion|sas6ir|sas6|adaptec|smartarray|eti|ultrastor\n OR \n";
+        print "$0 [-s <snmp_version>] -H <host> (-C <snmp_community>) | (-l login -x passwd [-X pass -L <authp>,<privp>) [-p <port>] [-t <timeout>] [-O <base oid>] [-A <status label text>] [-a <alert level>] [--extra_info] [--check_battery] [-g <num good drives>] [--drive_errors -P <previous performance data> -S <previous state>] [-v [DebugLogFile] || -d DebugLogFile] [--debug_time] [--snmp_optimize] -T megaraid|sasraid|perc3|perc4|perc5|perc6|mptfusion|sas6ir|sas6|adaptec|smartarray|eti|ultrastor|synology\n OR \n";
         print "$0 --version | $0 --help (use this to see get more detailed documentation of above options)\n";
 }
 
@@ -730,9 +746,9 @@ sub usage {
 # display help information
 sub help {
         print_version();
-        print "GPL 3.0 license (c) 2006-2012 William Leibzon\n";
+        print "GPL 3.0 license (c) 2006-2013 William Leibzon\n";
         print "This plugin uses SNMP to check state of RAID controllers and attached drives.\n";
-        print "Supported brands are: LSI, MPTFusion, Dell PERC, Adaptec, HP SmartArray and more.\n";
+        print "Supported brands are: LSI, MPTFusion, Dell PERC, Adaptec, HP SmartArray, ETI Ultrastor and more.\n";
         print "\n";
         print_usage();
         print "\n";
@@ -741,15 +757,22 @@ sub help {
         print "    Display help\n";
         print "  -V, --version\n";
         print "    Display version\n";
+        print "  -A --label <string>\n";
+        print "    Specify text to be printed first in nagios status line. Default label of \"Raid\"\n";
         print "  -T, --controller_type <type>\n";
         print "    Type of controller, specify one of:\n";
-        print "       megaraid|sasraid|perc3|perc4|perc5|perc6|perch700|mptfusion|sas6ir|sas6|adaptec|hp|smartarray|eti|ultrastor\n";
-        print "       (megaraid=perc3,perc4; sasraid=perc5,perc6,perch700; mptfusion=sas6ir,sas6; smartarray=hp; eti=ultrastor)\n";
-        print "           Note: currently 'sasraid' is default type if not specified as has been the case for 1.x versions\n";
-        print "                 but this will be removed and specifying controller type will be required in the future\n"; 
+        print "       megaraid|sasraid|perc3|perc4|perc5|perc6|perch700|mptfusion|sas6|sas6ir|\n";
+        print "	       adaptec|hp|smartarray|eti|ultrastor|synology\n";
+        print "    (aliases: megaraid=perc3,perc4; sasraid=perc5,perc6,perch700;\n"; 
+        print "              mptfusion=sas6ir,sas6; smartarray=hp; ultrastor=eti)\n";
+        print "    Note: 'sasraid' has been default type if not specified for 1.x, 2.1 and 2.2\n";
+        print "           plugin versions. From 2.3 specifying controller type will be required!\n"; 
         print "  -a, --alert <alert level>\n";
-        print "    Alert status to use if an error condition is found\n";
-        print "    Accepted values are: \"crit\" and \"warn\" (defaults to crit)\n";
+        print "    Alert status to use if an error condition not otherwise known is found\n";
+        print "    accepted values are: \"crit\" and \"warn\" (defaults to crit)\n";
+        print "    Note: This option should not be used any more and will be depreciated in 3.x version\n";
+        print "          type of alert depending on SNMP status from MIB is now specified in arrays for each card type\n";
+        print "          (except old special cases like megaraid & sasraid drive error counts for which it still applies)\n"; 
         print "  -b, --check_battery\n";
         print "    Check and output information on hard drive batteries (BBU) for supported cards\n";
         print "    'sasraid' and 'adaptec' card types are currently supported, more maybe added later\n"; 
@@ -775,8 +798,9 @@ sub help {
         print "  -H, --hostname <host>\n";
         print "    Hostname or IP address of target to check\n";
         print "  -O, --oid <base oid>\n";
-        print "    Base OID for megaraid is .1.3.6.1.4.1.3582 and you almost never need to change it\n";
-        print "    (the only case is when you might is when you have both percsnmp and sassnmp cards)\n";
+        print "    Base OID is normally set based on your controller and you almost never need to change it\n";
+        print "    unless you custom-set it different for your card (the only case I know is when you have both\n";
+	print "    percsnmp and sassnmp cards since normally each one would want to use same megarad OID)\n";
         print "  -s, --snmp_version 1 | 2 | 2c | 3\n";
         print "    Version of SNMP protocol to use (default is 1 if -C and 3 if -l specified)\n";
         print "  -p, --port <port>\n";
@@ -797,14 +821,14 @@ sub help {
         print "    Try to minimize number of SNMP queries replacing snmp_walk with retrieval of OIDs at once\n";
         print "    !! EXPERIMENTAL, USE AT YOUR OWN RISK !!! Use --debug_time to check it is actually faster.\n";
         print "\nDebug Options:\n";
-        print "  --debug[=FILENAME] || --verbose[=FILENAME]\n";
+        print "  --debug[=FILENAME] | --verbose[=FILENAME]\n";
         print "    Enables verbose debug output printing exactly what data was retrieved from SNMP\n";
         print "    This is mainly for manual checks when testing this plugin on the console\n";
         print "    If filename is specified instead of STDOUT the debug data is written to that file\n";
         print "  --debug_time \n";
         print "    This must be used with '-P' option and measures on how long each SNMP operation takes\n";
-        print "    The data is on this goes with 'performance' data so this can be seen in nagios\n";
-        print "    (although I'd not expect it to be graphed, just look at it from nagios status cgi)\n";
+        print "    The data gets output out as 'performance' data so this can be seen in nagios, but\n";
+        print "    I'd not expect it to be graphed, just look at it from nagios status cgi when you need\n";
         print "\n";
 }
 

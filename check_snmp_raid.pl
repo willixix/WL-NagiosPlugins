@@ -296,6 +296,26 @@ my @prev_state=            ();  # state based on above
 my %debug_time=            ();  # for debugging of how long execution takes
 my $session=            undef;  # SNMP session
 
+# Mapping of multipe acceptable names for cards that people can specify with -T to single card type
+my %cardtype_map = (
+  'megaraid' => 'megaraid',
+  'perc3' => 'megaraid',
+  'perc4' => 'megaraid',
+  'sasraid' => 'sasraid',
+  'perc5' => 'sasraid',
+  'perc6' => 'sasraid',
+  'perch700' => 'sasraid',
+  'mptfusion' => 'mptfusion',
+  'sas6' => 'mptfusion',
+  'sas6ir' => 'mptfusion',
+  'adaptec' => 'adaptec',
+  'hp' => 'hp',
+  'smartarray' => 'hp',
+  'ultrastor' => 'ultrastor',
+  'eti' => 'ultrastor',
+  'synology' => 'synology',
+);
+
 # Declare any functions defined at the end
 sub print_output;
 
@@ -656,6 +676,21 @@ sub code_to_description {
     }
 }
 
+# get nagios status exit code for type of error from config arrays
+sub code_to_nagiosstatus {
+    my($CODES, $code, $current_status) = @_;
+    my %CODES = %{$CODES};
+    my $exit_code = "OK";
+    if (defined($CODES{$code})) {
+	$exit_code=$CODES{$code}[2];
+    }
+    else {
+        $exit_code=$alert; # should this be $alert ?
+    }
+    $exit_code = $current_status if defined($current_status) && $ERRORS{$exit_code}<$ERRORS{$current_status};
+    return $exit_code;
+}
+
 # verbose output for debugging (updated 06/06/12 to write to debug file if specified)
 sub verb {
     my $t=shift;
@@ -870,33 +905,18 @@ sub check_options {
           { usage("Put snmp V3 priv login info with priv protocols!\n"); }
   }
 
-  # card type parameter
+  # -T card type parameter. cardtype is thereafter used in set_oids()
   if (defined($opt_cardtype)) {
-     if ($opt_cardtype eq 'megaraid' || $opt_cardtype eq 'perc3' || $opt_cardtype eq 'perc4') {
-        $cardtype='megaraid';
-     }
-     elsif ($opt_cardtype eq 'sasraid' || $opt_cardtype eq 'perc5' || $opt_cardtype eq 'perc6' || $opt_cardtype eq 'perch700') {
-        $cardtype='sasraid';
-     }
-     elsif ($opt_cardtype eq 'mptfusion' || $opt_cardtype eq 'sas6ir' || $opt_cardtype eq 'sas6') {
-        $cardtype='mptfusion';
-     }
-     elsif ($opt_cardtype eq 'adaptec') {
-        $cardtype='adaptec';
-     }
-     elsif ($opt_cardtype eq 'hp' || $opt_cardtype eq 'smartarray') {
-        $cardtype='smartarray';
-     }
-     elsif ($opt_cardtype eq 'eti' || $opt_cardtype eq 'ultrastor') {
-        $cardtype='ultrastor';
+     if (exists($cardtype_map{$opt_cardtype})) {
+        $cardtype=$cardtype_map{$opt_cardtype};
      }
      else {
-        usage("Invalid controller type specified");
+        usage("Invalid controller type specified: $opt_cardtype");
      }
   }
-
-  # set baseoid, default is ".1.3.6.1.4.1.3582" and then based on it set all other oids
+  # if baseoid is specified as a parameter, set it first. otherwise its set by set_oids
   $baseoid = $opt_baseoid if $opt_baseoid;
+  # set baseoid and and all other oids for plugin execution
   set_oids();
 
   # timeout - defaults to nagios timeout

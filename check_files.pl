@@ -2,7 +2,7 @@
 #
 # ============================== SUMMARY =====================================
 #
-# Program  : check_files.pl 
+# Program  : check_files.pl
 # Version  : 0.41
 # Date     : Mar 23, 2013
 # Author   : William Leibzon - william@leibzon.org
@@ -41,11 +41,11 @@
 # List of files to check are specified with -F option. These should be
 # specified in a way you'd specify files for ls, so for example to check
 # all perl files you use "*.pl" which is specified as:
-#    $ ./check_files.pl -L Files -F '*.pl' -w 4 -c 7 
+#    $ ./check_files.pl -L Files -F '*.pl' -w 4 -c 7
 # (above will give a warning if there are > 4 *.pl files and critical alert if > 7)
 #
 # You can specify more than one file type to check, for example:
-#    $ ./check_files.pl -L Files -F '*.pl,*.sh' -w 4,3 -c 7,5 
+#    $ ./check_files.pl -L Files -F '*.pl,*.sh' -w 4,3 -c 7,5
 # (above will give a warning if there are more than 4 .pl or more than 3 *.sh files
 #  and CRITICAL alert if there are more than 7 .pl or more than 5 *.sh files)
 #
@@ -56,7 +56,7 @@
 #  Search largest file:
 #    $ ./check_files.pl -D /opt/oradata -F "t" -f -s -H "10.0.0.1"
 #    OK - Largest size file is 3896 octet, 2 t files found | 't'=2 size_largest=3896o size_smallest=1o
-# 
+#
 # About Threhold Format:
 #
 #   Warning and critical levels are specified with '-w' and '-c' and each one
@@ -73,7 +73,7 @@
 #   Supported are also two specifications of range formats:
 #     number1:number2   issue alert if data is OUTSIDE of range [number1..number2]
 #                 i.e. alert if data<$number1 or data>$number2
-#     @number1:number2  issue alert if data is WITHIN range [number1..number2] 
+#     @number1:number2  issue alert if data is WITHIN range [number1..number2]
 #                 i.e. alert if data>=$number and $data<=$number2
 #
 #   A special modifier '^' can also be used to disable checking that warn values
@@ -101,11 +101,11 @@
 #   output number of files of each type and age of oldest and newest files.
 #
 # Execution Options:
-# 
+#
 #   This plugin checks list of files by executing 'ls' on a local system where
 #   it is run. It can also execute ls on a remote system or process the output
 #   from ls command executed through some other plugin. Options -C, -H and -I
-#   are used to specify how and where to execute 'ls' and process results. 
+#   are used to specify how and where to execute 'ls' and process results.
 #
 #   With -I the plugin will expect output from "ls -l" in standard input.
 #
@@ -122,7 +122,7 @@
 #
 #  [0.2]  Apr 19, 2012 - First version written based on check_netstat.pl 0.351
 #  [0.3]  Apr 21, 2012 - Added -l -r and -T options and fixed bugs
-#  [0.32] Apr 21, 2012 - Added -I as an alternative to -C 
+#  [0.32] Apr 21, 2012 - Added -I as an alternative to -C
 #  [0.33] Apr 27, 2012 - Fixed bug with determining file ages
 #  [0.34] Jun 22, 2012 - Added better reporting of file age than just seconds
 #  [0.35] Aug 21, 2012 - Option '-T' was broken. Bug reported by Jeremy Mauro
@@ -178,7 +178,7 @@ my @o_filesLv=      ();    # array for above list
 my @o_filesL=       ();    # array of regex based on above
 my $o_warn=         undef; # warning level option
 my @o_warnLv=       ();    # array from warn options, before further processing
-my @o_warnL=        ();    # array of warn options, each array element is an array of threshold spec 
+my @o_warnL=        ();    # array of warn options, each array element is an array of threshold spec
 my $o_crit=         undef; # Critical level option
 my @o_critLv=       ();    # array of critical options before processing
 my @o_critL=        ();    # array of critical options, each element is an array of threshold spec
@@ -202,7 +202,7 @@ my $o_host=         undef; # optional hostadress execute ls -l by ssh
 
 my $ls_pid=         undef;
 
-# For verbose output 
+# For verbose output
 sub verb { my $t=shift; print $t,"\n" if defined($o_verb) ; }
 
 sub print_version { print "$0: $Version\n" };
@@ -232,7 +232,7 @@ sub check_threshold {
     my $lv2 = $th_array->[2];
 
     # verb("debug check_threshold: $mod : ".(defined($lv1)?$lv1:'')." : ".(defined($lv2)?$lv2:''));
-    return "" if !defined($lv1) || ($mod eq '' && $lv1 eq ''); 
+    return "" if !defined($lv1) || ($mod eq '' && $lv1 eq '');
     return " " . $attrib . " is " . $data . " (equal to $lv1)" if $mod eq '=' && $data eq $lv1;
     return " " . $attrib . " is " . $data . " (not equal to $lv1)" if $mod eq '!' && $data ne $lv1;
     return " " . $attrib . " is " . $data . " (more than $lv1)" if $mod eq '>' && $data>$lv1;
@@ -250,7 +250,7 @@ sub parse_threshold {
 
     # link to an array that holds processed threshold data
     # array: 1st is type of check, 2nd is value2, 3rd is value2, 4th is option, 5th is nagios spec string representation for perf out
-    my $th_array = [ '', undef, undef, '', '' ]; 
+    my $th_array = [ '', undef, undef, '', '' ];
     my $th = $thin;
     my $at = '';
 
@@ -339,7 +339,7 @@ sub help {
     print extra debugging information
 
 File and Directory Selection options:
-    
+
 -F, --files=STR[,STR[,STR[..]]]
     Which files to check. What is here is similar to what you use for listing
     file with ls i.e. *.temp would look for all temp files. This is converted
@@ -355,7 +355,7 @@ File and Directory Selection options:
 -l, --lsfiles
     When present this adds specified file spec to ls. Now ls will list
     only files you specified with -F where as by default 'ls -l' will
-    list all files in directory and choose some with regex. This option 
+    list all files in directory and choose some with regex. This option
     should be used if there are a lot of files in a directory.
     WARNING: using this option will cause -r not to work on most system
 
@@ -376,7 +376,7 @@ Exection Options:
     on the remote server with ssh. Beware the script must be run with an account
     that has its public key to the remote server.
     This option does not work with the -C option
-    
+
 Threshold Checks and Performance Data options:
 
 -f, --perfparse
@@ -516,7 +516,7 @@ sub check_options {
         }
     }
 
-    if ((defined($o_stdin) && defined($o_cmd)) || 
+    if ((defined($o_stdin) && defined($o_cmd)) ||
 	(defined($o_stdin) && defined($o_host)) ||
 	(defined($o_host) && defined($o_cmd))) {
         print "Can use only one of -C or -I or -H\n";
@@ -526,14 +526,14 @@ sub check_options {
 }
 
 sub parse_filespec {
-    my $spec = shift; 
+    my $spec = shift;
     $spec =~ s/\./\\\./g;
     $spec =~ s/\?/\.\?/g;
     $spec =~ s/\*/\.\*/g;
     return $spec;
 }
 
-# ls -l line example: 
+# ls -l line example:
 #   -rwxr-xr-x  1 WLeibzon users    21747 Apr 20 23:04 check_files.pl
 sub parse_lsline {
     my @parsed = split (/\s+/, shift);
@@ -546,7 +546,7 @@ sub parse_lsline {
         }
         else {
             $ret{'type'}='file';
-        }    
+        }
         $mod += 400 if $2 =~ /r/;
         $mod += 200 if $2 =~ /w/;
         $mod += 100 if $2 =~ /x/;
@@ -589,7 +589,7 @@ sub open_shell_stream {
   my $shell_command_ref = shift;
   my $cd_dir=undef;
   my $shell_command=undef;
-  
+
   if (defined($o_stdin)) {
     $shell_command = "<stdin>";
     $shell_command_ref = $shell_command if defined($shell_command_ref);
@@ -700,7 +700,7 @@ while (<$READTHIS>) {
         $matched=0;
         for (my $i=0; $i<scalar(@o_filesL); $i++) {
             if ($ls[$nlines]{'filename'} =~ /$o_filesL[$i]/) {
-                $nmatches[$i] = 0 if !defined($nmatches[$i]); 
+                $nmatches[$i] = 0 if !defined($nmatches[$i]);
                 $nmatches[$i]++;
                 verb("    file matches regex '".$o_filesL[$i]."' for file spec '".$o_filesLv[$i]."'");
                 $matched=1;

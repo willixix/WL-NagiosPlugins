@@ -1,4 +1,4 @@
-#!/usr/bin/perl -w 
+#!/usr/bin/perl -w
 #
 # ============================== SUMMARY =====================================
 #
@@ -24,7 +24,7 @@
 #
 # Drop this plugin into plugins directory together with check_snmp_attributes.pl
 # If directory is sonething other than /usr/lib/nagios/plugins, make sure to modify
-# code (closer to end of this file) to specify correct directory. THIS IS A MUST. 
+# code (closer to end of this file) to specify correct directory. THIS IS A MUST.
 #
 # Here is also an example for nagios config:
 #
@@ -48,14 +48,14 @@
 #			  in plugins subdirectory and never announced
 # 0.15 - December 2011  : Plugin put on Nagios Exchange, documentation above added
 # 0.2  - Jan 08,  2012  : Removed retrieval of shared memory as 2.6 kernel had it at 0
-#			  and newest 3.0 kernel now report an error when asking for it 
+#			  and newest 3.0 kernel now report an error when asking for it
 #			  If you have an older 2.4 kernel system, use 0.15 version
 # 0.21 - May 20,  2012  : As has been pointed out, 1MB is 1024K and not 1000
 #
 # ========================== START OF PROGRAM CODE ===========================
 
 
-my @expressions_netsnmpmem = ( 
+my @expressions_netsnmpmem = (
         "total_free=snmp(1.3.6.1.4.1.2021.4.11.0),1024,/,round(1),' MB',+",	# Total free, data is reported in kb, we want MB
 	"total_real=snmp(1.3.6.1.4.1.2021.4.5.0),1024,/,round(1),' MB',+",	# Total real memory
 	"avail_real=snmp(1.3.6.1.4.1.2021.4.6.0),1024,/,round(1),' MB',+",	# Free real memory

@@ -28,20 +28,20 @@
 #
 # This plugin parses data from /proc/stat on linux system and outputs CPU utilization
 # and load data as well as several linux system schedule parameters
-# 
+#
 # It can be used either directly on the same machine, with check_nrpe or with SNMP,
 # either directly or with check_by_snmp, see examples for more information
 #
 # The plugin outputs lots of useful performance data for graphing and pnp4nagios
 # and nagiosgrapher templates are provided for your convinience or NagiosExchange
-# 
+#
 # ============================= SETUP NOTES ====================================
-# 
+#
 # To find all available options I recommend you do
 #   ./check_linux_procstat.pl -help
 #
-# Usage: ./check_linux_procstat.pl [-v] [[-P <filename> | -] | [-O oid -H <host> (-C <snmp_community>) [-2] | (-l login -x passwd [-X pass -L <authp>,<privp>) [-p <port>]]] [-w <warn cpu%> -c <crit cpu%>] [-f] [-t <timeout>] [-V] [-N <number of real cpus> [-n <number of cpu cores>]] 
-# 
+# Usage: ./check_linux_procstat.pl [-v] [[-P <filename> | -] | [-O oid -H <host> (-C <snmp_community>) [-2] | (-l login -x passwd [-X pass -L <authp>,<privp>) [-p <port>]]] [-w <warn cpu%> -c <crit cpu%>] [-f] [-t <timeout>] [-V] [-N <number of real cpus> [-n <number of cpu cores>]]
+#
 # In above options (none of which is actually required) mean:
 #  -w and -c allow to specify cpu threshold above which warning or critical alert is issued
 #  -N option allows to specify number of real CPUs, this is only used to make nice output
@@ -77,7 +77,7 @@
 # define service{
 #       use                             prod-service
 #       hostgroup_name                  linux
-#       service_description             Linux CPU Load and System Scheduler 
+#       service_description             Linux CPU Load and System Scheduler
 #       check_command                   check_linux_cpustat!75!95
 #       notification_options            c,r
 # }
@@ -87,7 +87,7 @@
 #    exec .1.3.6.1.4.1.2021.201 cpustat /bin/cat /proc/stat
 #    ----
 #    in /etc/snmp/snmpd.conf (exact OID is your choice, but don't forget to adjust -O)
-# 
+#
 # define command {
 #        command_name check_snmp_linuxcpustat
 #        command_line $USER1$/check_linux_procstat.pl -O 1.3.6.1.4.1.2021.201 -H $HOSTADDRESS$ -L sha,aes -l $_HOSTSNMP_V3_USER$ -x $_HOSTSNMP_V3_AUTH$ -X $_HOSTSNMP_V3_PRIV$ -f -w $ARG1$ -c $ARG2$
@@ -105,7 +105,7 @@
 #        command_line $USER1$/check_by_snmp -O 1.3.6.1.4.1.2021.201 -H $HOSTADDRESS$ -L sha,aes -l $_HOSTSNMP_V3_USER$ -x $_HOSTSNMP_V3_AUTH$ -X $_HOSTSNMP_V3_PRIV$ --exec $USER1$/check_linux_procstat.pl -f -w $ARG1$ -c $ARG2$ -P -
 # }
 #
-# check_by_snmp can be obtained from my site at http://william.leibzon.org/nagios/ 
+# check_by_snmp can be obtained from my site at http://william.leibzon.org/nagios/
 # or from Nagios Exchange and has been written in part based on check_linux_procstat
 # in order to allow using this mechanism with other plugins.
 #
@@ -117,7 +117,7 @@
 #
 # And here is an older example (from 2007 on linux 2.4 kernel) with performance data:
 # ./check_linux_procstat.pl -f -N 2 -n 4
-# OK - 2 real (4 virtual) CPUs - CPU(all) 47.0% used, 
+# OK - 2 real (4 virtual) CPUs - CPU(all) 47.0% used,
 # CPU0 49.0% used, CPU1 46.0% used, CPU2 46.0% used, CPU3 45.0% used |
 # cpu0_idle=1170345521 cpu0_iowait=1552433 cpu0_irq=6108869 cpu0_nice=2711 cpu0_softirq=24130393
 # cpu0_system=675077539 cpu0_used=1149243863 cpu0_user=442374629 cpu1_idle=1232342280 cpu1_iowait=1619125
@@ -185,7 +185,7 @@ our $no_snmp=0;
 eval 'use Net::SNMP';
 if ($@) {
   $no_snmp=1;
-}      
+}
 
 my $procstatfile = "/proc/stat";
 my $o_procstat = undef;		# option to specify /proc/stat filename
@@ -228,7 +228,7 @@ sub print_usage {
 sub isnum { # Return true if arg is a number
   my $num = shift;
   if ( $num =~ /^(\d+\.?\d*)|(^\.\d+)$/ ) { return 1 ;}
-  return 0; 
+  return 0;
 }
 
 # returns big integer object from larger number in input string
@@ -241,8 +241,8 @@ sub bint {
 sub help {
    print "\nLinux /proc/stat Monitor for Nagios version ",$Version,"\n";
    print "GPL licence, (c) 2008-2012 William Leibzon\n\n";
-   print_usage();       
-   print <<EOT;         
+   print_usage();
+   print <<EOT;
 
 Debug & Console Options:
  -v, --verbose
@@ -270,7 +270,7 @@ Standard Options:
    This is good to catch overflow (which did happen in 2.4 kernel and system up > 2 months)
  -P, --procstat <filename> | -
    By default /proc/stat is read. This allows to modify that and have this plugin read
-   specified file or get data from stdin if instead of file name - is specified 
+   specified file or get data from stdin if instead of file name - is specified
    This can not be combined with SNMP options below.
 
 SNMP Access Options (if none of these are specified, local system is checked):
@@ -368,7 +368,7 @@ sub check_options {
         }
         if (!defined($o_community) && (!defined($o_login) || !defined($o_passwd)) )
           { print "Put snmp login info!\n"; print_usage(); exit $ERRORS{"UNKNOWN"}}
-    } 
+    }
     else {
        if (defined($o_host) || defined($o_community)) {
 	  print "You specified hostname or community but not SNMP OID string\n";
@@ -389,7 +389,7 @@ sub check_options {
         print_usage();
         exit $ERRORS{"UNKNOWN"};
     }
-    # I still have one old install using -Y 
+    # I still have one old install using -Y
     if (defined($o_realcpus) && !defined($o_virtcpus) && defined($o_hyper)) {
 	$o_virtcpus=2*$o_realcpus;
     }
@@ -590,7 +590,7 @@ foreach $line (@lines) {
 	}
 }
 
-# page and swap data is not present in many systems 
+# page and swap data is not present in many systems
 $stats{"data_paged_out"} = 0 if defined($stats{"data_paged_in"});
 $stats{"swap_paged_out"} = 0 if defined($stats{"swap_paged_in"});
 

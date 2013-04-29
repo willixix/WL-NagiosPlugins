@@ -138,7 +138,7 @@ sub check_options {
 	print_usage();
 	exit $ERRORS{"UNKNOWN"};
     }
-    if (!defined($o_protocol) || !defined($o_host)) { 
+    if (!defined($o_protocol) || !defined($o_host)) {
 	print "Hostname (-H) and protocol (-P) are required parameters for this plugin\n\n";
 	print_usage();
 	exit $ERRORS{"UNKNOWN"};

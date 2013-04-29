@@ -30,17 +30,17 @@
 #
 # This is a nagios plugin that checks status of Power Supplies on Dell servers.
 # The plugin can also check voltage probes and battery status.
-# 
+#
 # Quick setup notes:
 # 1. The monitoring system should have Dell Openmanage with data available by SNMP.
-#    For proper work this should be openmanage 4.x or 5.x or later 
+#    For proper work this should be openmanage 4.x or 5.x or later
 # 2. Make sure to check and if necessary adjust the the path to utils.pm
 # 3. Make sure you have Net::SNMP perl module installed
 #
 # Run this with "-h" to find current list of options as documentation is incomplete.
 #
 # Quick notes on parameters - required are '-n' which is expected number of
-# power supplies in the system and for newer systems that report status of 
+# power supplies in the system and for newer systems that report status of
 # CPU power supplies (like Dell 1850) you should also specify number of
 # CPUs with '-c'. For 1850s and 1950s you can also add '-o' to check status
 # of voltage probes and with 1950s you can also add '-b' to check status
@@ -63,14 +63,14 @@
 #
 # ========================= CHANGES AND TODO =================================
 #
-# Changes: 
+# Changes:
 #   June 24, 2006 - first version of the plugin
 #   June 15, 2007 - bug fixes and top text
 #   Nov 20, 2007  - optionally check voltage probes
 #   Nov 27, 2007  - optionally check battery status
-#   Dec 21, 2007  - bug fixes (forgot to add alarm function, 
+#   Dec 21, 2007  - bug fixes (forgot to add alarm function,
 #                   bad spec for UNKNOWN status), updates docs on top
-# 
+#
 # ToDo:
 #
 # 1. Rather then being Dell-specific this could possibly be extended
@@ -155,7 +155,7 @@ sub help {
 	name or IP address of host to check
 -C, --community=COMMUNITY NAME (STRING)
 	community name for the host's SNMP agent (implies v 1 protocol)
--2, --v2c 
+-2, --v2c
         use SNMP v2 (instead of SNMP v1)
 -P, --port=PORT (INTEGER)
 	SNMPd port (Default 161)
@@ -203,7 +203,7 @@ sub check_options {
 };
 
 sub exit_snmperror {
-	my ($ses,$err)=@_; 
+	my ($ses,$err)=@_;
 	printf("%s: %s\n", $err, $ses->error);
 	$ses->close();
 	exit $ERRORS{"UNKNOWN"};

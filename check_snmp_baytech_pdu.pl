@@ -8,7 +8,7 @@
 # Author  : William Leibzon - william@leibzon.org
 # Summary : This is a nagios plugin that checks Baytech PDUs.
 #           It will report Current, Temperature, Power when you
-#	    give it name of the PDU to be checked. 
+#	    give it name of the PDU to be checked.
 # Licence : GPL - summary below, text at http://www.fsf.org/licenses/gpl.txt
 #
 # =========================== PROGRAM LICENSE =================================
@@ -57,12 +57,12 @@
 # have plugin report WARNING or CRITICAL if its outside of expected range.
 # To just report the data specify for example "--current" with no
 # additional values after. If you want to have thereshold for it then
-# specify parameter as for example "--current=5,15". That means you 
+# specify parameter as for example "--current=5,15". That means you
 # want WARNING if current is <5A or >15A. Critical levels follow WARNING,
 # so it could be "--current=5,15,1,19". If you want to specify some but
 # not other thresholds, then just don't specify value between ",," so
 # for example if you want CRITICAL alert at above 19A and no other
-# thresholds, it would be "--current=,,,15". 
+# thresholds, it would be "--current=,,,15".
 #
 # In addition each RPC can have multiple breakers. I've dealt with the
 # ones that have 4 breakers per RPC corresponding to outlets A1-12,
@@ -76,7 +76,7 @@
 #
 # For temperature as mentioned you can specify output format to be either
 # Celsius, Fahrenheit or more "real" (physically for formulas, etc) Kelvin.
-# You specify it with "-o" followed by C or F or K, for example for 
+# You specify it with "-o" followed by C or F or K, for example for
 # Fahrenheit: "-o F". The default for this plugin is Celsius.
 #
 # Two other important options need to be mentioned:
@@ -101,8 +101,8 @@
 #
 # define service{
 #       use                             std-service
-#       host_name                 	baytech 
-#       service_description             Baytech PDU Data - Cabinet4 
+#       host_name                 	baytech
+#       service_description             Baytech PDU Data - Cabinet4
 #       check_command                   check_cisco_temperature!foo!CAB4
 # }
 #
@@ -113,7 +113,7 @@
 #
 # 0.2  - May 28, 2008 : First working release. Documentation above is written too.
 #
-# 0.25 - Dec 19, 2011 : Full support for SNMP v3, small do & bug fixes 
+# 0.25 - Dec 19, 2011 : Full support for SNMP v3, small do & bug fixes
 #
 # ========================== START OF PROGRAM CODE ============================
 
@@ -182,7 +182,7 @@ my $o_temperature=undef;	# Temperature level option
 my @o_temperatureL=();		# array for above list
 
 my $o_ounit= 	'C';		# Output Temperature Measurement Units - can be 'C', 'F' or 'K'
-my $o_iunit=	'10C';		# Incoming Temperature Measurement Units 
+my $o_iunit=	'10C';		# Incoming Temperature Measurement Units
 
 sub print_version { print "$0: $Version\n" };
 
@@ -211,19 +211,19 @@ sub help {
 -T, --timeout=INTEGER
         timeout for SNMP in seconds (Default: 5)
 -H, --hostname=HOST
-	name or IP address of host to check 
+	name or IP address of host to check
 -C, --community=COMMUNITY NAME
 	community name for the SNMP agent (used with v1 or v2c protocols)
 -2, --v2c
 	use snmp v2c (can not be used with -l, -x)
 -l, --login=LOGIN ; -x, --passwd=PASSWD
-	Login and auth password for snmpv3 authentication 
-	If no priv password exists, implies AuthNoPriv 
+	Login and auth password for snmpv3 authentication
+	If no priv password exists, implies AuthNoPriv
 -X, --privpass=PASSWD
 	Priv password for snmpv3 (AuthPriv protocol)
 -L, --protocols=<authproto>,<privproto>
 	<authproto> : Authentication protocol (md5|sha : default md5)
-	<privproto> : Priv protocols (des|aes : default des) 
+	<privproto> : Priv protocols (des|aes : default des)
 -P, --port=PORT
 	SNMP port (Default 161)
 -n, --name=NAME_REGEX
@@ -238,7 +238,7 @@ sub help {
 	against thresholds (see below)
 -c, --current=WARNING_MIN,WARNING_MAX,CRITICAL_MIN,CRITICAL_MAX
 	Current levels for nagios to report WARNING or CRITICAL alert
-	Current is specified in Amps. 
+	Current is specified in Amps.
 -v, --voltage=WARNING_MIN,WARNING_MAX,CRITICAL_MIN,CRITICAL_MAX
 	Voltage levels for nagios alerts. Specified in (unsurisingly) Volts.
 -p, --power=WARNING_MIN,WARNING_MAX,CRITICAL_MIN,CRITICAL_MAX
@@ -279,7 +279,7 @@ sub convert_temp {
     $ctemp = $temp / $in_mult if !defined($ctemp);
     return $ctemp if $out_unit eq "C";
     return $ctemp * 1.8 + 32 if $out_unit eq "F";
-    return $ctemp + 273.15 if $out_unit eq "K"; 
+    return $ctemp + 273.15 if $out_unit eq "K";
     return $ctemp; # should not get here
 }
 
@@ -337,7 +337,7 @@ sub check_options {
     }
 
     $o_ounit =~ tr/[a-z]/[A-Z]/;
-    if ($o_ounit ne 'C' && $o_ounit ne 'F' && $o_ounit ne 'K') 
+    if ($o_ounit ne 'C' && $o_ounit ne 'F' && $o_ounit ne 'K')
 	{ print "Invalid output measurement unit specified!\n"; print_usage(); exit $ERRORS{"UNKNOWN"}; }
     if (defined($o_checkbreakers) && $o_checkbreakers ne "" && $o_checkbreakers ne 'check')
 	{ print "The only valid values are --breakers or --breakers=check\n"; print_usage(); exit $ERRORS{"UNKNOWN"}; }
@@ -485,7 +485,7 @@ sub check_dataresults_val {
 	}
 	else {
 	   $result = $convert_func->($dt->[2], $in_unit, $out_unit) if !defined($result);
-	   if (defined($dt->[6]) && isnum($dt->[6]) && $result > $dt->[6]) { 
+	   if (defined($dt->[6]) && isnum($dt->[6]) && $result > $dt->[6]) {
 		$$statuscode="CRITICAL";
 		$$statusinfo .= " AND" if $$statusinfo;
 		$$statusinfo .= " $name_full is " .$result . $out_unit ." > ". $dt->[6];
@@ -583,7 +583,7 @@ if (defined($TIMEOUT)) {
   alarm ($o_timeout+10);
 }
 
-# SNMP connection, build list of attributes to be retrieve 
+# SNMP connection, build list of attributes to be retrieve
 my ($session,$result,$oid,$line,$attr);
 $session=create_snmp_session();
 
@@ -657,7 +657,7 @@ else {
 	    set_dataresults_rpc($dataresults,$result,\@varlist,$attr,'power',$oid_breakers_power,\@o_powerL);
 	    set_dataresults_rpc($dataresults,$result,\@varlist,$attr,'temperature',undef,\@o_temperatureL);
 	}
-} 
+}
 
 # 3rd SNMP request - Data for Breakers
 if (scalar(@varlist)>0) {
@@ -702,7 +702,7 @@ if (defined($o_show) && scalar(keys %{$statusdata_array})>0) {
 	    for (my $i=1; $i<scalar(@{$statusdata_array->{$rpc_name}}); $i++) {
 		$statusdata .= ', ' if $i>1;
 		$statusdata .= "B".$i." is ";
-		$statusdata .= $statusdata_array->{$rpc_name}[$i]; 
+		$statusdata .= $statusdata_array->{$rpc_name}[$i];
 	    }
 	    $statusdata .= ')';
 	}

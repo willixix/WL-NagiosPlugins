@@ -53,7 +53,7 @@
 # Warning and critical levels are specified with '-w' and '-c' and each
 # one must have exact same number of values (separated by ',') as number
 # of attribute names specified with '-a'. Any values you dont want
-# to compare you specify as ~ (or just not specify a value, i.e. ',,'). 
+# to compare you specify as ~ (or just not specify a value, i.e. ',,').
 # There are also number of other one-letter modifiers that can be used
 # before actual data value to direct how data is to be checked.
 # These are as follows:
@@ -78,7 +78,7 @@
 #  3. As an option instead of using "twiddle" the data is retrieved
 #     from JBoss HTTP status/config data.
 #  4. Add full "help" output in the "check_help" function
-#  5. [0.2 DONE] Need to change how twiddle its called so that pid of twiddle 
+#  5. [0.2 DONE] Need to change how twiddle its called so that pid of twiddle
 #     process is saved and used to kill that process during timeout
 #  6. [0.31 DONE] Added -S parameter to specify JMX service instead of type
 #     shell is kept and that process can be killed during timeout (otherise
@@ -160,7 +160,7 @@ sub check_options {
         'h'     => \$o_help,            'help'          => \$o_help,
         'H:s'   => \$o_host,            'hostname:s'    => \$o_host,
 	'J:s'   => \$o_jmxmbean,	'jmx_mbean:s'   => \$o_jmxmbean,
-	'T:s'	=> \$o_datatype,	'data_type:s'	=> \$o_datatype, 
+	'T:s'	=> \$o_datatype,	'data_type:s'	=> \$o_datatype,
         'S:s'   => \$o_servicetype,     'service_type:s' => \$o_servicetype,
         't:i'   => \$o_timeout,         'timeout:i'     => \$o_timeout,
         'V'     => \$o_version,         'version'       => \$o_version,
@@ -190,7 +190,7 @@ sub check_options {
 	  exit $ERRORS{"UNKNOWN"};
         }
 	if (scalar(@o_warnLv)!=scalar(@o_jmxattrL) || scalar(@o_critLv)!=scalar(@o_jmxattrL)) {
-	  printf "Number of specified warning levels (%d) and critical levels (%d) must be equal to the number of attributes specified at '-a' (%d). If you need to ignore some attribute do it as ',,'\n", scalar(@o_warnLv), scalar(@o_critLv), scalar(@o_jmxattrL); 
+	  printf "Number of specified warning levels (%d) and critical levels (%d) must be equal to the number of attributes specified at '-a' (%d). If you need to ignore some attribute do it as ',,'\n", scalar(@o_warnLv), scalar(@o_critLv), scalar(@o_jmxattrL);
 	  print_usage();
 	  exit $ERRORS{"UNKNOWN"};
 	}
@@ -255,7 +255,7 @@ sub changedir {
   if (!defined($tempdir) || ! -d $tempdir) {
 	$tempdir="/tmp"
   }
-  my $cnt=0; 
+  my $cnt=0;
   my $twextra="";
   do {
      $twextra="/".$twdir_prefix.$cnt if $cnt!=0;
@@ -271,7 +271,7 @@ sub changedir {
   }
   else {
 	print "Unable to find or create directory within $tempdir tree with writable $twlogfile file\n";
-   	exit $ERRORS{"UNKNOWN"}; 
+   	exit $ERRORS{"UNKNOWN"};
   }
 }
 
@@ -279,7 +279,7 @@ sub changedir {
 
 check_options();
 
-# Check global timeout if something goes wrong 
+# Check global timeout if something goes wrong
 if (defined($TIMEOUT)) {
   verb("Alarm at $TIMEOUT");
   alarm($TIMEOUT);
@@ -307,8 +307,8 @@ for ($i=0;$i<scalar(@o_jmxattrL);$i++) {
   $dataresults{$o_jmxattrL[$i]} = ["check", undef];
 }
 for ($i=0;$i<scalar(@o_perfattrL);$i++) {
-  $twcall .= " $o_perfattrL[$i]" if !defined($dataresults{$o_perfattrL[$i]}); 
-  $dataresults{$o_perfattrL[$i]} = ["perf", undef]; 
+  $twcall .= " $o_perfattrL[$i]" if !defined($dataresults{$o_perfattrL[$i]});
+  $dataresults{$o_perfattrL[$i]} = ["perf", undef];
 }
 
 # here we actually collect the data and put in our hash, very simple actually
@@ -341,7 +341,7 @@ for ($i=0;$i<scalar(@o_jmxattrL);$i++) {
 	$statusdata .= "," if ($statusdata);
 	$statusdata .= " " . $o_jmxattrL[$i] . " is " . $dataresults{$o_jmxattrL[$i]}[1] ;
     }
-    $perfdata .= " " . $o_jmxattrL[$i] . "=" . $dataresults{$o_jmxattrL[$i]}[1] if defined($o_perf) && $dataresults{$o_jmxattrL[$i]}[0] ne "perf"; 
+    $perfdata .= " " . $o_jmxattrL[$i] . "=" . $dataresults{$o_jmxattrL[$i]}[1] if defined($o_perf) && $dataresults{$o_jmxattrL[$i]}[0] ne "perf";
   }
   else {
 	$statuscode="CRITICAL";
@@ -358,7 +358,7 @@ for ($i=0;$i<scalar(@o_perfattrL);$i++) {
 
 print "JBOSS " . $statuscode . $statusinfo;
 print " -".$statusdata if $statusdata;
-print " |".$perfdata if $perfdata; 
+print " |".$perfdata if $perfdata;
 print "\n";
 
 exit $ERRORS{$statuscode};

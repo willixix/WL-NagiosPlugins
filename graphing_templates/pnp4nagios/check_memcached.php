@@ -143,7 +143,7 @@ $def[5]  = rrd::def("curr_items", $RRDFILE[8], $DS[8], "AVERAGE");
 $def[5] .= rrd::def("total_items", $RRDFILE[17], $DS[17], "AVERAGE");
 $def[5] .= rrd::area("total_items", "#00FF00", "Items Added Per Sec");
 $def[5] .= rrd::gprint("total_items", array("LAST", "MAX", "AVERAGE"), "%3.0lf ");
-$def[5] .= rrd::comment("- Total Current Items "); 
+$def[5] .= rrd::comment("- Total Current Items ");
 $def[5] .= rrd::gprint("curr_items", array("LAST"), "%6.0lf ");
 
 $ds_name[6] ="CPU Use";

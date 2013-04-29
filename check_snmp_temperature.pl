@@ -47,7 +47,7 @@
 # Cisco Switches/Routers (cisco 7500, 5500, 2948) then you may skip
 # much of the configuration hassles and use pre-programmed settings
 # by using "--type" (or -T) parameter, you do still need to specify
-# though if you want output as C or F with '-o' option (see examples). 
+# though if you want output as C or F with '-o' option (see examples).
 # The plugin currently does not support finding critical & warning
 # thresholds which most systems also report in SNMP, so actual thresholds
 # you will need to specify as well.
@@ -65,10 +65,10 @@
 # to specify what base sensor temperature data type is with "-i" (see below).
 #
 # The way plugin works is to walk the snmp tree from base names OID and find
-# all the sensor names. Then it compares names given with '-a' (names are 
+# all the sensor names. Then it compares names given with '-a' (names are
 # seperated by ',') to those found in the snmp tree (in '-a' you're expected
 # to specify one word which would be found in the full sensor name and
-# is unique for thaqt `sensor) and uses OID ending (i.e. part of OID after 
+# is unique for thaqt `sensor) and uses OID ending (i.e. part of OID after
 # the base) and adds it to base value table OID to create OID to be retrieved
 # (similar to how you find ethernet statistics OIDs based on name of the
 # interface and in fact many of SNMP parameters are like that).
@@ -89,7 +89,7 @@
 #          out SNMP parameters that work, please send me email with this
 #          information so that I can add it as a new system type.
 #
-# The values retrieved are compared to specified warning and critical values, 
+# The values retrieved are compared to specified warning and critical values,
 # but first the temperature has to be converted from base measurement units to
 # measurement units you want. These units are Celsius (C) or Fahrenheit (F)
 # or Kelvin (K) with input measurement unit specified with '-i' and output
@@ -149,7 +149,7 @@
 #		    specified directly as parameter. Was used for checking Dell
 # 0.2  - Aug 2006 : Support multiple types of equipment by using config
 #		    hash/array and --type parameter
-# 0.21 - Dec 2006 : Added support for Juniper and HP 
+# 0.21 - Dec 2006 : Added support for Juniper and HP
 # 0.22 - Dec 2006 : Added quick hack to interpret 0 value as "dont' check" threshold
 # 0.23 - Dec 2007 : Bug Fixes (especially one involving F as input format)
 # 0.3  - Jan 2008 : Added '-n' and '-d' options to specify exact list of
@@ -187,10 +187,10 @@
 #
 # TODO and older revision history:
 #  -- TODO ON TODO --> since most of below is done, it should be cleaned up sometime later
-# 
+#
 # 1. [DONE - Aug 2006] To support multiple types of equipment add config
 #    array/hash and --type parameter
-# 2. More plugin types for various other equipment need to be added ... 
+# 2. More plugin types for various other equipment need to be added ...
 #    [DONE - Dec 2006] - added Juniper & HP
 # 3. [DONE - Mar 2012] Need to update warn & crit parameters parsing code so
 #    it would support both low and high values with '<' and '>' prefixed and
@@ -203,7 +203,7 @@
 #            library that would be shared with check_snmp_table and quite
 #            likely other plugins where multiple "attributes" are specified
 # 4. [DONE - Mar 2012] Add threshold specification in nagios plugin spec compatible way
-#    as was done with check_mysqld 0.9 which uses code similar to this check 
+#    as was done with check_mysqld 0.9 which uses code similar to this check
 #    Add specifying of WARN & CRIT after actual value ';' in the perf output
 #    [DONE - Dec 2011] - added WARN & CRIT to perf, threshold spec still on todo
 # 5. Support specifying table OIDs for temperature threshold values.
@@ -244,7 +244,7 @@ my %system_types = ( "dell" => [ "1.3.6.1.4.1.674.10892.1.700.20.1.8", "1.3.6.1.
 		     "cisco1" => [ "1.3.6.1.4.1.9.9.13.1.3.1.2", "1.3.6.1.4.1.9.9.13.1.3.1.3", "C" ],
 		     "cisco" =>  [ "1.3.6.1.4.1.9.9.13.1.3.1.2", "1.3.6.1.4.1.9.9.13.1.3.1.3", "C" ], # same as cisco 1 for now, this may change
 		     "juniper" => [ "1.3.6.1.4.1.2636.3.1.13.1.5", "1.3.6.1.4.1.2636.3.1.13.1.7", "C" ], # somebody verify it, dont have juniper right now
-		     "hp" => [ "1.3.6.1.4.1.232.6.2.6.8.1.3", "1.3.6.1.4.1.232.6.2.6.8.1.4", "C" ], 
+		     "hp" => [ "1.3.6.1.4.1.232.6.2.6.8.1.3", "1.3.6.1.4.1.232.6.2.6.8.1.4", "C" ],
 		     "alteon" => [ "", "", "C", ['RearLeftSensor', 'RearMiddleSensor', 'FrontMiddleSensor', 'FrontRightSensor'], ['1.3.6.1.4.1.1872.2.1.1.6.0','1.3.6.1.4.1.1872.2.1.1.7.0','1.3.6.1.4.1.1872.2.1.1.8.0','1.3.6.1.4.1.1872.2.1.1.9.0'] ], # why do they need to make these alteons so proprietory and hard to deal with?
 		     "baytech" => [ "1.3.6.1.4.1.4779.1.3.5.2.1.2", "1.3.6.1.4.1.4779.1.3.5.2.1.8", "10C" ],  # baytech pdu
 		     "lmsensors" => [ "1.3.6.1.4.1.2021.13.16.2.1.2", "1.3.6.1.4.1.2021.13.16.2.1.3", "1000C" ], #linux with lmsensors
@@ -284,7 +284,7 @@ my @o_attrL=    ();             # array for above list
 my $o_perfattr= undef;		# List of attributes to only provide values in performance data but no checking
 my @o_perfattrL=();		# array for above list
 my $o_ounit= 	'C';		# Output Temperature Measurement Units - can be 'C', 'F' or 'K'
-my $o_iunit=	'C';		# Incoming Temperature Measurement Units - can prefix with number if its n*temp 
+my $o_iunit=	'C';		# Incoming Temperature Measurement Units - can prefix with number if its n*temp
 my $oid_names=	undef;		# OID for base of sensor attribute names
 my $oid_data=	undef;		# OID for base of actual data for those attributes found when walking name base
 my $o_names=	undef;		# List of sensor names (as opposed to specifying names table)
@@ -296,7 +296,7 @@ my @ar_sensornames=();		# List of sensor names if specified in the sensor_types 
 my @ar_sensoroids=();		# List of sensor data oids if specified in sensor_types array
 
 # This is hack for HP based on cpqHeTemperatureLocale OID from cpqhlth.mib to map reported locale id to real name
-my %hp_locale =  ( 1=> ['OTHER',1], 2=> ['UNKNOWN',1],  3=> ['System', 1], 4=> ['SystemBoard',1], 5=> ['ioBoard',1], 
+my %hp_locale =  ( 1=> ['OTHER',1], 2=> ['UNKNOWN',1],  3=> ['System', 1], 4=> ['SystemBoard',1], 5=> ['ioBoard',1],
 		   6=> ['CPU',1], 7=> ['Memory',1], 8=> ['Storage',1], 9=> ['RemovableMedia',1],
 		   10=> ['PowerSupply',1], 11=> ['Ambient',1], 12=> ['Chassis',1], 13=> ['BridgeCard',1] );
 
@@ -321,7 +321,7 @@ sub check_threshold {
     my $lv2 = $th_array->[2];
 
     # verb("debug check_threshold: $mod : ".(defined($lv1)?$lv1:'')." : ".(defined($lv2)?$lv2:''));
-    return "" if !defined($lv1) || ($mod eq '' && $lv1 eq ''); 
+    return "" if !defined($lv1) || ($mod eq '' && $lv1 eq '');
     return " " . $attrib . " Temperature is " . $data . $o_ounit . " = " . $lv1.$o_ounit if $mod eq '=' && $data eq $lv1;
     return " " . $attrib . " Temperature is " . $data . $o_ounit . " != " . $lv1.$o_ounit if $mod eq '!' && $data ne $lv1;
     return " " . $attrib . " Temperature is " . $data . $o_ounit . " > " . $lv1.$o_ounit if $mod eq '>' && $data>$lv1;
@@ -339,7 +339,7 @@ sub parse_threshold {
 
     # link to an array that holds processed threshold data
     # array: 1st is type of check, 2nd is value2, 3rd is value2, 4th is option, 5th is nagios spec string representation for perf out
-    my $th_array = [ '', undef, undef, '', '' ]; 
+    my $th_array = [ '', undef, undef, '', '' ];
     my $th = $thin;
     my $at = '';
 
@@ -430,13 +430,13 @@ sub help {
 -2, --v2c
    Use snmp v2c
 -l, --login=LOGIN ; -x, --passwd=PASSWD
-   Login and auth password for snmpv3 authentication 
-   If no priv password exists, implies AuthNoPriv 
+   Login and auth password for snmpv3 authentication
+   If no priv password exists, implies AuthNoPriv
 -X, --privpass=PASSWD
    Priv password for snmpv3 (AuthPriv protocol)
 -L, --protocols=<authproto>,<privproto>
    <authproto> : Authentication protocol (md5|sha : default md5)
-   <privproto> : Priv protocole (des|aes : default des) 
+   <privproto> : Priv protocole (des|aes : default des)
 -P, --port=PORT
    SNMP port (Default 161)
 -w, --warn=INT[,INT[,INT[..]]]
@@ -572,7 +572,7 @@ sub check_options {
 	    print "Put snmp V3 priv login info with priv protocols!\n"; print_usage(); exit $ERRORS{"UNKNOWN"}}
 	}
     $o_ounit =~ tr/[a-z]/[A-Z]/;
-    if ($o_ounit ne 'C' && $o_ounit ne 'F' && $o_ounit ne 'K') 
+    if ($o_ounit ne 'C' && $o_ounit ne 'F' && $o_ounit ne 'K')
 	{ print "Invalid output measurement unit specified!\n"; print_usage(); exit $ERRORS{"UNKNOWN"}; }
     $o_iunit =~ tr/[a-z]/[A-Z]/;
     if ($o_iunit !~ /\d*[C|K|F]/)
@@ -632,7 +632,7 @@ sub check_options {
 	  exit $ERRORS{"UNKNOWN"};
         }
 	if (scalar(@ar_warnLv)!=scalar(@o_attrL) || scalar(@ar_critLv)!=scalar(@o_attrL)) {
-	  printf "Number of specified warning levels (%d) and critical levels (%d) must be equal to the number of attributes specified at '-a' (%d). If you need to ignore some attribute do it as ',,'\n", scalar(@ar_warnLv), scalar(@ar_critLv), scalar(@o_attrL); 
+	  printf "Number of specified warning levels (%d) and critical levels (%d) must be equal to the number of attributes specified at '-a' (%d). If you need to ignore some attribute do it as ',,'\n", scalar(@ar_warnLv), scalar(@ar_critLv), scalar(@o_attrL);
 	  verb("Warning Levels: ".join(",",@ar_warnLv));
 	  verb("Critical Levels: ".join(",",@ar_critLv));
 	  print_usage();
@@ -684,7 +684,7 @@ if ( defined($o_login) && defined($o_passwd)) {
       -authpassword	=> $o_passwd,
       -authprotocol	=> $o_authproto,
       -timeout          => $o_timeout
-    );  
+    );
   } else {
     verb("SNMPv3 AuthPriv login : $o_login, $o_authproto, $o_privproto");
     ($session, $error) = Net::SNMP->session(
@@ -820,7 +820,7 @@ else {
 		$dataresults{$attr}[2]=convert_temp($$result{$dataresults{$attr}[1]},$o_iunit,$o_ounit);
 		verb("got $dataresults{$attr}[1] : $attr = $dataresults{$attr}[2]");
 	    }
-	    else { 
+	    else {
 		if (defined($o_unkdef)) {
 		   $dataresults{$attr}[2]=$o_unkdef;
 		   verb("could not find snmp data for $attr, setting to to default value $o_unkdef");
@@ -830,7 +830,7 @@ else {
 		}
 	    }
 	}
-} 
+}
 
 # loop to check if warning & critical attributes are ok
 for ($i=0;$i<scalar(@o_attrL);$i++) {
@@ -850,7 +850,7 @@ for ($i=0;$i<scalar(@o_attrL);$i++) {
 	  $statusdata .= "," if ($statusdata);
 	  $statusdata .= " " . $o_attrL[$i] . " Temperature is " . $dataresults{$o_attrL[$i]}[2] . $o_ounit;
     }
-    if (defined($o_perf) && $dataresults{$o_attrL[$i]}[4]==0 && 
+    if (defined($o_perf) && $dataresults{$o_attrL[$i]}[4]==0 &&
         defined($o_warnL[$i][5]) && defined($o_critL[$i][5])) {
 	  $dataresults{$o_attrL[$i]}[4]++;
           $perfdata .= " " . $o_attrL[$i] . "=" . $dataresults{$o_attrL[$i]}[2];

@@ -40,8 +40,8 @@
 #  On local system it will execute standard unix 'uptime' and 'uname -a'.
 #
 #  On a remote system it'll retrieve data from sysSystem for system type
-#  and use that to decide if further data should be retrieved from 
-#    sysUptime (OID 1.3.6.1.2.1.1.3.0) for windows or 
+#  and use that to decide if further data should be retrieved from
+#    sysUptime (OID 1.3.6.1.2.1.1.3.0) for windows or
 #    hostUptime (OID 1.3.6.1.2.1.25.1.1.0) for unix system or
 #    snmpEngineTime (OID 1.3.6.1.6.3.10.2.1.3) for cisco switches
 #
@@ -52,7 +52,7 @@
 #
 #  1. You can also specify warning and critical thresholds which will
 #     give warning or critical alert if system has been up for lees then
-#     specified number of minutes. Example: 
+#     specified number of minutes. Example:
 #        check_uptime.pl -w 5
 #     Will give warning alert if system has been up for less then 5 minutes
 #
@@ -74,8 +74,8 @@
 #        command_name check_uptime
 #        command_line $USER1$/check_uptime.pl -f -w 5
 # }
-# 
-# 2. Local server (use with NRPE or on nagios host), 
+#
+# 2. Local server (use with NRPE or on nagios host),
 #    one critical alert on reboot:
 #
 # define command {
@@ -97,7 +97,7 @@
 #        command_name check_snmp_uptime_v3
 #        command_line $USER1$/check_uptime.pl -f -w -H $HOSTADDRESS$ -l $_HOSTSNMP_V3_USER$ -x $_HOSTSNMP_V3_AUTH$ -X $_HOSTSNMP_V3_PRIV$ -L sha,aes -P "$SERVICEPERFDATA$"
 # }
-# 
+#
 # 5. Example of service definition using above
 #
 # define service{
@@ -121,7 +121,7 @@
 # ============================= VERSION HISTORY ==============================
 #
 # 0.1 - sometime 2006 : Simple script for tracking local system uptime
-# 0.2 - sometime 2008 : Update to get uptime by SNMP, its now alike my other plugins 
+# 0.2 - sometime 2008 : Update to get uptime by SNMP, its now alike my other plugins
 # 0.3 -  Nov 14, 2009 : Added getting system info line and using that to decide
 #		        format of uptime line and how to process it. Added support
 #			for getting uptime with SNMP from windows systems.
@@ -145,7 +145,7 @@
 #		        output to go to instead of console and for '--debug'
 #			option as an alias to '--verbose'.
 # 0.521 - Oct 4, 2012 : Small bug in one of regex, see issue #11 on github
-# 
+#
 # TODO:
 #   0) Add '--extra-opts' to allow to read options from a file as specified
 #      at http://nagiosplugins.org/extra-opts. This is TODO for all my plugins
@@ -179,7 +179,7 @@ if ($@) {
   $no_snmp=1;
 }
 
-# Version 
+# Version
 my $Version='0.52';
 
 # SNMP OID
@@ -193,7 +193,7 @@ my @oid_uptime_types = ( ['', '', ''],		      	      # type 0 is reserved
            [ 'win', 'sysUpTime', $oid_sysUptime ], 	      # type 2 is windows
 	   [ 'unix-host', 'hostUpTime', $oid_hostUptime ],    # type 3 is unix-host
 	   [ 'unix-sys', 'sysUpTime', $oid_sysUptime ],       # type 4 is unix-sys
-	   [ 'net', 'engineTime', $oid_engineTime ]);         # type 5 is netswitch 
+	   [ 'net', 'engineTime', $oid_engineTime ]);         # type 5 is netswitch
 
 # Not used, but perhaps later
 my $oid_hrLoad = '1.3.6.1.2.1.25.3.3.1.2.1';
@@ -203,7 +203,7 @@ my $oid_sysLoadInt15 = '1.3.6.1.4.1.2021.10.1.5.3';
 
 # Standard options
 my $o_host = 		undef; 	# hostname
-my $o_timeout=  	undef;  # Timeout (Default 10) 
+my $o_timeout=  	undef;  # Timeout (Default 10)
 my $o_help=		undef; 	# wan't some help ?
 my $o_verb=		undef;	# verbose mode
 my $o_version=		undef;	# print version
@@ -277,7 +277,7 @@ Standard Options:
    specified number of minutes or ONE ALERT if -P option is used and
    system's previous uptime is larger then current on
  -f, --perfparse
-   Perfparse compatible output 
+   Perfparse compatible output
  -P, --prev_perfdata
    Previous performance data (normally put '-P \$SERVICEPERFDATA\$' in
    nagios command definition). This is recommended if you dont specify
@@ -288,7 +288,7 @@ Standard Options:
    Optional custom label before results prefixed to results
  -t, --timeout=INTEGER
    timeout for SNMP in seconds (Default: 15)
- 
+
 SNMP Access Options:
  -H, --hostname=HOST
    name or IP address of host to check (if not localhost)
@@ -297,13 +297,13 @@ SNMP Access Options:
  -2, --v2c
    use snmp v2c (can not be used with -l, -x)
  -l, --login=LOGIN ; -x, --passwd=PASSWD
-   Login and auth password for snmpv3 authentication 
-   If no priv password exists, implies AuthNoPriv 
+   Login and auth password for snmpv3 authentication
+   If no priv password exists, implies AuthNoPriv
  -X, --privpass=PASSWD
    Priv password for snmpv3 (AuthPriv protocol)
  -L, --protocols=<authproto>,<privproto>
    <authproto> : Authentication protocol (md5|sha : default md5)
-   <privproto> : Priv protocols (des|aes : default des) 
+   <privproto> : Priv protocols (des|aes : default des)
  -p, --port=PORT
    SNMP port (Default 161)
 EOT
@@ -328,7 +328,7 @@ sub verb {
     }
 }
 
-# load previous performance data 
+# load previous performance data
 sub process_perf {
  my %pdh;
  my ($nm,$dt);
@@ -386,7 +386,7 @@ sub check_options {
 	print "Invalid system type specified\n"; print_usage(); exit $ERRORS{"UNNKNOWN"};
     }
 
-    if (!defined($o_community) && (!defined($o_login) || !defined($o_passwd)) ) { 
+    if (!defined($o_community) && (!defined($o_login) || !defined($o_passwd)) ) {
 	 $o_type='local' if !defined($o_type) || $o_type eq 'auto';
 	 if ($o_type ne 'local') {
             print "Put snmp login info!\n"; print_usage(); exit $ERRORS{"UNKNOWN"}
@@ -420,7 +420,7 @@ sub check_options {
 	  { print "Put snmp V3 priv login info with priv protocols!\n"; print_usage(); exit $ERRORS{"UNKNOWN"}}
     }
 
-    if (defined($o_timeout) && (isnnum($o_timeout) || ($o_timeout < 2) || ($o_timeout > 60))) 
+    if (defined($o_timeout) && (isnnum($o_timeout) || ($o_timeout < 2) || ($o_timeout > 60)))
 	{ print "Timeout must be >1 and <60 !\n"; print_usage(); exit $ERRORS{"UNKNOWN"}}
     if (!defined($o_timeout)) {$o_timeout=$TIMEOUT+5;}
 
@@ -457,7 +457,7 @@ sub create_snmp_session {
       -authpassword	=> $o_passwd,
       -authprotocol	=> $o_authproto,
       -timeout          => $o_timeout
-     );  
+     );
     } else {
      verb("SNMPv3 AuthPriv login : $o_login, $o_authproto, $o_privproto");
      ($session, $error) = Net::SNMP->session(
@@ -602,7 +602,7 @@ else {
 		  if ($guessed_check_type==4) {
                       verb("Received noSuchName error for sysUpTime OID $oid. Giving up.");
                       $guessed_check_type=0;
-		  } 
+		  }
 	          if ($guessed_check_type==3) {
             	      verb("Received noSuchName error for hostUpTime OID $oid, will now try sysUpTime");
 		      $guessed_check_type=4;
@@ -655,7 +655,7 @@ else {
   elsif ($uptime_output =~ /^(\d+)$/) {
     my $upnum = $1;
     if ($oid eq $oid_sysUptime) {
-	$uptime_minutes = $upnum/100/60; 
+	$uptime_minutes = $upnum/100/60;
     }
     elsif ($oid eq $oid_engineTime) {
 	$uptime_minutes = $upnum/60;

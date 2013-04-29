@@ -61,7 +61,7 @@
 #   Plugin currently does not support authentication so the only connection
 #   parameters are "-H hostname" and "-p port". The default port is 11211
 #   and you must specify the hostname (if localhost specify it as -H 127.0.0.1)
-# 
+#
 # 2. Response Time, HitRate, Memory Utilization
 #
 #   To get response time you use "-T" or "--response_time" option. By itself
@@ -74,7 +74,7 @@
 #   and previous performance data is feed back, the data is based on real
 #   hitrate with lifelong info also given in paramphesis. As with -T you
 #   can specify -R by itself or with thresholds as -R warn,crit
-# 
+#
 #   Memory utilization corresponds to what some others call "size". This is
 #   percent of max memory currently in use. The option is -U or --utilization
 #   and as you probably guessed can be used by itself or as -U warn,crit
@@ -136,12 +136,12 @@
 #
 # 4. Memcache Statistics Variables and Calculating their Rate of Change
 #
-#   All statistics variables from memcached 'stats' can be checked with the plugin. 
-#   And as some people know there are actually several stats arrays in memcached. 
+#   All statistics variables from memcached 'stats' can be checked with the plugin.
+#   And as some people know there are actually several stats arrays in memcached.
 #   By default the plugin will get statistics for 'misc' and 'malloc'. You can
 #   specify a list of statistics array names (corresponding to 'stats name'
 #   command in memcached) with -s or --stats command. Known arrays are:
-#     misc, malloc, sizes, maps, cachedump, slabs, items 
+#     misc, malloc, sizes, maps, cachedump, slabs, items
 #   And example of trying to retrieve all of them is:
 #     -s misc,malloc,sizes,maps,cachedump,slabs,items
 #   However not all of them will have data in your system and arrays like
@@ -151,7 +151,7 @@
 #   To see stat variables in plugin status output line and or specify thresholds
 #   based on their values you would use -a or --variables argument. For example:
 #       -a curr_connections,evictions
-#   You must specify same number of warning and critical thresholds with 
+#   You must specify same number of warning and critical thresholds with
 #   -w or --warn and -c or --crit argument as a number of variables specified
 #   in -a. If you simply want variable values on status without checking their value
 #   then either use ~ in place of threshold value or nothing at all. For example:
@@ -166,7 +166,7 @@
 #   is a format used internally by plugin. As an alternative you can specify how to
 #   label these with --rate_label option where you can specify prefix and/or suffix.
 #   For example '--rate_label=dt_' would have the output being "dt_total_connections'
-#   where as '---rate_label=,_rate' is plugin default giving 'total_connections_rate'. 
+#   where as '---rate_label=,_rate' is plugin default giving 'total_connections_rate'.
 #   You can use these names with -a and -A such as:
 #           --rate_label=,_rate -a total_connections_rate -w 1000 -c ~
 #
@@ -176,7 +176,7 @@
 #   In commands.cfg this would be specified as:
 #     -P "$SERVICEPERFDATA$"
 #   And don't forget the quotes, in this case they are not just for documentation.
-# 
+#
 # 5. Threshold Specification
 #
 #   The plugin fully supports Nagios plug-in specification for specifying thresholds:
@@ -191,7 +191,7 @@
 #   There are two two specifications of range formats as with other nagios plugins:
 #     number1:number2   issue alert if data is OUTSIDE of range [number1..number2]
 #	                i.e. alert if data<$number1 or data>$number2
-#     @number1:number2  issue alert if data is WITHIN range [number1..number2] 
+#     @number1:number2  issue alert if data is WITHIN range [number1..number2]
 #		        i.e. alert if data>=$number and $data<=$number2
 #
 #   The plugin will attempt to check that WARNING values is less than CRITICAL
@@ -220,7 +220,7 @@
 #   find at the top of the code (further below) and plugin author does not claim
 #   to have identified all variables correctly. Please email if you find an error
 #   or want to add more variables.
-# 
+#
 #   As noted above performance data is also used to calcualte rate of change
 #   by feeding it back with -P option. In that regard even if you did not specify
 #   -f or -A but you have specified &variable, its actual data would be sent out
@@ -268,7 +268,7 @@
 #
 # In above the -v option means "verbose" and with it plugin will output some debugging
 # information about what it is doing. The option is not intended to be used when plugin
-# is called from nagios itself. 
+# is called from nagios itself.
 #
 # ======================= VERSION HISTORY and TODO ================================
 #
@@ -295,7 +295,7 @@
 #  [0.63 - Jun 10 2012] Documentation fixes.
 #		        Default rate variable name changed from &Delta_variable to
 #                       variable_rate to be in sync with check_redis.pl. One of the reasons
-#                       is that in the future I'll plan to add variables that are real 
+#                       is that in the future I'll plan to add variables that are real
 #                       delta i.e new_value-old_value and not (new_value-old_value)/time
 #		        Also I've decided that specifying prefix & suffix or rate label
 #                       variables will not be one-letter option and only long-name option
@@ -332,7 +332,7 @@
 #         These would mean you specify '--connected_clients' in similar way to '--hitrate'
 #         Internally these would be convered into -A, -w, -c as appropriate an used
 #         together with these options. So in practice it will now allow to get any data
-#         just a different way to specify options for this plugin. 
+#         just a different way to specify options for this plugin.
 #     (c) Allow regex when selecting variable name(s) with -a, this will be enabled with
 #	  a special option and not be default
 #	  [DONE]
@@ -345,7 +345,7 @@
 #         be implimented by allowing regex checks in place of specific variable name.
 #	  [DONE]
 #
-#  Others are welcome recommand a new feature to be added here. If so please email to 
+#  Others are welcome recommand a new feature to be added here. If so please email to
 #         william@leibzon.org.
 #  And don't worry, I'm not a company with some hidden agenda to use your idea
 #  but an actual person who you can easily get hold of by email, find on forums
@@ -421,7 +421,7 @@ my %KNOWN_STATUS_VARS = (
 	 'pid' => [ 'misc', 'STATUSINFO', '' ],
 	);
 
-# Here you can also specify which variables should go into perf data, 
+# Here you can also specify which variables should go into perf data,
 # For right now it is 'GAUGE', 'COUNTER', 'DATA' (but not 'TEXTDATA'), and 'BOOLEAN'
 # you may want to remove BOOLEAN if you don't want too much data
 my $PERF_OK_STATUS_REGEX = 'GAUGE|COUNTER|^DATA$|BOOLEAN';
@@ -441,7 +441,7 @@ my $o_perf=     undef;          # Performance data option
 my @o_check=	();		# General check option that maybe repeated more than once
 my $o_timeout=  undef;          # Timeout to use - note that normally timeout is take from nagios anyway
 my $o_mdsopt=	undef;		# Stat List to get data for
-my @o_mdslist= ('misc','malloc'); # Default List, if -S option is entered, this is replaced 
+my @o_mdslist= ('misc','malloc'); # Default List, if -S option is entered, this is replaced
 my $o_timecheck=undef;          # threshold spec for connection time
 my $o_hitrate=	undef;		# threshold spec for hitrate%
 my $o_utilsize=	undef;		# threshold spec for utilization%
@@ -564,15 +564,15 @@ General Check Option (all 3 forms equivalent, can be repated more than once):
 
 Measured/Calculated Data:
  -T, --response_time=[WARN,CRIT]
-   If this is used as just -T the plugin will measure and output connection 
+   If this is used as just -T the plugin will measure and output connection
    response time in seconds. With -f this would also be provided on perf variables.
    You can also specify values for this parameter, these are interprted as
-   WARNING and CRITICAL thresholds (separated by ','). 
+   WARNING and CRITICAL thresholds (separated by ',').
  -R, --hitrate=[WARN,CRIT]
    Calculates Hitrate %: cache_miss/(cache_hits+cache_miss). If this is used
    as just -R then this info just goes to output line. With '-R -f' these
    go as performance data. You can also specify values for this parameter,
-   these are interprted as WARNING and CRITICAL thresholds (separated by ','). 
+   these are interprted as WARNING and CRITICAL thresholds (separated by ',').
    The format for WARN and CRIT is same as what you would use in -w and -c.
  -U, --utilization=[WARN,CRIT]
    This calculates percent of space in use, which is bytes/limit_maxbytes
@@ -607,7 +607,7 @@ EOT
 # Licence : LGPL - full text at http://www.fsf.org/licenses/lgpl.txt
 #
 # ============================= LIBRARY HISTORY AND VERSIONS ====================================
-# 
+#
 # Note: you may safely skip this section if you're looking at documentation about this library or plugin
 #
 # [2006-2008]  The history of this library goes back to plugins such as check_snmp_temperature.pl,
@@ -616,7 +616,7 @@ EOT
 #	       these thresholds. Several of my plugins had common architecture supporting multiple
 #	       variables or attributes to be checked using -a/--attributes/--variables option and
 #	       --warn and --crit options with list of thresholds for these attributes and --perfvars
-#	       specifying variables whose data would only go as PERFOUT for graphing. 
+#	       specifying variables whose data would only go as PERFOUT for graphing.
 #
 # [2008-2011]  Threshold parsing and check code had been rewritten and support added for specifying
 #	       range per plugin guidelines: http://nagiosplug.sourceforge.net/developer-guidelines.html
@@ -884,7 +884,7 @@ sub uptime_info {
   $upinfo .= "$days days" if $days>0;
   $upinfo .= (($upinfo ne '')?' ':'').$hrs." hours" if $hrs>0;
   $upinfo .= (($upinfo ne '')?' ':'').$mins." minutes" if $mins>0 && ($days==0 || $hrs==0);
-  $upinfo .= (($upinfo ne '')?' ':'').$secs." seconds" if $secs>0 && $days==0 && $hrs==0; 
+  $upinfo .= (($upinfo ne '')?' ':'').$secs." seconds" if $secs>0 && $days==0 && $hrs==0;
   return $upinfo;
 }
 
@@ -899,7 +899,7 @@ sub verb {
 
     if (defined($o_verb) || (defined($self) && defined($self->{'verbose'}) && $self->{'verbose'} ne 0)) {
         $debug_file_name = $self->{'debug_file'} if defined($self) && $self->{'debug_file'} ne "";
-        $debug_file_name = $self->{'verbose'} if $debug_file_name ne "" && defined($self) && 
+        $debug_file_name = $self->{'verbose'} if $debug_file_name ne "" && defined($self) &&
 					         ($self->{'verbose'} ne 0 && $self->{'verbose'} ne 1 && $self->{'verbose'} ne '');
         $debug_file_name = $o_verb if $debug_file_name ne "" && defined($o_verb) && $o_verb ne "";
         if ($debug_file_name ne "") {
@@ -1276,7 +1276,7 @@ sub check_threshold {
     $issymb = 0 if defined($self) && $self->{'output_comparison_symbols'} eq 0;
 
     # verb("debug check_threshold: $mod : ".(defined($lv1)?$lv1:'')." : ".(defined($lv2)?$lv2:''));
-    return "" if !defined($lv1) || ($mod eq '' && $lv1 eq ''); 
+    return "" if !defined($lv1) || ($mod eq '' && $lv1 eq '');
     return " " . $attrib . " is " . $data . ( ($issymb==1)?' = ':' equal to ' ). $lv1 if $mod eq '=' && $data eq $lv1;
     return " " . $attrib . " is " . $data . ( ($issymb==1)?' != ':' not equal to ' ). $lv1 if $mod eq '!' && $data ne $lv1;
     return " " . $attrib . " is " . $data . ( ($issymb==1)?' > ':' more than ' ) . $lv1 if $mod eq '>' && $data>$lv1;
@@ -1308,7 +1308,7 @@ sub parse_threshold {
     # link to an array that holds processed threshold data
     # array: 1st is type of check, 2nd is threshold value or value1 in range, 3rd is value2 in range,
     #        4th is extra options such as ^, 5th is nagios spec string representation for perf out
-    my $th_array = [ '', undef, undef, '', '' ]; 
+    my $th_array = [ '', undef, undef, '', '' ];
     my $th = $thin;
     my $at = '';
 
@@ -1375,7 +1375,7 @@ sub threshold_specok {
     return 1 if defined($warn_thar) && defined($warn_thar->[1]) &&
 		defined($crit_thar) && defined($crit_thar->[1]) &&
 		isnum($warn_thar->[1]) && isnum($crit_thar->[1]) &&
-                $warn_thar->[0] eq $crit_thar->[0] && 
+                $warn_thar->[0] eq $crit_thar->[0] &&
                 (!defined($warn_thar->[3]) || $warn_thar->[3] !~ /\^/) &&
 		(!defined($crit_thar->[3]) || $crit_thar->[3] !~ /\^/) &&
               (($warn_thar->[1]>$crit_thar->[1] && ($warn_thar->[0] =~ />/ || $warn_thar->[0] eq '@')) ||
@@ -1489,7 +1489,7 @@ sub vardata {
 #		       SAVED:YES|NO   - put results in saved data (this really should not be set manually)
 #		       PATTERN:<regex> - enables regex match allowing more than one real data name to match this threshold
 #		       NAME:<string> - overrides output status and perf name for this variable
-#		       UOM:<string>  - unit of measurement symbol to add to perf 
+#		       UOM:<string>  - unit of measurement symbol to add to perf
 #  @RETURNS       : Returns reference to a hash array, a library's structure for holding processed MULTI-THRESHOLD spec
 #		    Note that this is MULTI-THRESHOLD hash structure, it itself contains threshold hashes returned by parse_threshold()
 #  @PRIVACY & USE : PUBLIC, but its use is discouraged. Maybe used directly or as an object instance function.
@@ -1508,7 +1508,7 @@ sub parse_thresholds_list {
           $t !~ /^PATTERN/ && $t !~ /^NAME/ && $t !~ /^UOM/) {
 	if (scalar(@tin)==2) {
 	     if (defined($self)) {
-		  $thres->{'WARN'} = $self->parse_threshold($tin[0]); 
+		  $thres->{'WARN'} = $self->parse_threshold($tin[0]);
 		  $thres->{'CRIT'} = $self->parse_threshold($tin[1]);
 	     }
 	     else {
@@ -1721,7 +1721,7 @@ sub additional_options_list {
               push @VarOptions,$v."=s";
 	      if ($self->{'enable_rate_of_change'} eq 1 && $known_vars->{$v}[1] eq 'COUNTER' && ($o_rprefix ne '' || $o_rsuffix ne '')) {
 		   $v2 = $o_rprefix.$v.$o_rsuffix;
-		   push @VarOptions,$v2."=s" 
+		   push @VarOptions,$v2."=s"
 	      }
 	  }
 	}
@@ -1835,7 +1835,7 @@ sub options_startprocessing {
 		for (my $i=0; $i<scalar(@{$perfVars}); $i++) {
 			$perfVars->[$i] = '&'.$1 if $perfVars->[$i] =~ /^$o_rprefix(.*)$o_rsuffix$/;
 		}
-	} 
+	}
     }
     if (defined($o_warn) || defined($o_crit) || defined($o_variables)) {
 	if (defined($o_variables)) {
@@ -1893,7 +1893,7 @@ sub _options_setthresholds {
     $o_rsuffix = $self->{'o_rsuffix'} if exists($self->{'o_rsuffix'});
 
     if (scalar(@{$ar_warnLv})!=scalar(@{$ar_varsL}) || scalar(@{$ar_critLv})!=scalar(@{$ar_varsL})) {
-	  printf "Number of specified warning levels (%d) and critical levels (%d) must be equal to the number of attributes specified at '-a' (%d). If you need to ignore some attribute do it as ',,'\n", scalar(@{$ar_warnLv}), scalar(@{$ar_critLv}), scalar(@{$ar_varsL}); 
+	  printf "Number of specified warning levels (%d) and critical levels (%d) must be equal to the number of attributes specified at '-a' (%d). If you need to ignore some attribute do it as ',,'\n", scalar(@{$ar_warnLv}), scalar(@{$ar_critLv}), scalar(@{$ar_varsL});
 	  $self->verb("Warning Levels: ".join(",",@{$ar_warnLv}));
 	  $self->verb("Critical Levels: ".join(",",@{$ar_critLv}));
 	  if (defined($self)) { $self->usage(); }
@@ -2064,7 +2064,7 @@ sub set_statuscode {
 
 #  @DESCRIPTION   : This function is called closer to end of the code after plugin retrieved data and
 #		    assigned values to variables. This function checks variables against all thresholds.
-#		    It prepares statusdata and statusinfo and exitcode. 
+#		    It prepares statusdata and statusinfo and exitcode.
 #  @LAST CHANGED  : 09-03-12 by WL
 #  @INPUT         : none
 #  @RETURNS       : nothing (future: 1 on success, 0 on error)
@@ -2126,7 +2126,7 @@ sub main_checkvars {
 		$self->addto_statusdata_output($dvar,$aname." is ".$dataresults->{$dvar}[0]);
 
 		# if we were asked to output performance, prepare it but do not output until later
-		if ((defined($self->{'o_perf'}) && defined($avar) && !exists($thresholds->{$avar}{'PERF'})) || 
+		if ((defined($self->{'o_perf'}) && defined($avar) && !exists($thresholds->{$avar}{'PERF'})) ||
 		    (exists($thresholds->{$avar}{'PERF'}) && $thresholds->{$avar}{'PERF'} eq 'YES')) {
 			$perf_str = perf_name($aname).'='.$dataresults->{$dvar}[0];
 			$self->set_perfdata($dvar, $perf_str, undef, "IFNOTSET"); # with undef UOM would get added
@@ -2182,7 +2182,7 @@ sub main_perfvars {
 		    }
 		    else {
 			$self->verb(" -- not adding to perfdata because of it is '".$known_vars->{$avar}[1]."' type variable --");
-		    } 
+		    }
 	        }
 	        else {
 		    $self->verb("Perfvar: $avar selected for PERFOUT but data not defined");
@@ -2273,7 +2273,7 @@ sub check_options {
     my $nlib = shift;
     my %Options = ();
     Getopt::Long::Configure("bundling");
-    GetOptions(\%Options, 
+    GetOptions(\%Options,
    	'v:s'	=> \$o_verb,		'verbose:s'	=> \$o_verb, "debug:s" => \$o_verb,
         'h'     => \$o_help,            'help'          => \$o_help,
         'H:s'   => \$o_host,            'hostname:s'    => \$o_host,
@@ -2303,7 +2303,7 @@ sub check_options {
     if (defined($o_version)) { p_version(); exit $ERRORS{"UNKNOWN"} };
 
     # access/connection options
-    if (!defined($o_host)) { print "Please specify hostname (-H)\n"; print_usage(); exit $ERRORS{"UNKNOWN"}; } 
+    if (!defined($o_host)) { print "Please specify hostname (-H)\n"; print_usage(); exit $ERRORS{"UNKNOWN"}; }
     @o_mdslist=split(/,/, lc $o_mdsopt) if defined($o_mdsopt) && $o_mdsopt ne '';
 
     # now start options processing in the library
@@ -2380,17 +2380,17 @@ close($sock);
 
 my $start_time;
 my $dsn = $HOSTNAME.":".$PORT;
-$nlib->verb("connecting to $dsn"); 
+$nlib->verb("connecting to $dsn");
 $start_time = [ Time::HiRes::gettimeofday() ] if defined($o_timecheck);
 $memd = new Cache::Memcached { 'servers' => [ $dsn ] };
 
 if (!$memd) {
-  print "CRITICAL ERROR - Memcache error connecting to '$HOSTNAME' on port $PORT\n"; 
+  print "CRITICAL ERROR - Memcache error connecting to '$HOSTNAME' on port $PORT\n";
   exit $ERRORS{'CRITICAL'};
 }
 
 # This returns hashref of various statistics data on memcached
-# Basically results of 'stats', 'stats malloc', 'stats sizes', etc. 
+# Basically results of 'stats', 'stats malloc', 'stats sizes', etc.
 $nlib->verb("Requesting statistics on: ".join(',',@o_mdslist));
 my $stats = $memd->stats(\@o_mdslist);
 
@@ -2435,7 +2435,7 @@ foreach $vstat (keys %{$stats->{'hosts'}{$dsn}}) {
     else {
        $vval = $stats->{'hosts'}{$dsn}{$vstat};
        chop($vval);
-       my @lines = split("\n",$vval); 
+       my @lines = split("\n",$vval);
        my $count=0;
        foreach my $ln (@lines) {
 	  $count++;
@@ -2449,10 +2449,10 @@ foreach $vstat (keys %{$stats->{'hosts'}{$dsn}}) {
 		$dnam = $vstat."_".$count;
 		$vval = $ln;
 		$vval =~ s/\s/_/g;
-	  } 
+	  }
           $nlib->verb("Stats Data: $vstat($dnam) = $vval");
 	  $nlib->add_data($dnam, $vval);
-       } 
+       }
     }
   }
 }

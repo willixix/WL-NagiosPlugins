@@ -66,7 +66,7 @@
 #
 # While you may know your base names and data tables, you may not know what
 # values to check. You can find all attribute names by doing:
-#     check_snmp_table.pl -C community -N oid-base-table -D oid-data-table -a '*' -H HOSTNAME 
+#     check_snmp_table.pl -C community -N oid-base-table -D oid-data-table -a '*' -H HOSTNAME
 # if there are problems with above try adding '-R -v' and see debug output
 #
 # The values retrieved are compared to specified warning and critical levels.
@@ -95,7 +95,7 @@
 # Additionally if you want performance output then use '-f' option to get all
 # the attributes specified in '-a' or specify particular list of attributes for
 # performance data with '-A' (this list can include names not found in '-a').
-# A special option of -A '*' will allow to get data from all attrbutes found 
+# A special option of -A '*' will allow to get data from all attrbutes found
 # when browsing the names table.
 #
 # ============================= SETUP EXAMPLES ===============================
@@ -235,7 +235,7 @@ sub help {
 	community name for the host's SNMP agent (implies v 1 protocol)
 -P, --port=PORT
 	SNMPD port (Default 161)
--2, --v2c 
+-2, --v2c
         use SNMP v2 (instead of SNMP v1)
 -w, --warn=STR[,STR[,STR[..]]]
 	Warning level(s) - usually numbers (same number of values specified as number of attributes)
@@ -378,7 +378,7 @@ sub check_value {
     return " " . $attrib . " is " . $data . " > " . $level if $modifier eq '>' && $data>$level;
     return " " . $attrib . " is " . $data . " < " . $level if $modifier eq '<' && $data<$level;
     return "";
-} 
+}
 
 ########## MAIN #######
 
@@ -509,7 +509,7 @@ foreach $attr (keys %dataresults) {
 		$dataresults{$attr}[3]=$result->{$dataresults{$attr}[1]};
 		verb("got $dataresults{$attr}[1] : $attr = $dataresults{$attr}[3]");
 	}
-	else { 
+	else {
 		if (defined($o_unkdef)) {
 		   $dataresults{$attr}[3]=$o_unkdef;
 		   verb("could not find snmp data for $attr, setting to to default value $o_unkdef");
@@ -533,7 +533,7 @@ for ($i=0;$i<scalar(@o_attrL);$i++) {
         }
     	else {
 		$statusdata .= "," if ($statusdata);
-		$statusdata .= " " . $o_attrL[$i] . " is " . $dataresults{$o_attrL[$i]}[3] ; 
+		$statusdata .= " " . $o_attrL[$i] . " is " . $dataresults{$o_attrL[$i]}[3] ;
     	}
         $perfdata .= " " . $o_attrL[$i] . "=" . $dataresults{$o_attrL[$i]}[3] if defined($o_perf) && $dataresults{$o_attrL[$i]}[0] ne "perf";
     }

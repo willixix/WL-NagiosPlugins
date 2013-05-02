@@ -64,10 +64,10 @@
 # 10. Query Cache Hits
 #  Number of hits and update of query cache. Most of these numbers are already shown as part
 # 11. Binlog Cache Transactions
-#  Graphed are binlog_cache_use and binlog_cache_disk_use variables. 
+#  Graphed are binlog_cache_use and binlog_cache_disk_use variables.
 #
 # ============================= SETUP NOTES ====================================
-# 
+#
 # 1. Copy this template pnp4nagios's templates directory
 # 2. Make sure you specify all attributes as below listed under
 #    '$USER21$' as a '-A' parameter to check_mysqld.pl plugin
@@ -97,9 +97,9 @@
 #   $USER21$='com_commit,com_rollback,com_delete,com_update,com_insert,com_insert_select,com_select,qcache_hits,qcache_inserts,qcache_not_cached,questions,bytes_sent,bytes_received,aborted_clients,aborted_connects,binlog_cache_disk_use,binlog_cache_use,connections,created_tmp_disk_tables,created_tmp_files,created_tmp_tables,delayed_errors,delayed_insert_threads,delayed_writes,handler_update,handler_write,handler_delete,handler_read_first,handler_read_key,handler_read_next,handler_read_prev,handler_read_rnd,handler_read_rnd_next,key_blocks_not_flushed,key_blocks_unused,key_blocks_used,key_read_requests,key_reads,key_write_requests,key_writes,max_used_connections,not_flushed_delayed_rows,open_files,open_streams,open_tables,opened_tables,prepared_stmt_count,qcache_free_blocks,qcache_free_memory,qcache_lowmem_prunes,qcache_queries_in_cache,qcache_total_blocks,select_full_join,select_rangle_check,slow_launch_threads,slow_queries,table_locks_immediate,table_locks_waited,threads_cached,threads_connected,threads_created,threads_running'
 #
 # -----------------------------------------------------------------------------
-# 
+#
 # You will need nagios with larger buffers (as compared to usual 2.x distrubutions)
-# for storing performance variables in order to fully utilize this template. 
+# for storing performance variables in order to fully utilize this template.
 # Doing so requires recompile after modifying MAX_INPUT_BUFFER, MAX_COMMAND_BUFFER,
 # MAX_PLUGINOUTPUT_LENGTH which are defined in objects.h and common.h.
 # Patches for some versions of nagios is available at
@@ -112,10 +112,10 @@
 # v0.22 - 12/19/2011 : Changed so that first STACK is an AREA.
 # v0.3  - 03/10/2012 : The first version of template for PNP4Nagios
 # v0.31 - 03/20/2012 : Updated network traffic to be Mb/sec
-# 
+#
 # TODO: a. Testing under newest 5.x and 6.0 alpha versions of mysql
 #       b. Better documentation of what graphed data means.
-#       c. Information from mysql developers about 'handler' data 
+#       c. Information from mysql developers about 'handler' data
 #          and confirmation that it is being displayed properly
 #
 # =============================== END OF HEADER ===============================

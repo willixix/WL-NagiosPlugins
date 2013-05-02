@@ -4,7 +4,7 @@
 #
 # Program : check_dnsname.pl
 # Version : 0.11
-# Date    : Nov 24 2006 
+# Date    : Nov 24 2006
 #          (added all the top comments you see, no code changes since 2005?)
 # Author  : William Leibzon - william@leibzon.org
 # Summary : This is a nagios plugin that makes sure two dns hostnames point

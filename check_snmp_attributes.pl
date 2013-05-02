@@ -1,4 +1,4 @@
-#!/usr/bin/perl -w 
+#!/usr/bin/perl -w
 #
 # Help : ./check_snmp_attributes.pl -h
 #
@@ -28,11 +28,11 @@
 # Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
 #
 # ===================== INFORMATION ABOUT THIS LIBRARY =========================
-# 
+#
 # I'm afraid I do not have the time to write documention. This is basically an
 # experimental library I was working on in 2008 to make it easier to write plugins
 # similar to ones I've written without really writing any plugin code and just
-# defining how data is retrieved. It started from the code from I believe a 
+# defining how data is retrieved. It started from the code from I believe a
 # check_snmp_temperature plugin and then extended to basically build a virtual
 # machine insider perl to interpret syntax for defining data values.
 #
@@ -46,7 +46,7 @@
 #
 # Its all very cool and all but I decided it got too complex for its own good and
 # its easier to just write plugins in perl as I did before. However I did write
-# SNMP Memory plugin using this library and had installed it in places with 
+# SNMP Memory plugin using this library and had installed it in places with
 # many thousands of servers so library appears to be stable and working fine
 # although I'm sure it has plenty of bugs if you start extending it further
 # so it should be considered EXPERIMENTAL.
@@ -57,7 +57,7 @@
 #
 # VERSION HISTORY:
 #  0.2x - 2007 & 2008  : Original development, I lost repository with version history
-#  0.31 - Mar 18, 2009 : Bug fixes, dont remember. This version is considered stable, 
+#  0.31 - Mar 18, 2009 : Bug fixes, dont remember. This version is considered stable,
 #			 no major issues on several different client instalations.
 #  0.32 - Dec 10, 2011 : Added full support for SNMP v3, added this doc header
 #			 first release to public planned around Dec 22, 20011
@@ -123,7 +123,7 @@ my $o_confexpr= undef;          # Config expression
 my $o_enfwcnum= undef;          # Special check to make sure number of warning and critical parameters is same as what is at -a
 
 # non-config global arrays
-my %data_vars=  ();             # Main hash array holding variable & attribute data and expressions ready for processing; 
+my %data_vars=  ();             # Main hash array holding variable & attribute data and expressions ready for processing;
                                 # This also serves as symbols table and contains function names, operators, etc.
 my @expr_order=  ();            # This array holds expressions in the order of how they are to be processed, it is filled by process_config()
 my %func_table= ();             # This is an array of registered functions containing references to perl functions that deal with them
@@ -153,7 +153,7 @@ sub tonum {
 }
 
 # For verbose/debug output
-sub verb { 
+sub verb {
     my ($lv,$dbg)=@_;
     $debug_buffer[$lv].= "($lv) ".$dbg."\n" if defined($dbg) && ($o_vdebug==-1 || $o_vdebug >= $lv);
     for (my $i=1;$i<=$o_vdebug;$i++) {
@@ -196,7 +196,7 @@ sub help {
 -e, --expression=STR[;STR[;STR[..]]]
    List of Configuration expression(s). They are entered as
      attrib1,attrib2,..=oper,oper,oper,...
-   Where operands order is in RPN (Reverse Polish Notation) and can contain function names, 
+   Where operands order is in RPN (Reverse Polish Notation) and can contain function names,
    operators (+/-*%), attribute variable names and data numbers (or data strings enclosed in '..').
    Multiple expressions can be specified separated from each other with ';'
 -w, --warn=STR[,STR[,STR[..]]]
@@ -215,12 +215,12 @@ sub help {
 	Critical values can have the same prefix modifiers as warning (see above) except '^'
 --check-warncritlist
         This causes enforced checking to make sure that number of critical and warning levels specified is exactly
-	the same as number of attributes specified with -A and enforce checking that warning values are smaller 
+	the same as number of attributes specified with -A and enforce checking that warning values are smaller
         (or larger for '>') then critical. This does not allow "attribute<level" syntax in -w or -c either.
 -a, --attributes=STR[,STR[,STR[..]]]
 	Which attribute(s) to check. This is used as regex to check if attribute is found in attribnames table
 -D, --display_attributes=STR[,STR[,STR[..]]]
-        List of attributes that would be displayed (in main screen) but not checked with 
+        List of attributes that would be displayed (in main screen) but not checked with
 -A, --perf_attributes=STR[,STR[,STR[..]]]
 	Which attribute(s) to add to as part of performance data output. These names can be different then the
 	ones listed in '-a' to only output attributes in perf data but not check. Special value of '*' gets them all.
@@ -262,7 +262,7 @@ sub check_options {
     if (defined($o_verb) && $o_vdebug==-1) { $o_vdebug=$o_verb; }
     if ($o_vdebug==-1) { $o_vdebug=0; }
     verb($o_vdebug,undef);
-    if ( ! defined($o_host) ) # check host and filter 
+    if ( ! defined($o_host) ) # check host and filter
 	{ print "No host defined!\n"; print_usage(); plugin_exit("UNKNOWN"); }
     # check snmp information
     if ( !defined($o_community) && (!defined($o_login) || !defined($o_passwd)) )
@@ -280,8 +280,8 @@ sub check_options {
 
     if (!defined($o_confexpr) && scalar(@expr_order)==0) {
 	print "Config expression not defined!\n";
-	print_usage(); 
-	plugin_exit("UNKNOWN"); 
+	print_usage();
+	plugin_exit("UNKNOWN");
     }
     elsif (defined($o_confexpr)) {
 	my @config_expressions = split /;/, $o_confexpr;
@@ -582,7 +582,7 @@ sub process_config_expressions {
     my @var_list;
     my $tstr;
     my $elt;
-    
+
     foreach (@{$expressions_config}) {
 	($vars, $expr) = split /=/;
 	if ($expr eq "") {
@@ -792,7 +792,7 @@ sub check_value {
     return " " . $attrib . " is " . $data . " > " . $level if $modifier eq '>' && $d > $l;
     return " " . $attrib . " is " . $data . " < " . $level if $modifier eq '<' && $d < $l;
     return "";
-} 
+}
 
 sub check_warncrit_thresholds {
     # loop to check if warning & critical attributes are ok
@@ -866,7 +866,7 @@ sub check_warncrit_thresholds {
 	if (defined($data_vars{$o_attrL[$i]}) && $data_vars{$o_attrL[$i]}{'type'} eq 'var' && $data_vars{$o_attrL[$i]}{'from'} eq 'config' && !defined($data_vars{$o_attrL[$i]}{'out'})) {
 	    if (defined($data_vars{$o_attrL[$i]}{'data'})) {
 		$statusdata .= "," if ($statusdata);
-		$statusdata .= " " . $o_attrL[$i] . " is " . $data_vars{$o_attrL[$i]}{'data'} ; 
+		$statusdata .= " " . $o_attrL[$i] . " is " . $data_vars{$o_attrL[$i]}{'data'} ;
 	    }
 	    else {
 	        $statusdata .= "," if ($statusdata);
@@ -879,7 +879,7 @@ sub check_warncrit_thresholds {
 	if (defined($data_vars{$o_dispattrL[$i]}) && $data_vars{$o_dispattrL[$i]}{'type'} eq 'var' && $data_vars{$o_dispattrL[$i]}{'from'} eq 'config' && !defined($data_vars{$o_dispattrL[$i]}{'out'})) {
 	    if (defined($data_vars{$o_dispattrL[$i]}{'data'})) {
 		$statusdata .= "," if ($statusdata);
-		$statusdata .= " " . $o_dispattrL[$i] . " is " . $data_vars{$o_dispattrL[$i]}{'data'} ; 
+		$statusdata .= " " . $o_dispattrL[$i] . " is " . $data_vars{$o_dispattrL[$i]}{'data'} ;
 	    }
 	    else {
 	        $statusdata .= "," if ($statusdata);
@@ -940,7 +940,7 @@ sub basefunc_var_eval {
     my $vname="";
 
     $vname=$1 if $func_str =~ /^__var\((.*)\)/;
-    $vname=$func_str if !$vname;	    
+    $vname=$func_str if !$vname;	
     if (exists($data_vars{$vname}) && defined($data_vars{$vname}{'data'})) {
 	unshift @{$stack},$data_vars{$vname}{'data'};
 	return 1;
@@ -1089,7 +1089,7 @@ sub basefunc_operatordot_stringadd_register {
 
 # SNMP Function/Operator - retrieves data from specified OID
 sub func_snmp_config {
-    my $in = shift;    
+    my $in = shift;
     if ($in =~ /snmp\((.*)\)/) {
         if ($no_snmp) {
             print "Can't locate Net/SNMP.pm\n"; print_usage(); exit $ERRORS{"UNKNOWN"};
@@ -1132,7 +1132,7 @@ sub func_snmp_proc {
 	      -authpassword     => $o_passwd,
 	      -authprotocol     => $o_authproto,
 	      -timeout          => $o_timeout
-	    );  
+	    );
 	  } else {
 	    verb("SNMPv3 AuthPriv login : $o_login, $o_authproto, $o_privproto");
 	    ($session, $error) = Net::SNMP->session(
@@ -1147,7 +1147,7 @@ sub func_snmp_proc {
 	      -timeout          => $o_timeout
 	    );
 	  }
-    } 
+    }
     elsif (defined ($o_version2)) {
 	# SNMPv2 Login
 	($session, $error) = Net::SNMP->session(
@@ -1172,12 +1172,12 @@ sub func_snmp_proc {
 	plugin_exit("UNKNOWN");
     }
 
-     # Get NetSNMP memory values 
+     # Get NetSNMP memory values
      $resultat = (Net::SNMP->VERSION < 4) ?
 		$session->get_request(@nets_oid_array)
 		:$session->get_request(-varbindlist => \@nets_oid_array);
 
-     # Exit with error if SNMP get_request failed  
+     # Exit with error if SNMP get_request failed
      if (!defined($resultat)) {
 	 printf("ERROR: snmp get_request failed - %s.\n", $session->error);
 	 $session->close;

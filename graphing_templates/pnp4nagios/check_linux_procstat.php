@@ -7,7 +7,7 @@
 #
 # CPU data is cpu_???? for all cpu together and cpu?_???? for specific core
 # csum_???? is sum from all cpu?_ cores which replaces cpu_?? if its different
-# 
+#
 # Some additional data are memory and swap operations (not in for later 2.6 kernel),
 # interrupts and context switches, processes forking and blocked processes stats
 
@@ -62,11 +62,11 @@ for ($i=0; $i<count($CORE); $i++) {
         $unm = '';
         if ($i==0) {
                 $opt[$gkey] = '--vertical-label Percent --title "Total for all CPUs on ' . $this->MACRO['DISP_HOSTNAME']. '"  --upper=101 --lower=0';
-                $ds_name[$gkey] = "Total for All CPUs"; 
+                $ds_name[$gkey] = "Total for All CPUs";
                 $pre = 'percent_';
                 $unm = '%2.1lf%% ';
         }
-        else {  
+        else {
                 $opt[$gkey] = '--vertical-label "jiffs/sec" --title "CPU Core '. ($i-1) . ' on '. $this->MACRO['DISP_HOSTNAME'].'" --lower=0';
                 $ds_name[$gkey] = 'CPU Core '.($i-1);
                 $unm = '%6.2lf ';
@@ -128,7 +128,7 @@ ed_out)) {
         $def[$gkey] .= rrd::def("data_paged_out", $RRDFILE[$data_paged_out], $DS[$data_paged_out], "AVERAGE");
         $def[$gkey] .= rrd::def("swap_paged_in", $RRDFILE[$swap_paged_in], $DS[$swap_paged_in], "AVERAGE");
         $def[$gkey] .= rrd::def("swap_paged_out", $RRDFILE[$swap_paged_out], $DS[$swap_paged_out], "AVERAGEo");
-        
+
         $def[$gkey] .= "AREA:data_paged_in#00CF00:\"Data Paged In \: \t\g\" ";
         $def[$gkey] .= rrd::gprint("data_paged_in", array("LAST", "AVERAGE", "MAX"), '%6.2lf ');
         $def[$gkey] .= "AREA:data_paged_out#FF8C0:\"Data Paged Out\: \t\g\":STACK ";

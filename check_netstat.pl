@@ -2,7 +2,7 @@
 #
 # ============================== SUMMARY =====================================
 #
-# Program : check_netstat.pl 
+# Program : check_netstat.pl
 # Version : 0.353
 # Date    : Mar 23, 2013
 # Author  : William Leibzon - william@leibzon.org
@@ -77,7 +77,7 @@
 # Supported are also two specifications of range formats:
 #   number1:number2   issue alert if data is OUTSIDE of range [number1..number2]
 #	              i.e. alert if data<$number1 or data>$number2
-#   @number1:number2  issue alert if data is WITHIN range [number1..number2] 
+#   @number1:number2  issue alert if data is WITHIN range [number1..number2]
 #		      i.e. alert if data>=$number and $data<=$number2
 #
 # A special modifier '^' can also be used to disable checking that warn values
@@ -94,7 +94,7 @@
 # The first example is for your server to check SMTP connections - warnings
 # would be sent here fore more then 15 incoming connections or more then 10
 # outgoing and critical alerts for more than 40 incoming or 20 outgoing
-# ---- 
+# ----
 # define command {
 #        command_name check_smtp_connections
 #        command_line $USER1$/check_netstat.pl -L "SMTP Load" -H $HOSTADDRESS$ -C $ARG1$ -N 5.3 -2 -p "<smtp,>smtp" -w $ARG2$ -c $ARG3$ -f -A "@"
@@ -162,7 +162,7 @@
 #        reported is quite inconsistant
 #  [0.33] Nov 2011 - Bug fixed. Warning was being issued by Critical conditions.
 #		     Thank you for reporting the bug: Giuliano Ippoliti, Steven Back
-#  [0.34] Dec 2011 - release and update of documentation 
+#  [0.34] Dec 2011 - release and update of documentation
 #  [0.35] Mar 2012 - Bug fix: updated snmpnetstat options from '-CP' to '-Cp'
 #  		     Threshold parsing and check code has been rewritten with new code
 #		     from check_mysqld and now supports ranges in similar way to nagios
@@ -239,19 +239,19 @@ my @o_perfattrLp=();            # array of modifiers for perfomance attribute mo
 my @o_perfattrLn=();            # array of ports in numeric form
 my $o_warn=     undef;          # warning level option
 my @o_warnLv=   ();             # array from warn options, before further processing
-my @o_warnL=	();		# array of warn options, each array element is an array of threshold spec 
+my @o_warnL=	();		# array of warn options, each array element is an array of threshold spec
 my $o_crit=     undef;          # Critical level option
 my @o_critLv=   ();             # array of critical options before processing
 my @o_critL=	();		# array of critical options, each element is an array of threshold spec
 my $o_label=    '';             # Label used to show what is in plugin output
 my $o_established=undef;        # only count established TCP sessions
-my $o_state=	undef;		# Only count TCP sessions in this state 
+my $o_state=	undef;		# Only count TCP sessions in this state
 my $o_proto=	'tcp';		# Protocol, default is TCP
 my $o_netsnmpv= undef;		# Net-SNMP package version
 
 my $netstat_pid=undef;
 
-# For verbose output 
+# For verbose output
 sub verb { my $t=shift; print $t,"\n" if defined($o_verb) ; }
 
 sub print_version { print "$0: $Version\n" };
@@ -275,9 +275,9 @@ sub autodetect_netsnmpversion {
 }
 
 sub isnew_netsnmp {
-	my $arg = shift; 
+	my $arg = shift;
 	$arg =~ /(\d)\.(\d)/;
-	if ($1>5 || ($1 eq 5 && $2>2)) { 
+	if ($1>5 || ($1 eq 5 && $2>2)) {
 	   verb("NET-SNMP Version later than 5.3");
 	   return 1;
 	}
@@ -299,7 +299,7 @@ sub check_threshold {
     my $lv2 = $th_array->[2];
 
     # verb("debug check_threshold: $mod : ".(defined($lv1)?$lv1:'')." : ".(defined($lv2)?$lv2:''));
-    return "" if !defined($lv1) || ($mod eq '' && $lv1 eq ''); 
+    return "" if !defined($lv1) || ($mod eq '' && $lv1 eq '');
     return " " . $attrib . " is " . $data . " (equal to $lv1)" if $mod eq '=' && $data eq $lv1;
     return " " . $attrib . " is " . $data . " (not equal to $lv1)" if $mod eq '!' && $data ne $lv1;
     return " " . $attrib . " is " . $data . " (more than $lv1)" if $mod eq '>' && $data>$lv1;
@@ -317,7 +317,7 @@ sub parse_threshold {
 
     # link to an array that holds processed threshold data
     # array: 1st is type of check, 2nd is value2, 3rd is value2, 4th is option, 5th is nagios spec string representation for perf out
-    my $th_array = [ '', undef, undef, '', '' ]; 
+    my $th_array = [ '', undef, undef, '', '' ];
     my $th = $thin;
     my $at = '';
 
@@ -404,7 +404,7 @@ sub help {
 	name or IP address of host to check with SNMP (using snmpnetstat)
 -C, --community=COMMUNITY NAME
 	community name for SNMP - can only be used if -H is also specified
--2, --v2c 
+-2, --v2c
         use SNMP v2 (instead of SNMP v1)
 -P, --snmpport=PORT
 	port number for SNMP - can only be used if -H is specified
@@ -425,8 +425,8 @@ sub help {
 	(this is reported in perfomance data as 'all_out').
 -A, --perf_attributes=STR[,STR[,STR[..]]]
 	Which tcp ports to add as part of performance data output.
-	These names can be different than the ones listed in '--ports' 
-	to only output these ports in perf data but not check. 
+	These names can be different than the ones listed in '--ports'
+	to only output these ports in perf data but not check.
 -w, --warn=STR[,STR[,STR[..]]]
 	Warning level(s) - must be a number
 	Warning values can have the following prefix modifiers:
@@ -456,8 +456,8 @@ sub help {
 -f, --perfparse
         Used only with '-p'. Causes to output data not only in main status line
 	but also as perfparse output
--F, --perf_copy				    
-        Used only with '-A'. Can be used so that that ports listed '-A' also 
+-F, --perf_copy				
+        Used only with '-A'. Can be used so that that ports listed '-A' also
 	get reported as normal plugin output
 EOD
 }
@@ -498,7 +498,7 @@ sub check_options {
     }
     elsif (defined($o_community) || defined($o_version2) || defined($o_snmpport) ||
 	    defined($o_login) || defined($o_passwd)) {
-	print "Can not use snmp-specific attributes without specifying host!\n"; 
+	print "Can not use snmp-specific attributes without specifying host!\n";
 	print_usage();
 	exit $ERRORS{"UNKNOWN"};
     }
@@ -726,7 +726,7 @@ while (<SHELL_DATA>) {
         ($port_local, $port_remote, $conn_state) = parse_netstatline($_, $netstat_format);
       }
     }
-    else { # $netstat_format==1 || $netstat_format==2 || $netstat_format==4 
+    else { # $netstat_format==1 || $netstat_format==2 || $netstat_format==4
       if (/^$o_proto\s/) {
         ($port_local, $port_remote, $conn_state) = parse_netstatline($_, $netstat_format);
       }
@@ -735,7 +735,7 @@ while (<SHELL_DATA>) {
       verb("local_port: $port_local | remote_port: $port_remote | state: $conn_state");
       if ((defined($o_established) && $conn_state eq "ESTABLISHED") ||
 	  (defined($o_state) && $conn_state eq $o_state) ||
-	  (!defined($o_established) && !defined($o_state))) { 
+	  (!defined($o_established) && !defined($o_state))) {
 	      $locports{0}++;
 	      if (defined($locports{$port_local})) { $locports{$port_local}++; }
 	        else { $locports{$port_local}=1; }

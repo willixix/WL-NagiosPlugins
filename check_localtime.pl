@@ -55,7 +55,7 @@
 #        }
 #
 # =================================== TODO ===================================
-# 
+#
 # 1. Currently accepts fixed format parameters "hour:minute-hour:minute".
 #    It maybe interesting to extend for example to specify day of the week
 #    to allow for one CRITICAL period during the week...

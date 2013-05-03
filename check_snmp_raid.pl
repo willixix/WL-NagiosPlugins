@@ -214,12 +214,12 @@
 #	    - Bug fixes. Fix for debugging. Old DEBUG printfs are replaced with calls to verb() function
 #           - code_to_description() and code_to_nagiosstatus() functions added
 #	    - %cardtype_map with list of card types added replacing if/elseif in check_options
-#	    - partial rewrite exit status code for logical and physical drives. This may introduce small
+#           - partial rewrite exit status code for logical and physical drives. This may introduce small
 #             incompatible changes for megaraid - but old code dates workarounds for megaraid checks and
 #             doing manually what 3rd column of LOGDRV_CODES and PHYSDRV_CODES are now used for
 #	 d. New -A/--label option and changes in the nagios status output
 #	    - New -A/--label option allows to specify start of the plugin output in place of default 'Raid'
-#	    - print_output() function has been renamed print_and_exit() and now also exits with specified alert code
+#           - print_output() function has been renamed print_and_exit() and now also exits with specified alert code
 #           - reordering of output: # of controllders, drives, batteries first, then new additional controller status
 #             such as 'powersupply is ok' and last model & tasks info which are now labeled as 'tasks []' before data
 #        * Code contributions for this release: Michael Cook, Stanislav German-Evtushenko, William Leibzon *

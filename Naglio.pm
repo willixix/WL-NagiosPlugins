@@ -1056,7 +1056,7 @@ sub parse_thresholds_list {
 #			 1) ref to combined thresholds hash array i.e. { 'WARN' => threshold array, 'CRIT' => threshold array, ABSENT => ... }
 #                           such hash array is returned by by parse_thresholds_list function
 #			 -- OR --
-#			 2) a tet string with a list of thresholds in the format
+#			 2) a string with a list of thresholds in the format
 #			     WARN:threshold,CRIT:thresholod,ABSENT:OK|WARNING|CRITICAL|UNKNOWN,ZERO:WARNING|CRITICAL|UNKNOWN,PATTERN:pattern,NAME:name
 # 			    which would get parsed y parse_thresholds_list function into ref array
 #  @RETURNS       : nothing (future: 1 on success, 0 on error)
@@ -1360,7 +1360,7 @@ sub _options_setthresholds {
 #  @LAST CHANGED  : 08-21-12 by WL
 #  @INPUT         :  ARG1 - reference to previous performance data hash array. It looks for _ptime variable there.
 #		     ARG2 - string with previous performance time in unix seconds. This may come from separate plugin option.
-#  @RETURNS       : Time in unix seconds frm 1970 or undef if it was not locatedthe code istthe code ishe code is
+#  @RETURNS       : Time in unix seconds frm 1970 or undef if it was not located
 #  @PRIVACY & USE : PRIVATE, Maybe used directly or as an object instance function.
 sub _set_prevtime {
     my ($self,$prevperf,$o_prevtime) = _self_args(@_);

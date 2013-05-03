@@ -78,7 +78,7 @@
 #   (which can show spikes and downs) with lifelong info also given in paramphesis
 #   The data is based on keyspace_hits and keyspace_misses stats variables.
 #   As with -T you can specify -R by itself or with thresholds as -R warn,crit
-# 
+#
 #   Memory utilization is percent of real memory used by Redis out of total
 #   memory on the system. To be able to calculate it plugin needs to known
 #   amount of memory your system has which you specify with "-M" or "--memory="
@@ -153,7 +153,7 @@
 #   As an alternative you can specify how to label these with --rate_label
 #   option where you can specify prefix and/or suffix. For example '--rate_label=dt_'
 #   would have the output being "dt_total_connections_received' where as
-#   '--rate_label=,_rate' is plugin default giving 'total_connections_received_rate'. 
+#   '--rate_label=,_rate' is plugin default giving 'total_connections_received_rate'.
 #   You can use these names with -a and -A such as:
 #       --rate_label=,_rate -a total_connections_received_rate -w 1000 -c ~
 #   Note that --rate_label will not work with new variable-named options, the
@@ -166,7 +166,7 @@
 #   In commands.cfg this would be specified as:
 #     -P "$SERVICEPERFDATA$"
 #   And don't forget the quotes, in this case they are not just for documentation.
-# 
+#
 # 5. Threshold Specification
 #
 #   The plugin fully supports Nagios plug-in specification for specifying thresholds:
@@ -181,7 +181,7 @@
 #   There are also two specifications of range formats as with other nagios plugins:
 #     number1:number2   issue alert if data is OUTSIDE of range [number1..number2]
 #	                i.e. alert if data<$number1 or data>$number2
-#     @number1:number2  issue alert if data is WITHIN range [number1..number2] 
+#     @number1:number2  issue alert if data is WITHIN range [number1..number2]
 #		        i.e. alert if data>=$number and $data<=$number2
 #
 #   The plugin will attempt to check that WARNING value is less than CRITICAL
@@ -193,7 +193,7 @@
 #
 #   With '-f' option values of all variables you specified in -a as well as
 #      response time from -T (response time),
-#      hirate from -R, 
+#      hirate from -R,
 #      memory utilization from -m
 #   and other data are reported back out as performance data for Nagios graphing programs.
 #
@@ -212,7 +212,7 @@
 #   find at the top of the code (further below) and plugin author does not claim
 #   to have identified all variables correctly. Please email if you find an error
 #   or want to add more variables.
-# 
+#
 #   As noted above performance data is also used to calcualte rate of change
 #   by feeding it back with -P option. In that regard even if you did not specify
 #   -f or -A but you have specified &variable, its actual data would be sent out
@@ -241,7 +241,7 @@
 #       HEXISTS:name - returns 0 or 1 depending on if specified hash key 'name' exists [TODO]
 #       SLEN  - returns number of items in a set [TODO, SCARD redis opp]
 #       SEXISTS:name - returns 0 or 1 depending on if set member 'name' exists [SISMEMBER, TODO]
-#       ZLEN  - returns number of items in a sorted set [TODO, ZCARD redis opp] 
+#       ZLEN  - returns number of items in a sorted set [TODO, ZCARD redis opp]
 #       ZCOUNT:min:max - counts number of items in sorted set with scores within the given values
 #       ZRANGE:AVG:min:max - retrieve sorted set members from min to max and average results
 #       ZRANGE:SUM:min:max - retrieve sorted set members from min to max and sum results
@@ -306,7 +306,7 @@
 #   /usr/lib/nagios/plugins/check_redis.pl -H localhost -a 'connected_clients,blocked_clients' -w ~,~ -c ~,~ -m -M 4G -A -R -T -f -v
 #
 # In above the -v option means "verbose" and with it plugin will output some debugging information
-# about what it is doing. The option is not intended to be used when plugin is called from nagios itself. 
+# about what it is doing. The option is not intended to be used when plugin is called from nagios itself.
 #
 # Example of using query and varialbe-based long options with debug enabled as well (-v):
 #
@@ -323,9 +323,9 @@
 #		     Version 0.4 because its based on a well developed code base
 #  [0.41 - Apr 15, 2012] Added list of variables array and perf_ok regex.
 #			 Still testing internally and not released yet.
-#  [0.42 - Apr 28, 2012] Added total_keys, total_expires, nice uptime_info 
+#  [0.42 - Apr 28, 2012] Added total_keys, total_expires, nice uptime_info
 #			 and memory utilization
-#  [0.43 - May 31, 2012] Release candidate. More documentation added 
+#  [0.43 - May 31, 2012] Release candidate. More documentation added
 #			 replacing check_memcached examples. Bugs fixed.
 #			 Made "_rate" as default rate variables suffix in
 #		         place of &delta. Changed -D option to -r.
@@ -374,12 +374,12 @@
 #  1. Library Enhancements (will apply to multiple plugins that share common code)
 #     (a) Add '--extra-opts' to allow to read options from a file as specified
 #         at http://nagiosplugins.org/extra-opts. This is TODO for all my plugins
-#     (b) [DONE] 
+#     (b) [DONE]
 #	  In plans are to allow long options to specify thresholds for known variables.
 #         These would mean you specify '--connected_clients' in similar way to '--hitrate'
 #         Internally these would be convered into -A, -w, -c as appropriate an used
 #         together with these options. So in practice it will now allow to get any data
-#         just a different way to specify options for this plugin. 
+#         just a different way to specify options for this plugin.
 #     (c) Allow regex when selecting variable name(s) with -a, this will be enabled with
 #	  a special option and not be default
 #	  [DONE]
@@ -392,7 +392,7 @@
 #         without directly specifying it
 #     (d) Maybe special options to measure cpu use and set thresholds
 #
-#  Others are welcome recommand a new feature to be added here. If so please email to 
+#  Others are welcome recommand a new feature to be added here. If so please email to
 #         william@leibzon.org.
 #  And don't worry, I'm not a company with some hidden agenda to use your idea
 #  but an actual person who you can easily get hold of by email, find on forums
@@ -441,10 +441,10 @@ my $Version='0.73';
 # This is a list of known stat and info variables including variables added by plugin,
 # used in order to designate COUNTER variables with 'c' in perfout for graphing programs
 # The format is:
-#        VAR_NAME => [ TYPE, PerfSuffix, DESCRIPTION] 
+#        VAR_NAME => [ TYPE, PerfSuffix, DESCRIPTION]
 # If option has description, the variable will also become available as a long option so for example
 # you can specify "--connected_clients=WARN,CRIT" instead of specifying "-a connected_clients -w WARN -c CRIT'
-my %KNOWN_STATUS_VARS = ( 
+my %KNOWN_STATUS_VARS = (
 	 'memory_utilization' => [ 'status', 'GAUGE', '%' ],      					# calculated by plugin
 	 'redis_version' => [ 'status', 'VERSION', '' ],						# version string variable
 	 'response_time' => [ 'status','GAUGE', 's' ],							# measured by plugin
@@ -501,7 +501,7 @@ my %KNOWN_STATUS_VARS = (
 	 'slave3' => [ 'status', 'TEXTINFO', '' ],
 	);
 
-# Here you can also specify which variables should go into perf data, 
+# Here you can also specify which variables should go into perf data,
 # For right now it is 'GAUGE', 'COUNTER', 'DATA' (but not 'TEXTDATA'), and 'BOOLEAN'
 # you may want to remove BOOLEAN if you don't want too much data
 my $PERF_OK_STATUS_REGEX = 'GAUGE|COUNTER|^DATA$|BOOLEAN';
@@ -640,7 +640,7 @@ Key Data Query Option (maybe repeated more than once):
         HLEN  	     - returns number of items in a hash
         HGET:name    - get specific hash key 'name'
         HEXISTS:name - returns 0 or 1 depending on if specified hash key 'name' exists
-        SLEN	     - returns number of items in a set 
+        SLEN	     - returns number of items in a set
         SEXISTS:name - returns 0 or 1 depending on if set member 'name' exists
         ZLEN	     - returns number of items in a sorted set
         ZCOUNT:min:max     - counts items in sorted set with scores within the given values
@@ -678,15 +678,15 @@ General Check Option (all 3 forms equivalent, can be repated more than once):
 
 Measured/Calculated Data:
  -T, --response_time=[WARN,CRIT]
-   If this is used as just -T the plugin will measure and output connection 
+   If this is used as just -T the plugin will measure and output connection
    response time in seconds. With -f this would also be provided on perf variables.
    You can also specify values for this parameter, these are interprted as
-   WARNING and CRITICAL thresholds (separated by ','). 
+   WARNING and CRITICAL thresholds (separated by ',').
  -R, --hitrate=[WARN,CRIT]
    Calculates Hitrate %: cache_miss/(cache_hits+cache_miss). If this is used
    as just -R then this info just goes to output line. With '-R -f' these
    go as performance data. You can also specify values for this parameter,
-   these are interprted as WARNING and CRITICAL thresholds (separated by ','). 
+   these are interprted as WARNING and CRITICAL thresholds (separated by ',').
    The format for WARN and CRIT is same as what you would use in -w and -c.
  -m, --memory_utilization=[WARN,CRIT]
    This calculates percent of total memory on system used by redis, which is
@@ -729,7 +729,7 @@ EOT
 # Licence : LGPL - full text at http://www.fsf.org/licenses/lgpl.txt
 #
 # ============================= LIBRARY HISTORY AND VERSIONS ====================================
-# 
+#
 # Note: you may safely skip this section if you're looking at documentation about this library or plugin
 #
 # [2006-2008]  The history of this library goes back to plugins such as check_snmp_temperature.pl,
@@ -738,7 +738,7 @@ EOT
 #	       these thresholds. Several of my plugins had common architecture supporting multiple
 #	       variables or attributes to be checked using -a/--attributes/--variables option and
 #	       --warn and --crit options with list of thresholds for these attributes and --perfvars
-#	       specifying variables whose data would only go as PERFOUT for graphing. 
+#	       specifying variables whose data would only go as PERFOUT for graphing.
 #
 # [2008-2011]  Threshold parsing and check code had been rewritten and support added for specifying
 #	       range per plugin guidelines: http://nagiosplug.sourceforge.net/developer-guidelines.html
@@ -1006,7 +1006,7 @@ sub uptime_info {
   $upinfo .= "$days days" if $days>0;
   $upinfo .= (($upinfo ne '')?' ':'').$hrs." hours" if $hrs>0;
   $upinfo .= (($upinfo ne '')?' ':'').$mins." minutes" if $mins>0 && ($days==0 || $hrs==0);
-  $upinfo .= (($upinfo ne '')?' ':'').$secs." seconds" if $secs>0 && $days==0 && $hrs==0; 
+  $upinfo .= (($upinfo ne '')?' ':'').$secs." seconds" if $secs>0 && $days==0 && $hrs==0;
   return $upinfo;
 }
 
@@ -1021,7 +1021,7 @@ sub verb {
 
     if (defined($o_verb) || (defined($self) && defined($self->{'verbose'}) && $self->{'verbose'} ne 0)) {
         $debug_file_name = $self->{'debug_file'} if defined($self) && $self->{'debug_file'} ne "";
-        $debug_file_name = $self->{'verbose'} if $debug_file_name ne "" && defined($self) && 
+        $debug_file_name = $self->{'verbose'} if $debug_file_name ne "" && defined($self) &&
 					         ($self->{'verbose'} ne 0 && $self->{'verbose'} ne 1 && $self->{'verbose'} ne '');
         $debug_file_name = $o_verb if $debug_file_name ne "" && defined($o_verb) && $o_verb ne "";
         if ($debug_file_name ne "") {
@@ -1398,7 +1398,7 @@ sub check_threshold {
     $issymb = 0 if defined($self) && $self->{'output_comparison_symbols'} eq 0;
 
     # verb("debug check_threshold: $mod : ".(defined($lv1)?$lv1:'')." : ".(defined($lv2)?$lv2:''));
-    return "" if !defined($lv1) || ($mod eq '' && $lv1 eq ''); 
+    return "" if !defined($lv1) || ($mod eq '' && $lv1 eq '');
     return " " . $attrib . " is " . $data . ( ($issymb==1)?' = ':' equal to ' ). $lv1 if $mod eq '=' && $data eq $lv1;
     return " " . $attrib . " is " . $data . ( ($issymb==1)?' != ':' not equal to ' ). $lv1 if $mod eq '!' && $data ne $lv1;
     return " " . $attrib . " is " . $data . ( ($issymb==1)?' > ':' more than ' ) . $lv1 if $mod eq '>' && $data>$lv1;
@@ -1430,7 +1430,7 @@ sub parse_threshold {
     # link to an array that holds processed threshold data
     # array: 1st is type of check, 2nd is threshold value or value1 in range, 3rd is value2 in range,
     #        4th is extra options such as ^, 5th is nagios spec string representation for perf out
-    my $th_array = [ '', undef, undef, '', '' ]; 
+    my $th_array = [ '', undef, undef, '', '' ];
     my $th = $thin;
     my $at = '';
 
@@ -1497,7 +1497,7 @@ sub threshold_specok {
     return 1 if defined($warn_thar) && defined($warn_thar->[1]) &&
 		defined($crit_thar) && defined($crit_thar->[1]) &&
 		isnum($warn_thar->[1]) && isnum($crit_thar->[1]) &&
-                $warn_thar->[0] eq $crit_thar->[0] && 
+                $warn_thar->[0] eq $crit_thar->[0] &&
                 (!defined($warn_thar->[3]) || $warn_thar->[3] !~ /\^/) &&
 		(!defined($crit_thar->[3]) || $crit_thar->[3] !~ /\^/) &&
               (($warn_thar->[1]>$crit_thar->[1] && ($warn_thar->[0] =~ />/ || $warn_thar->[0] eq '@')) ||
@@ -1611,7 +1611,7 @@ sub vardata {
 #		       SAVED:YES|NO   - put results in saved data (this really should not be set manually)
 #		       PATTERN:<regex> - enables regex match allowing more than one real data name to match this threshold
 #		       NAME:<string> - overrides output status and perf name for this variable
-#		       UOM:<string>  - unit of measurement symbol to add to perf 
+#		       UOM:<string>  - unit of measurement symbol to add to perf
 #  @RETURNS       : Returns reference to a hash array, a library's structure for holding processed MULTI-THRESHOLD spec
 #		    Note that this is MULTI-THRESHOLD hash structure, it itself contains threshold hashes returned by parse_threshold()
 #  @PRIVACY & USE : PUBLIC, but its use is discouraged. Maybe used directly or as an object instance function.
@@ -1630,7 +1630,7 @@ sub parse_thresholds_list {
           $t !~ /^PATTERN/ && $t !~ /^NAME/ && $t !~ /^UOM/) {
 	if (scalar(@tin)==2) {
 	     if (defined($self)) {
-		  $thres->{'WARN'} = $self->parse_threshold($tin[0]); 
+		  $thres->{'WARN'} = $self->parse_threshold($tin[0]);
 		  $thres->{'CRIT'} = $self->parse_threshold($tin[1]);
 	     }
 	     else {
@@ -1843,7 +1843,7 @@ sub additional_options_list {
               push @VarOptions,$v."=s";
 	      if ($self->{'enable_rate_of_change'} eq 1 && $known_vars->{$v}[1] eq 'COUNTER' && ($o_rprefix ne '' || $o_rsuffix ne '')) {
 		   $v2 = $o_rprefix.$v.$o_rsuffix;
-		   push @VarOptions,$v2."=s" 
+		   push @VarOptions,$v2."=s"
 	      }
 	  }
 	}
@@ -1957,7 +1957,7 @@ sub options_startprocessing {
 		for (my $i=0; $i<scalar(@{$perfVars}); $i++) {
 			$perfVars->[$i] = '&'.$1 if $perfVars->[$i] =~ /^$o_rprefix(.*)$o_rsuffix$/;
 		}
-	} 
+	}
     }
     if (defined($o_warn) || defined($o_crit) || defined($o_variables)) {
 	if (defined($o_variables)) {
@@ -2015,7 +2015,7 @@ sub _options_setthresholds {
     $o_rsuffix = $self->{'o_rsuffix'} if exists($self->{'o_rsuffix'});
 
     if (scalar(@{$ar_warnLv})!=scalar(@{$ar_varsL}) || scalar(@{$ar_critLv})!=scalar(@{$ar_varsL})) {
-	  printf "Number of specified warning levels (%d) and critical levels (%d) must be equal to the number of attributes specified at '-a' (%d). If you need to ignore some attribute do it as ',,'\n", scalar(@{$ar_warnLv}), scalar(@{$ar_critLv}), scalar(@{$ar_varsL}); 
+	  printf "Number of specified warning levels (%d) and critical levels (%d) must be equal to the number of attributes specified at '-a' (%d). If you need to ignore some attribute do it as ',,'\n", scalar(@{$ar_warnLv}), scalar(@{$ar_critLv}), scalar(@{$ar_varsL});
 	  $self->verb("Warning Levels: ".join(",",@{$ar_warnLv}));
 	  $self->verb("Critical Levels: ".join(",",@{$ar_critLv}));
 	  if (defined($self)) { $self->usage(); }
@@ -2186,7 +2186,7 @@ sub set_statuscode {
 
 #  @DESCRIPTION   : This function is called closer to end of the code after plugin retrieved data and
 #		    assigned values to variables. This function checks variables against all thresholds.
-#		    It prepares statusdata and statusinfo and exitcode. 
+#		    It prepares statusdata and statusinfo and exitcode.
 #  @LAST CHANGED  : 09-03-12 by WL
 #  @INPUT         : none
 #  @RETURNS       : nothing (future: 1 on success, 0 on error)
@@ -2248,7 +2248,7 @@ sub main_checkvars {
 		$self->addto_statusdata_output($dvar,$aname." is ".$dataresults->{$dvar}[0]);
 
 		# if we were asked to output performance, prepare it but do not output until later
-		if ((defined($self->{'o_perf'}) && defined($avar) && !exists($thresholds->{$avar}{'PERF'})) || 
+		if ((defined($self->{'o_perf'}) && defined($avar) && !exists($thresholds->{$avar}{'PERF'})) ||
 		    (exists($thresholds->{$avar}{'PERF'}) && $thresholds->{$avar}{'PERF'} eq 'YES')) {
 			$perf_str = perf_name($aname).'='.$dataresults->{$dvar}[0];
 			$self->set_perfdata($dvar, $perf_str, undef, "IFNOTSET"); # with undef UOM would get added
@@ -2304,7 +2304,7 @@ sub main_perfvars {
 		    }
 		    else {
 			$self->verb(" -- not adding to perfdata because of it is '".$known_vars->{$avar}[1]."' type variable --");
-		    } 
+		    }
 	        }
 	        else {
 		    $self->verb("Perfvar: $avar selected for PERFOUT but data not defined");
@@ -2399,10 +2399,10 @@ sub option_query {
 	  # how to query
 	  my @key_querytype = split(':', uc shift @ar);
 	  $nlib->verb("- processing query type specification: ".join(':',@key_querytype));
-	  $query[$i] = { 'query_type' => $key_querytype[0] }; 
+	  $query[$i] = { 'query_type' => $key_querytype[0] };
 	  if ($key_querytype[0] eq 'GET' || $key_querytype[0] eq 'LLEN' ||
 	      $key_querytype[0] eq 'SLEN' || $key_querytype[0] eq 'HLEN' ||
-	      $key_querytype[0] eq 'ZLEN') { 
+	      $key_querytype[0] eq 'ZLEN') {
                if (scalar(@key_querytype)!=1) {
                         print "Incorrect specification. GET, LLEN, SLEN, HLEN, ZLEN do not have any arguments\n";
                         print_usage();
@@ -2475,7 +2475,7 @@ sub option_query {
 
 # sets password, host, port and other data based on options entered
 sub options_setaccess {
-    if (!defined($o_host)) { print "Please specify hostname (-H)\n"; print_usage(); exit $ERRORS{"UNKNOWN"}; } 
+    if (!defined($o_host)) { print "Please specify hostname (-H)\n"; print_usage(); exit $ERRORS{"UNKNOWN"}; }
     if (defined($o_pwfile) && $o_pwfile) {
         if ($o_password) {
 	    print "use either -x or -C to enter credentials\n"; print_usage(); exit $ERRORS{"UNKNOWN"};
@@ -2506,7 +2506,7 @@ sub check_options {
     my $nlib = shift;
     my %Options = ();
     Getopt::Long::Configure("bundling");
-    GetOptions(\%Options, 
+    GetOptions(\%Options,
    	'v:s'	=> \$o_verb,		'verbose:s' => \$o_verb, "debug:s" => \$o_verb,
         'h'     => \$o_help,            'help'          => \$o_help,
         'H:s'   => \$o_host,            'hostname:s'    => \$o_host,
@@ -2574,7 +2574,7 @@ sub check_options {
 		print "Total memory value $o_totalmemory can not be interpreted\n";
 		print_usage();
 		exit $ERRORS{"UNKNOWN"};
-	} 
+	}
     }
     if (defined($o_repdelay) && $o_repdelay ne '') {
           $nlib->verb("Processing replication delay thresholds: $o_repdelay");
@@ -2648,7 +2648,7 @@ close($sock);
 # now do connection using Redis library
 my $start_time;
 my $dsn = $HOSTNAME.":".$PORT;
-$nlib->verb("connecting to $dsn"); 
+$nlib->verb("connecting to $dsn");
 $start_time = [ Time::HiRes::gettimeofday() ] if defined($o_timecheck);
 
 $redis = Redis-> new ( server => $dsn, 'debug' => (defined($o_verb))?1:0 );
@@ -2661,7 +2661,7 @@ if ($DATABASE) {
 }
 
 if (!$redis) {
-  print "CRITICAL ERROR - Redis Library - can not connect to '$HOSTNAME' on port $PORT\n"; 
+  print "CRITICAL ERROR - Redis Library - can not connect to '$HOSTNAME' on port $PORT\n";
   exit $ERRORS{'CRITICAL'};
 }
 
@@ -2718,7 +2718,7 @@ for (my $i=0; $i<scalar(@query);$i++) {
 	    $range_start=0;
 	}
 	if (defined($query[$i]{'query_range_end'}) && $query[$i]{'query_range_end'} ne '') {
-	    $range_end= $query[$i]{'query_range_end'}; 
+	    $range_end= $query[$i]{'query_range_end'};
 	}
 	elsif ($query[$i]{'query_type'} eq 'LRANGE') {
 	    $nlib->verb("Getting (lrange) redis key: ".$query[$i]{'key_query'});
@@ -2779,7 +2779,7 @@ foreach $vnam (keys %{$stats}) {
 		$dbs{$vnam}= {'name'=>$vnam};
 		foreach (split(/,/,$vval)) {
 			my ($k,$d) = split(/=/,$_);
-			$nlib->add_data($vnam.'_'.$k,$d); 
+			$nlib->add_data($vnam.'_'.$k,$d);
 			$dbs{$vnam}{$k}=$d;
 			$nlib->verb(" - stats data added: ".$vnam.'_'.$k.' = '.$d);
 			$total_keys+=$d if $k eq 'keys' && Naglio::isnum($d);
@@ -2849,7 +2849,7 @@ if (defined($o_hitrate) && defined($nlib->vardata('keyspace_hits')) && defined($
      }
 }
 
-# Replication Delay 
+# Replication Delay
 my $repl_delay=0;
 if (defined($o_repdelay) && defined($nlib->vardata('master_last_io_seconds_ago')) && defined($nlib->vardata('role'))) {
     if ($nlib->vardata('role') eq 'slave') {
@@ -2905,7 +2905,7 @@ print " - " if $nlib->statusinfo();
 print "REDIS " . $dbversion . ' on ' . $HOSTNAME. ':'. $PORT;
 print ' has '.scalar(keys %dbs).' databases ('.join(',',keys(%dbs)).')';
 print " with $total_keys keys" if $total_keys > 0;
-print ', up '.$nlib->uptime_info($nlib->vardata('uptime_in_seconds')) if defined($nlib->vardata('uptime_in_seconds')); 
+print ', up '.$nlib->uptime_info($nlib->vardata('uptime_in_seconds')) if defined($nlib->vardata('uptime_in_seconds'));
 print " - " . $nlib->statusdata() if $nlib->statusdata();
 print $nlib->perfdata();
 print "\n";

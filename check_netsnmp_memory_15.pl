@@ -1,4 +1,4 @@
-#!/usr/bin/perl -w 
+#!/usr/bin/perl -w
 #
 # ============================== SUMMARY =====================================
 #
@@ -25,7 +25,7 @@
 #
 # Drop this plugin into plugins directory together with check_snmp_attributes.pl
 # If directory is sonething other than /usr/lib/nagios/plugins, make sure to modify
-# code (closer to end of this file) to specify correct directory. THIS IS A MUST. 
+# code (closer to end of this file) to specify correct directory. THIS IS A MUST.
 #
 # Here is also an example for nagios config:
 #
@@ -46,7 +46,7 @@
 # ========================== START OF PROGRAM CODE ===========================
 
 
-my @expressions_netsnmpmem = ( 
+my @expressions_netsnmpmem = (
         "total_free=snmp(1.3.6.1.4.1.2021.4.11.0),1000,/,round(1),' MB',+",	# Total free, data is reported in kb, we want MB
 	"total_real=snmp(1.3.6.1.4.1.2021.4.5.0),1000,/,round(1),' MB',+",	# Total real memory
 	"avail_real=snmp(1.3.6.1.4.1.2021.4.6.0),1000,/,round(1),' MB',+",	# Free real memory

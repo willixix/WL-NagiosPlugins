@@ -94,7 +94,7 @@ foreach ($this->DS as $KEY=>$VAL) {
 	if (isset($VAR[$VAL['LABEL']])) {
 		$VAR[$VAL['LABEL']] = $VAL['DS'];
 	}
-} 
+}
 
 $gindex=0;
 
@@ -160,7 +160,7 @@ if ($VAR['total_connections_received'] != -1 ||
   $gindex++;
 }
 
-if ($VAR['keyspace_hits'] != -1 && $VAR['keyspace_misses'] != -1) { 
+if ($VAR['keyspace_hits'] != -1 && $VAR['keyspace_misses'] != -1) {
   $vindex_hits=$VAR['keyspace_hits'];
   $vindex_misses=$VAR['keyspace_misses'];
   $ds_name[$gindex] = "Redis Hits and Misses";
@@ -269,7 +269,7 @@ if ($VAR['used_memory'] != -1 && $VAR['used_memory_peak']) {
   $gindex++;
 }
 
-if ($VAR['used_cpu_sys'] != -1) { 
+if ($VAR['used_cpu_sys'] != -1) {
   $vindex_cpumain_sys=$VAR['used_cpu_sys'];
   $vindex_cpumain_user=$VAR['used_cpu_user'];
   $vindex_cpuchild_sys=$VAR['used_cpu_sys_children'];

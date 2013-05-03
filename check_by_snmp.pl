@@ -39,12 +39,12 @@
 #
 # This program is written and maintained by:
 #   William Leibzon - william(at)leibzon.org
-# 
+#
 # ============================= SETUP NOTES ====================================
-# 
+#
 # To find all available options do:
 #   ./check_by_snmp -help
-# 
+#
 # All SNMP Versions (1,2,3) and authentication options are supported and
 # similar to my other check_snmp plugins.
 #
@@ -76,9 +76,9 @@
 #    with same exit code as remote command (usualy nagios plugin) and it gives
 #    nagios exit errors if SNMP connection can not be established.
 #
-#    If more than one Extend name or OID are specified, than exit code is from 
+#    If more than one Extend name or OID are specified, than exit code is from
 #    last one though it really does not make mush sense to specify more than one
-#    when you're basically using check_by_snmp to execute remote plugin 
+#    when you're basically using check_by_snmp to execute remote plugin
 #
 # -F option is used to specify which files the remote data should be written to
 #    on nagios server. If you have a plugin on nagios that is expecting certain
@@ -86,7 +86,7 @@
 #    may have multiple of the same plugin executed for different remote systems
 #    so really each file should be unique for each run which is why -T is better.
 #    -F can also be useful for debugging as even if you write to standard output
-#    you can use this to also write data to some debug/log file. 
+#    you can use this to also write data to some debug/log file.
 #
 # -T option will have this plugin write data to temporary file name of its choice.
 #    The directory is normally /tmp but if you want you can specify different
@@ -99,7 +99,7 @@
 #    Please note that you MUST NOT specify --exec="command". This is really not your
 #    standard option, it basically just indicates where ARG processing should end
 #    and rest is used as ARGV parameters for a command to be executed.
-# 
+#
 #    You would use this option when real processing is to be done by some other
 #    nagios plugin which would use data retrieved from a remote system with
 #    check_by_snmp. Very often these would be dumping of files in /proc,
@@ -122,16 +122,16 @@
 #    And if you are using -F then check_by_snmp will just use exec to replace
 #    itself with specified command. If files specified in -F is a temporary file
 #    name, you are responsible for deleting it.
-# 
+#
 # -v is a debug option when you're testing this plugin directly on the shell
-#    command line, you will find it useful if you run into any problems 
+#    command line, you will find it useful if you run into any problems
 #
 # ========================= SETUP EXAMPLES ==================================
 #
 # For example on how to set this up I will use check_drbd plugin by Brandon Lee Poyner
 # (you can find it on exchange.nagios.org) as it happened to be good victim and can
 # be used with check_by_snmp in multiple ways:
-# 
+#
 #   1) -S option with no --exec (this is default behavior when no options are specified)
 #	Returns results from SNMP to standard output. This is what you may call "snmp cat"
 #	and so most similar to check_nrpe or check_by_ssh in that it lets you simply
@@ -152,7 +152,7 @@
 #	or more temporary files and execute specified nagios plugin. The plugin
 #	will parse arguments in the actual check command to be executed and replace
 #        %FILE1% with a name of the first file it wrote
-#        %FILE2% with a name of the 2nd file it wrote 
+#        %FILE2% with a name of the 2nd file it wrote
 #        ...
 #      If these were temporary files, they will be deleted after plugin finished
 #
@@ -181,9 +181,9 @@
 #	  define command {
 #        	command_name check_drbd
 #        	command_line $USER1$/check_by_snmp -O 1.3.6.1.4.1.2021.202 -H $HOSTADDRESS$ -L sha,aes -l $_HOSTSNMP_V3_USER$ -x $_HOSTSNMP_V3_AUTH$ -X $_HOSTSNMP_V3_PRIV$ -S --exec $USER1$/check_drbd-0.5.2 -p - -d All
-#	  } 
+#	  }
 #
-#    4) -F with --exec 
+#    4) -F with --exec
 #	Last case which is my least favorite is to specify actual files to
 #	write with -F option and then execute another plugin which will know
 #	these file names and read them for processing. If these are meant to
@@ -245,7 +245,7 @@ our $no_snmp=0;
 eval 'use Net::SNMP';
 if ($@) {
   $no_snmp=1;
-}      
+}
 
 # These are nsExtendResult and nsExtendOutLine table bases
 my $oid_ExtendExitStatus="1.3.6.1.4.1.8072.1.3.2.3.1.4";
@@ -259,7 +259,7 @@ my $o_version=  undef;          # version info option
 my $opt_extlist=undef;		# List of Extend names to e retrieved
 my @extends=	();		#
 my $opt_oidlist= undef;		# List of OIDs to retrieve data from
-my @oids=	();		#  
+my @oids=	();		#
 my $opt_filelist=undef;		# List of files to write
 my @files=();			#
 
@@ -294,14 +294,14 @@ sub print_usage {
 sub isnum { # Return true if arg is a number
   my $num = shift;
   if ( $num =~ /^(\d+\.?\d*)|(^\.\d+)$/ ) { return 1 ;}
-  return 0; 
+  return 0;
 }
 
 sub help {
    print "\nCheck By SNMP (using Extend or Exec) for Nagios, version ",$Version,"\n";
    print "GPL licence, (c) 20011-2012 William Leibzon\n\n";
-   print_usage();       
-   print <<EOT;         
+   print_usage();
+   print <<EOT;
 
 Debug & Console Options:
  -v, --verbose
@@ -316,7 +316,7 @@ Standard Options:
    If you added "extend name command" in /etc/snmp/snmpd.conf such as
      "exec cpustat /bin/cat /proc/stat"
    then "-E cpustat" would return data from executing "/bin/cat /proc/stat".
-   You can specify more than one such name here to be queried at once, 
+   You can specify more than one such name here to be queried at once,
    wuth at least one extend name or exec OID (see below) required.
  -O, --oid=<oid>[,<oid>[,<oid>..]]
    OID of where results have been put with snmp exec. At least one is required.
@@ -481,7 +481,7 @@ sub check_options {
     {
 	print "Put snmp login info!\n";
 	print_usage(); exit $ERRORS{"UNKNOWN"};
-    } 
+    }
 
     if (defined($opt_filelist)) {
 	if (defined($o_tempfiles)) {
@@ -525,7 +525,7 @@ sub replace_macros {
 			verb("Replacing '".$reg."' in '".$args->[$i]."' with '".$rep."'");
 			$args->[$i] =~ s/$reg/$rep/g;
 		}
-	} 
+	}
   }
 }
 
@@ -616,7 +616,7 @@ my @slines=();            # Printing of stdout is delayed, here they are collect
 my $retcode = undef;	  # return exit value of the last executed command
 my ($i,$b,$e);
 
-# Convert Extend Name into OIDs which are base + ASCII code of each character in the name 
+# Convert Extend Name into OIDs which are base + ASCII code of each character in the name
 for($i=0; $i<scalar(@extends);$i++) {
    my @chars = split //, $extends[$i];
    $oids[$i]=$oid_ExtendDataLines.'.'.scalar(@chars);
@@ -625,8 +625,8 @@ for($i=0; $i<scalar(@extends);$i++) {
 	$oids[$i] .= '.' . ord($c);
 	$oid_exitcode .= '.' . ord($c);
    }
-   verb("Converted Extends Name '".$extends[$i]."' to Data Lines OID ".$oids[$i]); 
-   verb("Converted Extends Name '".$extends[$i]."' to Exit Status OID ".$oid_exitcode); 
+   verb("Converted Extends Name '".$extends[$i]."' to Data Lines OID ".$oids[$i]);
+   verb("Converted Extends Name '".$extends[$i]."' to Exit Status OID ".$oid_exitcode);
 }
 
 # Read the data from SNMP
@@ -710,7 +710,7 @@ if ($o_exec) {
    replace_macros(\@exec_args,\@files);
    verb("Command to be executed (after MACRO processing): ".join(' ',@exec_args));
    if (defined($o_stdout) || defined($o_tempfiles)) {
-   	pipe(OUT_FROMPIPE, OUT_TOPIPE) or die "Could not create pipe - $!"; 
+   	pipe(OUT_FROMPIPE, OUT_TOPIPE) or die "Could not create pipe - $!";
 	pipe(IN_FROMPIPE, IN_TOPIPE) or die "Could not create pipe - $!";
 	$pid = fork();
 	if (!defined($pid)) {
@@ -752,7 +752,7 @@ if ($o_exec) {
 	    close OUT_TOPIPE;
 	    close IN_FROMPIPE;
 	    open(STDIN, "<&=".fileno(OUT_FROMPIPE)) or die "Could not redirect STDIN - $!";
-	    # below will not work with embedded perl, so have to use dup2 
+	    # below will not work with embedded perl, so have to use dup2
 	    # open(STDOUT, ">&=".fileno(IN_TOPIPE)) or die "Could not redirect STDOUT - $!";
 	    dup2(fileno(IN_TOPIPE),1);
             if (!exec(@exec_args)) {

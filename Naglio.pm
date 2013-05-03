@@ -22,7 +22,7 @@ our $AUTHOR     = "William Leibzon";
 #   THIS IS WORK IN PROGRESS, THE LIBRARY HAS NOT BEEN RELEASED YET AND INTERFACES MAY CHANGE
 #
 # ============================= LIBRARY HISTORY AND VERSIONS ====================================
-# 
+#
 # Note: you may safely skip this section if you're looking at documentation about this library or plugin
 #
 # [2006-2008]  The history of this library goes back to plugins such as check_snmp_temperature.pl,
@@ -31,7 +31,7 @@ our $AUTHOR     = "William Leibzon";
 #	       these thresholds. Several of my plugins had common architecture supporting multiple
 #	       variables or attributes to be checked using -a/--attributes/--variables option and
 #	       --warn and --crit options with list of thresholds for these attributes and --perfvars
-#	       specifying variables whose data would only go as PERFOUT for graphing. 
+#	       specifying variables whose data would only go as PERFOUT for graphing.
 #
 # [2008-2011]  Threshold parsing and check code had been rewritten and support added for specifying
 #	       range per plugin guidelines: http://nagiosplug.sourceforge.net/developer-guidelines.html
@@ -115,7 +115,7 @@ my $DEFAULT_PERF_OK_STATUS_REGEX = 'GAUGE|COUNTER|^DATA$|BOOLEAN';
 #		       plugin_description => string        - plugin longer description
 #		       plugin_authors => string 	   - list of plugin authors
 #                      knownStatsVars => reference to hash - hash array defining known variables, what type they are, their description
-#		       usage_text => string,		   - text string to display when calling default usage function 
+#		       usage_text => string,		   - text string to display when calling default usage function
 #		       usage_function => &ref  		   - OR function that would display helpful text in case of error with options for this plugin
 #		       verbose => 1 or "" or "filename"    - set to 1 or "" if verbose/debug or to filename to send data to (may not be called "0" or "1")
 #                      output_comparison_symbols => 0 or 1 - 1 means library output in case threshold is met can use "<", ">", "="
@@ -301,7 +301,7 @@ sub readable_time {
   my ($self,$total_sec) = _self_args(@_);
   my ($sec,$mins,$hrs,$days);
   my $txtout="";
-  
+
   sub div_mod { return int( $_[0]/$_[1]) , ($_[0] % $_[1]); }
 
   ($mins,$sec) = div_mod($total_sec,60);
@@ -325,7 +325,7 @@ sub verb {
 
     if (defined($o_verb) || (defined($self) && defined($self->{'verbose'}) && $self->{'verbose'} ne 0)) {
         $debug_file_name = $self->{'debug_file'} if defined($self) && $self->{'debug_file'} ne "";
-        $debug_file_name = $self->{'verbose'} if $debug_file_name ne "" && defined($self) && 
+        $debug_file_name = $self->{'verbose'} if $debug_file_name ne "" && defined($self) &&
 					         ($self->{'verbose'} ne 0 && $self->{'verbose'} ne 1 && $self->{'verbose'} ne '');
         $debug_file_name = $o_verb if $debug_file_name ne "" && defined($o_verb) && $o_verb ne "";
         if ($debug_file_name ne "") {
@@ -702,7 +702,7 @@ sub check_threshold {
     $issymb = 0 if defined($self) && $self->{'output_comparison_symbols'} eq 0;
 
     # verb("debug check_threshold: $mod : ".(defined($lv1)?$lv1:'')." : ".(defined($lv2)?$lv2:''));
-    return "" if !defined($lv1) || ($mod eq '' && $lv1 eq ''); 
+    return "" if !defined($lv1) || ($mod eq '' && $lv1 eq '');
     return " " . $attrib . " is " . $data . ( ($issymb==1)?' = ':' equal to ' ). $lv1 if $mod eq '=' && $data eq $lv1;
     return " " . $attrib . " is " . $data . ( ($issymb==1)?' != ':' not equal to ' ). $lv1 if $mod eq '!' && $data ne $lv1;
     return " " . $attrib . " is " . $data . ( ($issymb==1)?' > ':' more than ' ) . $lv1 if $mod eq '>' && $data>$lv1;
@@ -734,7 +734,7 @@ sub parse_threshold {
     # link to an array that holds processed threshold data
     # array: 1st is type of check, 2nd is threshold value or value1 in range, 3rd is value2 in range,
     #        4th is extra options such as ^, 5th is nagios spec string representation for perf out
-    my $th_array = [ '', undef, undef, '', '' ]; 
+    my $th_array = [ '', undef, undef, '', '' ];
     my $th = $thin;
     my $at = '';
 
@@ -801,7 +801,7 @@ sub threshold_specok {
     return 1 if defined($warn_thar) && defined($warn_thar->[1]) &&
 		defined($crit_thar) && defined($crit_thar->[1]) &&
 		isnum($warn_thar->[1]) && isnum($crit_thar->[1]) &&
-                $warn_thar->[0] eq $crit_thar->[0] && 
+                $warn_thar->[0] eq $crit_thar->[0] &&
                 (!defined($warn_thar->[3]) || $warn_thar->[3] !~ /\^/) &&
 		(!defined($crit_thar->[3]) || $crit_thar->[3] !~ /\^/) &&
               (($warn_thar->[1]>$crit_thar->[1] && ($warn_thar->[0] =~ />/ || $warn_thar->[0] eq '@')) ||
@@ -915,7 +915,7 @@ sub vardata {
 #		       SAVED:YES|NO   - put results in saved data (this really should not be set manually)
 #		       PATTERN:<regex> - enables regex match allowing more than one real data name to match this threshold
 #		       NAME:<string> - overrides output status and perf name for this variable
-#		       UOM:<string>  - unit of measurement symbol to add to perf 
+#		       UOM:<string>  - unit of measurement symbol to add to perf
 #  @RETURNS       : Returns reference to a hash array, a library's structure for holding processed MULTI-THRESHOLD spec
 #		    Note that this is MULTI-THRESHOLD hash structure, it itself contains threshold hashes returned by parse_threshold()
 #  @PRIVACY & USE : PUBLIC, but its use is discouraged. Maybe used directly or as an object instance function.
@@ -934,7 +934,7 @@ sub parse_thresholds_list {
           $t !~ /^PATTERN/ && $t !~ /^NAME/ && $t !~ /^UOM/) {
 	if (scalar(@tin)==2) {
 	     if (defined($self)) {
-		  $thres->{'WARN'} = $self->parse_threshold($tin[0]); 
+		  $thres->{'WARN'} = $self->parse_threshold($tin[0]);
 		  $thres->{'CRIT'} = $self->parse_threshold($tin[1]);
 	     }
 	     else {
@@ -1147,7 +1147,7 @@ sub additional_options_list {
               push @VarOptions,$v."=s";
 	      if ($self->{'enable_rate_of_change'} eq 1 && $known_vars->{$v}[1] eq 'COUNTER' && ($o_rprefix ne '' || $o_rsuffix ne '')) {
 		   $v2 = $o_rprefix.$v.$o_rsuffix;
-		   push @VarOptions,$v2."=s" 
+		   push @VarOptions,$v2."=s"
 	      }
 	  }
 	}
@@ -1261,7 +1261,7 @@ sub options_startprocessing {
 		for (my $i=0; $i<scalar(@{$perfVars}); $i++) {
 			$perfVars->[$i] = '&'.$1 if $perfVars->[$i] =~ /^$o_rprefix(.*)$o_rsuffix$/;
 		}
-	} 
+	}
     }
     if (defined($o_warn) || defined($o_crit) || defined($o_variables)) {
 	if (defined($o_variables)) {
@@ -1319,7 +1319,7 @@ sub _options_setthresholds {
     $o_rsuffix = $self->{'o_rsuffix'} if exists($self->{'o_rsuffix'});
 
     if (scalar(@{$ar_warnLv})!=scalar(@{$ar_varsL}) || scalar(@{$ar_critLv})!=scalar(@{$ar_varsL})) {
-	  printf "Number of specified warning levels (%d) and critical levels (%d) must be equal to the number of attributes specified at '-a' (%d). If you need to ignore some attribute do it as ',,'\n", scalar(@{$ar_warnLv}), scalar(@{$ar_critLv}), scalar(@{$ar_varsL}); 
+	  printf "Number of specified warning levels (%d) and critical levels (%d) must be equal to the number of attributes specified at '-a' (%d). If you need to ignore some attribute do it as ',,'\n", scalar(@{$ar_warnLv}), scalar(@{$ar_critLv}), scalar(@{$ar_varsL});
 	  $self->verb("Warning Levels: ".join(",",@{$ar_warnLv}));
 	  $self->verb("Critical Levels: ".join(",",@{$ar_critLv}));
 	  if (defined($self)) { $self->usage(); }
@@ -1490,7 +1490,7 @@ sub set_statuscode {
 
 #  @DESCRIPTION   : This function is called closer to end of the code after plugin retrieved data and
 #		    assigned values to variables. This function checks variables against all thresholds.
-#		    It prepares statusdata and statusinfo and exitcode. 
+#		    It prepares statusdata and statusinfo and exitcode.
 #  @LAST CHANGED  : 09-03-12 by WL
 #  @INPUT         : none
 #  @RETURNS       : nothing (future: 1 on success, 0 on error)
@@ -1552,7 +1552,7 @@ sub main_checkvars {
 		$self->addto_statusdata_output($dvar,$aname." is ".$dataresults->{$dvar}[0]);
 
 		# if we were asked to output performance, prepare it but do not output until later
-		if ((defined($self->{'o_perf'}) && defined($avar) && !exists($thresholds->{$avar}{'PERF'})) || 
+		if ((defined($self->{'o_perf'}) && defined($avar) && !exists($thresholds->{$avar}{'PERF'})) ||
 		    (exists($thresholds->{$avar}{'PERF'}) && $thresholds->{$avar}{'PERF'} eq 'YES')) {
 			$perf_str = perf_name($aname).'='.$dataresults->{$dvar}[0];
 			$self->set_perfdata($dvar, $perf_str, undef, "IFNOTSET"); # with undef UOM would get added
@@ -1608,7 +1608,7 @@ sub main_perfvars {
 		    }
 		    else {
 			$self->verb(" -- not adding to perfdata because of it is '".$known_vars->{$avar}[1]."' type variable --");
-		    } 
+		    }
 	        }
 	        else {
 		    $self->verb("Perfvar: $avar selected for PERFOUT but data not defined");
@@ -1706,7 +1706,7 @@ sub get_shortname {
         $name = uc basename( $ENV{NAGIOS_PLUGIN} || $0 );
     }
     $name=$1 if $name =~ /^check(.*)/;
-    $name=$1 if $name =~ /(.*)\.(.*)$/; 
+    $name=$1 if $name =~ /(.*)\.(.*)$/;
     return $name;
 }
 

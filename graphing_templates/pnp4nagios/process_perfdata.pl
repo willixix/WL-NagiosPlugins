@@ -3,7 +3,7 @@
 ##
 ## pnp4nagios–0.6.16
 ## Copyright (c) 2005-2010 Joerg Linge (http://www.pnp4nagios.org)
-## 
+##
 ## Modified by William Leibzon (2010-2012) to add 'DS' and 'ONLY_NAMED_DS'
 ##
 ## This program is free software; you can redistribute it and/or
@@ -50,8 +50,8 @@ my %conf = (
     XML_ENC            => "UTF-8",
     XML_UPDATE_DELAY   => 0,                        # Write XML only if file is older then XML_UPDATE_DELAY seconds
     RRD_DAEMON_OPTS    => "",
-    GEARMAN_HOST       => "localhost:4730",                        # How many gearman worker childs to start 
-    PREFORK            => 2,                        # How many gearman worker childs to start 
+    GEARMAN_HOST       => "localhost:4730",                        # How many gearman worker childs to start
+    PREFORK            => 2,                        # How many gearman worker childs to start
     REQUESTS_PER_CHILD => 20000,                   # Restart after a given count of requests
     ENCRYPTION         => 1,                       # Decrypt mod_gearman packets
     KEY                => 'should_be_changed',
@@ -118,7 +118,7 @@ if ( $conf{USE_RRDs} == 1 ) {
 }
 
 #
-# Include Gearman modules if needed 
+# Include Gearman modules if needed
 #
 if ( defined($opt_gm) ) {
     unless ( eval "use Gearman::Worker;1" ) {
@@ -157,7 +157,7 @@ if( ! defined($opt_gm) ){
     if($conf{ENCRYPTION} == 1){
         print_log( "Encryptions is enabled", 0 );
         read_keyfile($conf{'KEY_FILE'});
-        # fill key up to 32 bytes 
+        # fill key up to 32 bytes
         $conf{'KEY'} = substr($conf{'KEY'},0,32) . chr(0) x ( 32 - length( $conf{'KEY'} ) );
         $cypher = Crypt::Rijndael->new( $conf{'KEY'}, Crypt::Rijndael::MODE_ECB() );
     }
@@ -227,7 +227,7 @@ sub parse_env {
         # Gearman Worker
         $job_data = decode_base64($job_data);
         if($conf{ENCRYPTION} == 1){
-            $job_data = $cypher->decrypt( $job_data )        
+            $job_data = $cypher->decrypt( $job_data )
         }
         my @LINE = split(/\t/, $job_data);
         foreach my $k (@LINE) {
@@ -438,7 +438,7 @@ sub data2rrd {
             $DS = 1;
             # PNP 0.4.x Template compatibility
             $NAGIOS{RRDFILE} = "";
-            
+
             #
             $rrd_storage_type = "MULTIPLE";
             $rrdfile          = $conf{RRDPATH} . "/" . $data[$i]{hostname} . "/" . $data[$i]{servicedesc} . "_" . $data[$i]{name} . ".rrd";
@@ -833,8 +833,8 @@ sub read_custom_template {
     for (my $i=0; $i<scalar(@{$CTPL->{DSLIST}}); $i++) {
 	print_log("  -- $i --", 3);
 	foreach my $ds (keys %{$CTPL->{DSLIST}[$i]}) {
-	   print_log("    -- " . $ds . " = " . $CTPL->{DSLIST}[$i]{$ds}, 3);   
-	} 
+	   print_log("    -- " . $ds . " = " . $CTPL->{DSLIST}[$i]{$ds}, 3);
+	}
     }
     print_log("--  DSNAMES = ", 3);
     foreach my $ds (keys %{$CTPL->{DSNAMES}}) {
@@ -924,7 +924,7 @@ sub _parse {
     # Nagios::Plugin::Performance
     my $string     = shift;
     my $tmp_string = $string;
-    
+
     # TODO: WL - I don't think this will work properly with quoted perf name with space
     $string =~ s/^\s*([^=]+)=([^\s]+)?\s*//;
 
@@ -954,7 +954,7 @@ sub _parse {
 	 && $label =~ /$conf{UNSAFE_NAME_REGEX}/ ) {
        	    if ($conf{PROCESS_UNSAFEDATA}) {
         	return _parse($string); # recursive call
-       	    }  
+       	    }
             else {
         	return undef;
 	    }
@@ -974,7 +974,7 @@ sub _parse {
         "min"      => $5,
         "max"      => $6
     );
-    
+
     $p{label}  =~ s/[']//g;        # cleanup
     $p{name}   =~ s/[']//g;        # cleanup
     $p{name}   =~ s/[\/\\]/_/g;    # cleanup
@@ -1033,7 +1033,7 @@ sub cleanup {
 }
 
 #
-# Urlencode 
+# Urlencode
 #
 sub urlencode {
     my $string = shift;
@@ -1053,7 +1053,7 @@ sub trim {
 }
 
 #
-# Recursive Template search 
+# Recursive Template search
 #
 sub adjust_template {
     my ($ctpl,$p,$command,$uom,$ncount,$name) = @_;
@@ -1064,14 +1064,14 @@ sub adjust_template {
     if (!exists($ctpl->{'COMMAND'}) || $ctpl->{'COMMAND'} ne $command) {
 	my @temp_template = split /\!/, $command;
 	my $initial_template = trim(cleanup($temp_template[0]));
-	read_custom_template ($ctpl, $command); 
+	read_custom_template ($ctpl, $command);
 	if ( defined($ctpl->{'TEMPLATE'}) && $ctpl->{'TEMPLATE'} ne $initial_template ) {
 	    read_custom_template ($ctpl, $ctpl->{'TEMPLATE'} );
 	}
 	$ctpl->{'COMMAND'}=$command;
 	$ctpl->{'dsid_count'}=0;
     }
- 
+
     # We check if this name has been defined in template using DS = id:name:DSTYPE:... directive
     if (defined($name) && exists($ctpl->{'DSNAMES'}{$name})) {
 	$p->{'dsid'} = $ctpl->{'DSNAMES'}{$name};
@@ -1082,7 +1082,7 @@ sub adjust_template {
     elsif (!defined($ctpl->{'ONLY_NAMED_DS'}) || $ctpl->{'ONLY_NAMED_DS'} != 1) {
 	# if this name was not listed, find first id that was not reserved by those that were named
 	$ctpl->{'dsid_count'}=0 if !exists($ctpl->{'dsid_count'});
-	while (exists($ctpl->{'DSLIST'}[$ctpl->{'dsid_count'}]) && 
+	while (exists($ctpl->{'DSLIST'}[$ctpl->{'dsid_count'}]) &&
 		exists($ctpl->{'DSLIST'}[$ctpl->{'dsid_count'}]{'NAME'})) { $ctpl->{'dsid_count'}++; }
 
 	# check if it may have been listed with DSTYPE without a name specified
@@ -1393,7 +1393,7 @@ sub init_stats {
 
 #
 # Store some internal runtime infos
-# 
+#
 sub store_internals {
     if( ! -w $conf{'STATS_DIR'}){
         print_log("*** ERROR: ".$conf{'STATS_DIR'}." is not writable or does not exist",0);
@@ -1401,7 +1401,7 @@ sub store_internals {
     }
     my $statsfile = $conf{'STATS_DIR'}."/".(int $stats{timet} / 60);
     open( STAT, ">> $statsfile" ) or die "Cant create statistic file ", $!;
-    printf(STAT "%d %f %d %d %d %d %d %d\n", $stats{timet},$stats{runtime},$stats{rows},$stats{update},$stats{create},$stats{error},$stats{invalid},$stats{skipped}); 
+    printf(STAT "%d %f %d %d %d %d %d %d\n", $stats{timet},$stats{runtime},$stats{rows},$stats{update},$stats{create},$stats{error},$stats{invalid},$stats{skipped});
     close(STAT);
     check_internals();
 }
@@ -1415,7 +1415,7 @@ sub check_internals {
     opendir(STATS, $conf{'STATS_DIR'});
     while ( defined ( my $file = readdir STATS) ){
         next if $file =~ /^\.\.?$/; # skip . and ..
-        next if $file =~ /-PID-/;   # skip temporary files 
+        next if $file =~ /-PID-/;   # skip temporary files
         next if $file == (int $stats{timet} / 60); # skip our current file
         push @files, $file;
     }
@@ -1423,7 +1423,7 @@ sub check_internals {
 }
 
 #
-# Read and aggregate files found by check_internals() 
+# Read and aggregate files found by check_internals()
 #
 sub read_internals {
     my @files = @_;
@@ -1448,7 +1448,7 @@ sub read_internals {
             @chunks = split();
             $stats{timet}    = $chunks[0];
             $stats{runtime} += $chunks[1];
-            $stats{rows}    += $chunks[2]; 
+            $stats{rows}    += $chunks[2];
             $stats{update}  += $chunks[3];
             $stats{create}  += $chunks[4];
             $stats{error}   += $chunks[5];
@@ -1461,12 +1461,12 @@ sub read_internals {
     }
 }
 #
-# 
+#
 #
 sub process_internals {
     my $last_rrd_dtorage_type = $conf{'RRD_STORAGE_TYPE'};
     $conf{'RRD_STORAGE_TYPE'} = "MULTIPLE";
-    %NAGIOS = ( 
+    %NAGIOS = (
         HOSTNAME => '.pnp-internal',
         DISP_HOSTNAME => 'pnp-internal',
         SERVICEDESC => 'runtime',
@@ -1474,7 +1474,7 @@ sub process_internals {
         TIMET => $stats{timet},
         DATATYPE => 'SERVICEPERFDATA',
         CHECK_COMMAND => 'pnp-runtime',
-        PERFDATA => "runtime=".$stats{runtime}."s rows=".$stats{rows}." errors=".$stats{error}." invalid=".$stats{invalid}." skipped=".$stats{skipped} ." update=".$stats{update}. " create=".$stats{create} 
+        PERFDATA => "runtime=".$stats{runtime}."s rows=".$stats{rows}." errors=".$stats{error}." invalid=".$stats{invalid}." skipped=".$stats{skipped} ." update=".$stats{update}. " create=".$stats{create}
     );
     parse_perfstring(  $NAGIOS{PERFDATA} );
     $conf{'RRD_STORAGE_TYPE'} = $last_rrd_dtorage_type;
@@ -1523,9 +1523,9 @@ sub new_child {
     $sigset = POSIX::SigSet->new(SIGINT);
     sigprocmask(SIG_BLOCK, $sigset)
         or die "Can't block SIGINT for fork: $!\n";
-    
+
     die "fork: $!" unless defined ($pid = fork);
-    
+
     if ($pid) {
         # Parent records the child's birth and returns.
         sigprocmask(SIG_UNBLOCK, $sigset)
@@ -1536,17 +1536,17 @@ sub new_child {
     } else {
         # Child can *not* return from this subroutine.
         $SIG{INT} = 'DEFAULT';      # make SIGINT kill us as it did before
-    
+
         # unblock signals
         sigprocmask(SIG_UNBLOCK, $sigset)
             or die "Can't unblock SIGINT for fork: $!\n";
-    
+
         my $worker = Gearman::Worker->new();
         $worker->job_servers($conf{'GEARMAN_HOST'});
         $worker->register_function("perfdata", 2, sub { return main(@_); });
-        my %opt = ( 
-                    on_complete => sub { $req++; }, 
-                    stop_if => sub { if ( $req > $conf{'REQUESTS_PER_CHILD'} ) { return 1;}; } 
+        my %opt = (
+                    on_complete => sub { $req++; },
+                    stop_if => sub { if ( $req > $conf{'REQUESTS_PER_CHILD'} ) { return 1;}; }
                   );
         print_log("connecting to gearmand '".$conf{'GEARMAN_HOST'}."'",0);
         $worker->work( %opt );
@@ -1645,7 +1645,7 @@ sub print_help {
     Default: /opt/nagios/addons/pnp4nagios/etc/process_perfdata.cfg
 
   Gearman Worker Options:
-    --gearman 
+    --gearman
     Start in gearman worker mode
     --daemon
     Run as daemon

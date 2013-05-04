@@ -3,8 +3,8 @@
 # ============================== SUMMARY =====================================
 #
 # Program  : check_files.pl
-# Version  : 0.41
-# Date     : Mar 23, 2013
+# Version  : 0.415
+# Date     : May 03, 2013
 # Author   : William Leibzon - william@leibzon.org
 # Summary  : This is a nagios plugin that counts files in a directory and
 #            checks their age an size. Various thresholds on this can be set.
@@ -133,9 +133,10 @@
 #  [0.39] Jan 23, 2013 - Added -H option for execute ls -l by ssh (Patrick Bailat)
 #  [0.40] Feb 10, 2013 - Documentation cleanup. New release.
 #  [0.41] Mar 23, 2013 - Fixed bug in parse_threshold function
+#  [0.415] May 3, 2013 - Fixing bugs in open_shel_stream() function
 #
-#  TODO: This plugin is using early threshold check code that became the base of
-#        Naglio library and should be updated to use this library.
+#  TODO: This plugin is using early threshold check code that became the base
+#        of Naglio library and should be updated to use the library later
 #
 # ========================== LIST OF CONTRIBUTORS =============================
 #
@@ -166,7 +167,7 @@ if ($@) {
  %ERRORS = ('OK'=>0,'WARNING'=>1,'CRITICAL'=>2,'UNKNOWN'=>3,'DEPENDENT'=>4);
 }
 
-my $Version='0.41';
+my $Version='0.415';
 
 my $o_help=         undef; # help option
 my $o_timeout=      10;    # Default 10s Timeout

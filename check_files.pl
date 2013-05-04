@@ -592,7 +592,7 @@ sub open_shell_stream {
 
   if (defined($o_stdin)) {
     $shell_command = "<stdin>";
-    $shell_command_ref = $shell_command if defined($shell_command_ref);
+    $$shell_command_ref = $shell_command if defined($shell_command_ref);
     return \*STDIN;
   }
   else {
@@ -615,9 +615,12 @@ sub open_shell_stream {
         if(defined($o_host)) {
             $shell_command = "ssh -o BatchMode=yes -o ConnectTimeout=30 ".$o_host." ";
         }
-        verb("Command: ".$shell_command);
+	else {
+	    $shell_command = "";
+	}
         $shell_command .= $cd_dir if defined($cd_dir);
         $shell_command .= "LANG=C ls -l";
+	verb("Command: ".$shell_command);
     }
     $shell_command .= " -R" if defined($o_recurse);
     $shell_command .= " ".join(" ",@o_filesLv) if defined($o_lsfiles);

@@ -3,8 +3,8 @@
 # ============================== SUMMARY =====================================
 #
 # Program : check_snmp_raid / check_sasraid_megaraid / check_megaraid
-# Version : 2.2b1
-# Date    : Apr 28, 2013
+# Version : 2.2
+# Date    : May 3, 2013
 # Author  : William Leibzon - william@leibzon.org
 # Copyright: (C) 2006-2013 William Leibzon
 # Summary : This is a nagios plugin to monitor Raid controller cards with SNMP

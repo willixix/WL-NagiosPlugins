@@ -518,8 +518,8 @@ sub check_options {
     }
 
     if ((defined($o_stdin) && defined($o_cmd)) ||
-	(defined($o_stdin) && defined($o_host)) ||
-	(defined($o_host) && defined($o_cmd))) {
+        (defined($o_stdin) && defined($o_host)) ||
+        (defined($o_host) && defined($o_cmd))) {
         print "Can use only one of -C or -I or -H\n";
         print_usage();
         exit $ERRORS{"UNKNOWN"};
@@ -539,25 +539,25 @@ sub parse_filespec {
 sub parse_lsline {
     my @parsed = split (/\s+/, shift);
     my %ret = ('type' => 'unset');
-    my $mod = 0;
     # parse file mode into std number
     if (defined($parsed[0]) && $parsed[0] =~ /([-d])(.{3})(.{3})(.{3})/) {
-        if ($1 eq 'd') {
+	my ($file_type,$mod_user, $mod_group, $mod_all) = ($1,$2,$3,$4);
+        if ($file_type eq 'd') {
             $ret{'type'}='dir';
         }
         else {
             $ret{'type'}='file';
         }
-        $mod += 400 if $2 =~ /r/;
-        $mod += 200 if $2 =~ /w/;
-        $mod += 100 if $2 =~ /x/;
-        $mod += 40 if $3 =~ /r/;
-        $mod += 20 if $3 =~ /w/;
-        $mod =~ 10 if $3 =~ /x/;
-        $mod =~ 4 if $4 =~ /r/;
-        $mod =~ 2 if $4 =~ /w/;
-        $mod =~ 1 if $4 =~ /x/;
-        $ret{'mode'} = $mod;
+        $ret{'mode'} = 0;
+        $ret{'mode'} += 400 if $mod_user =~ /r/;
+        $ret{'mode'} += 200 if $mod_user =~ /w/;
+        $ret{'mode'} += 100 if $mod_user =~ /x/;
+        $ret{'mode'} += 40 if $mod_group =~ /r/;
+        $ret{'mode'} += 20 if $mod_group =~ /w/;
+        $ret{'mode'} += 10 if $mod_group =~ /x/;
+        $ret{'mode'} += 4 if $mod_all =~ /r/;
+        $ret{'mode'} += 2 if $mod_all =~ /w/;
+        $ret{'mode'} += 1 if $mod_all =~ /x/;
 
         $ret{'nfiles'} = $parsed[1] if defined($parsed[1]); # number of files, dir start with 2
         $ret{'user'} = $parsed[2] if defined($parsed[2]);
@@ -616,12 +616,12 @@ sub open_shell_stream {
         if(defined($o_host)) {
             $shell_command = "ssh -o BatchMode=yes -o ConnectTimeout=30 ".$o_host." ";
         }
-	else {
-	    $shell_command = "";
-	}
+        else {
+            $shell_command = "";
+        }
         $shell_command .= $cd_dir if defined($cd_dir);
         $shell_command .= "LANG=C ls -l";
-	verb("Command: ".$shell_command);
+        verb("Command: ".$shell_command);
     }
     $shell_command .= " -R" if defined($o_recurse);
     $shell_command .= " ".join(" ",@o_filesLv) if defined($o_lsfiles);

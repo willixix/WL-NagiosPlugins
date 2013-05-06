@@ -3,8 +3,8 @@
 # ============================== SUMMARY =====================================
 #
 # Program  : check_files.pl
-# Version  : 0.415
-# Date     : May 03, 2013
+# Version  : 0.416
+# Date     : May 05, 2013
 # Author   : William Leibzon - william@leibzon.org
 # Summary  : This is a nagios plugin that counts files in a directory and
 #            checks their age an size. Various thresholds on this can be set.
@@ -133,7 +133,8 @@
 #  [0.39] Jan 23, 2013 - Added -H option for execute ls -l by ssh (Patrick Bailat)
 #  [0.40] Feb 10, 2013 - Documentation cleanup. New release.
 #  [0.41] Mar 23, 2013 - Fixed bug in parse_threshold function
-#  [0.415] May 3, 2013 - Fixing bugs in open_shel_stream() function
+#  [0.416] May 3, 2013 - Fixed bugs reported by Joerg Heinemann that caused failures under
+#                        embedded perl. Bugs were in open_shell_stream() and parse_lsline()
 #
 #  TODO: This plugin is using early threshold check code that became the base
 #        of Naglio library and should be updated to use the library later
@@ -167,7 +168,7 @@ if ($@) {
  %ERRORS = ('OK'=>0,'WARNING'=>1,'CRITICAL'=>2,'UNKNOWN'=>3,'DEPENDENT'=>4);
 }
 
-my $Version='0.415';
+my $Version='0.416';
 
 my $o_help=         undef; # help option
 my $o_timeout=      10;    # Default 10s Timeout
@@ -541,7 +542,7 @@ sub parse_lsline {
     my %ret = ('type' => 'unset');
     # parse file mode into std number
     if (defined($parsed[0]) && $parsed[0] =~ /([-d])(.{3})(.{3})(.{3})/) {
-	my ($file_type,$mod_user, $mod_group, $mod_all) = ($1,$2,$3,$4);
+        my ($file_type,$mod_user, $mod_group, $mod_all) = ($1,$2,$3,$4);
         if ($file_type eq 'd') {
             $ret{'type'}='dir';
         }

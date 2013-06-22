@@ -3,8 +3,8 @@
 # ============================== SUMMARY =====================================
 #
 # Program : check_snmp_raid / check_sasraid_megaraid / check_megaraid
-# Version : 2.2
-# Date    : May 3, 2013
+# Version : 2.3
+# Date    : June 20, 2013
 # Author  : William Leibzon - william@leibzon.org
 # Copyright: (C) 2006-2013 William Leibzon
 # Summary : This is a nagios plugin to monitor Raid controller cards with SNMP
@@ -214,15 +214,23 @@
 #	    - Bug fixes. Fix for debugging. Old DEBUG printfs are replaced with calls to verb() function
 #           - code_to_description() and code_to_nagiosstatus() functions added
 #	    - %cardtype_map with list of card types added replacing if/elseif in check_options
-#           - partial rewrite exit status code for logical and physical drives. This may introduce small
-#             incompatible changes for megaraid - but old code dates workarounds for megaraid checks and
-#             doing manually what 3rd column of LOGDRV_CODES and PHYSDRV_CODES are now used for
+#           - partial rewrite of exit status code for logical and physical drives. This may introduce small
+#             incompatible changes for megaraid - but old code dates to workarounds for megaraid checks
+#             and doing manually what 3rd column of LOGDRV_CODES and PHYSDRV_CODES are now used for
 #	 d. New -A/--label option and changes in the nagios status output
-#	    - New -A/--label option allows to specify start of the plugin output in place of default 'Raid'
+#	    - New -A/--label option allows to specify text to start plugin output in place of default 'Raid'
 #           - print_output() function has been renamed print_and_exit() and now also exits with specified alert code
 #           - reordering of output: # of controllders, drives, batteries first, then new additional controller status
 #             such as 'powersupply is ok' and last model & tasks info which are now labeled as 'tasks []' before data
 #        * Code contributions for this release: Michael Cook, Stanislav German-Evtushenko, William Leibzon *
+#   23. [2.3 - June 20, 2013] The following are additions in this version:
+#        a. Applied patch by Erez Zarum to properly support multiple sasraid controllers
+#         . added option -m to enable retrieving extra tabbles for multi-controller support
+#        b .Imported snmp_get_table(), snmp_get_request(), set_snmp_window() functions from check_netint 2.4b3
+#           added options for bulksnmp support and for setting snmp msg window
+#	 c. Code refactoring to replace direct calls to net::snmp get_table and get_request
+#           functions with above ones that do bulk snmp if desired
+#        * Code contributions for this release: William Leibzon, Erez Zarum *
 #
 # ========================== LIST OF CONTRIBUTORS =============================
 #
@@ -237,12 +245,13 @@
 #    John Reuning
 #    Khanh Truong
 #    Robert Wikman
+#    Erez Zarum
 #
 # Open source community is grateful for all your contributions.
 #
 # ========================== START OF PROGRAM CODE ===========================
 
-my $version = "2.2";
+my $version = "2.3";
 
 use strict;
 use Getopt::Long;
@@ -260,7 +269,7 @@ our $TIMEOUT;
 our %ERRORS;
 eval 'use utils qw(%ERRORS $TIMEOUT)';
 if ($@) {
- $TIMEOUT = 20;
+ $TIMEOUT = 30;
  %ERRORS = ('OK'=>0,'WARNING'=>1,'CRITICAL'=>2,'UNKNOWN'=>3,'DEPENDENT'=>4);
 }
 
@@ -282,6 +291,8 @@ my $v3protocols=        undef;  # V3 protocol list.
 my $o_authproto=        'md5';  # Auth protocol
 my $o_privproto=        'des';  # Priv protocol
 my $o_privpass=         undef;  # priv password
+my $o_octetlength=      undef;	 # SNMP Message size parameter
+my $o_bulksnmp=         undef;	 # do snmp bulk request
 my $opt_snmpversion=    undef;  # SNMP version option, default "1" when undef
 my $opt_baseoid=        undef;  # allows to override default $baseoid above
 
@@ -304,6 +315,7 @@ my $opt_optimize=       undef;  # -o experimental option to optimize SNMP querie
 my $opt_extrainfo=      undef;  # -i option that gives more info on drives and their state at the expense of more queries
 my $opt_battery=        undef;  # -b option to check if RAID card batteries (BBU) are working
 my $opt_label=		 undef;  # text to start plugin output with which overrides default "Raid"
+my $opt_multcontrollers=undef;  # use this option when multptiple sas controllers are present
 
 # Other global variables
 my $nagios_status=       "OK";  # nagios return status code, starts with "OK"
@@ -313,6 +325,7 @@ my %prev_perf=             ();  # previous performance data feed to plugin with 
 my @prev_state=            ();  # state based on above
 my %debug_time=            ();  # for debugging of how long execution takes
 my $session=            undef;  # SNMP session
+my $snmp_session_v=         0;  # if no snmp session, its 0, otherwise 1 2 or 3 depending on version of SNMP session opened
 
 # Mapping of multipe acceptable names for cards that people can specify with -T to single card type
 my %cardtype_map = (
@@ -352,11 +365,16 @@ my $phydrv_count_oid = undef;                # used only by sasraid to verify nu
 my $phydrv_goodcount_oid = undef;            # only sasraid. number of good drives in the system. not a table
 my $phydrv_badcount_oid = undef;             # only sasraid. number of bad drives in the system. not a table
 my $phydrv_bad2count_oid = undef;            # only sasraid. number of bad drives in the system. not a table
+my $adapter_status_tableoid = undef;         # only sasraid. get adapter status overall, these includes goodcount,badcount, etc.. to optimize snmp requests.
+my $phydrv_controller_tableoid = undef;      # only sasraid. get controller id for each drive
+my $phydrv_channel_tableoid = undef;         # only sasraid. get channel id (enclosure) for each drive
+my $phydrv_devid_tableoid = undef;           # only sasraid. get device id for each drive
+my $phydrv_lunid_tableoid = undef;           # only sasraid. get lun id for each drive
 my $sys_temperature_oid = undef;             # TODO: controller/system temperature
-my $readfail_oid = undef;                    # number of read fails. only old megaraid. not a table
-my $writefail_oid = undef;                   # number of write fails. only old megaraid. not a table
-my $adpt_readfail_oid = undef;               # number of read fails. only megaraid. not sure of the difference from above any more
-my $adpt_writefail_oid = undef;              # number of write fails. only megaraid. not sure of the difference from above
+my $readfail_oid = undef;                    # only old megaraid. number of read fails. not a table
+my $writefail_oid = undef;                   # only old megaraid. number of write fails. not a table
+my $adpt_readfail_oid = undef;               # only megaraid. number of read fails. not sure of the difference from above any more
+my $adpt_writefail_oid = undef;              # only megaraid. number of write fails. not sure of the difference from above
 my $battery_status_tableoid = undef;         # table to check batteries and their status
 my %controller_status_oids = ();             # set of additional oids to check that report controller operating status
 my %controller_status_codes = ();            # set of responses for above additional status tables (must be same for all tables)
@@ -433,6 +451,7 @@ sub set_oids {
   }
   elsif ($cardtype eq 'sasraid') {
     $baseoid = "1.3.6.1.4.1.3582" if $baseoid eq "";               # megaraid standard base oid
+    $adapter_status_tableoid = $baseoid . ".4.1.4.1.2.1";
     $logdrv_status_tableoid = $baseoid . ".4.1.4.3.1.2.1.5";       # sasraid logical
     # $sas_logdrv_name_tableoid = $baseoid . ".4.1.4.3.1.2.1.6";   # sas virtual device name
     $phydrv_status_tableoid = $baseoid . ".4.1.4.2.1.2.1.10";      # sasraid physical
@@ -440,6 +459,10 @@ sub set_oids {
     $phydrv_othererrors_tableoid = $baseoid . ".4.1.4.2.1.2.1.8";  # sasraid other errors
     $phydrv_vendor_tableoid = $baseoid . ".4.1.4.2.1.2.1.24";      # sasraid drive vendor
     $phydrv_product_tableoid = $baseoid . ".4.1.4.2.1.2.1.25";     # sasraid drive model
+    $phydrv_controller_tableoid = $baseoid . ".4.1.4.2.1.2.1.22";  # sasraid drive to controller id
+    $phydrv_channel_tableoid = $baseoid . ".4.1.4.2.1.2.1.18";     # sasraid drive to enclosure/channel id
+    $phydrv_devid_tableoid = $baseoid . ".4.1.4.2.1.2.1.2";        # sasraid drive to device id
+    $phydrv_lunid_tableoid = $baseoid . ".4.1.4.2.1.2.1.1";        # sasraid drive to lun id
     $phydrv_count_oid = $baseoid . ".4.1.4.1.2.1.21";              # pdPresentCount
     $phydrv_goodcount_oid = $baseoid . ".4.1.4.1.2.1.22";          # pdDiskPresentCount
     $phydrv_badcount_oid = $baseoid . ".4.1.4.1.2.1.23";           # pdDiskPredFailureCount
@@ -561,17 +584,17 @@ sub set_oids {
         1 => ['unknown', 'array state is unknown', 'UNKNOWN'],
         2 => ['optimal', 'array is functioning properly', 'OK'],
         3 => ['failed', 'array failed', 'CRITICAL'],
-        4 => ['degraded', 'array is unconfigured', 'WARNING'],
+        4 => ['initialize', 'array is unconfigured', 'WARNING'],
         5 => ['degraded', 'array is recovering', 'WARNING'],
         6 => ['degraded', 'array is ready for rebuild', 'WARNING'],
         7 => ['degraded', 'array is rebuilding', 'WARNING'],
-        8 => ['degraded', 'array wrong drive', 'CRITICAL'],
-        9 => ['degraded', 'array bad connect', 'CRITICAL'],
-        10 => ['degraded', 'array is overheating', 'CRITICAL'],
-        11 => ['degraded', 'array is shutdown', 'CRITICAL'],
-        12 => ['degraded', 'array is expanding', 'WARNING'],
-        13 => ['unknown', 'array not available', 'CRITICAL'],
-        14 => ['degraded', 'array queued for expansion', 'WARNING'],
+        8 => ['other-failure', 'array wrong drive', 'CRITICAL'],
+        9 => ['other-failure', 'array bad connect', 'CRITICAL'],
+        10 => ['other-failure', 'array is overheating', 'CRITICAL'],
+        11 => ['failed', 'array is shutdown', 'CRITICAL'],
+        12 => ['initialize', 'array is expanding', 'WARNING'],
+        13 => ['other-failure', 'array not available', 'CRITICAL'],
+        14 => ['initialize', 'array queued for expansion', 'WARNING'],
     );   
     ## Status codes for physical drives
     %PHYDRV_CODES = (
@@ -733,7 +756,7 @@ sub print_version {
 # display usage information
 sub print_usage {
         print "Usage:\n";
-        print "$0 [-s <snmp_version>] -H <host> (-C <snmp_community>) | (-l login -x passwd [-X pass -L <authp>,<privp>) [-p <port>] [-t <timeout>] [-O <base oid>] [-A <status label text>] [-a <alert level>] [--extra_info] [--check_battery] [-g <num good drives>] [--drive_errors -P <previous performance data> -S <previous state>] [-v [DebugLogFile] || -d DebugLogFile] [--debug_time] [--snmp_optimize] -T megaraid|sasraid|perc3|perc4|perc5|perc6|mptfusion|sas6ir|sas6|adaptec|smartarray|eti|ultrastor|synology\n OR \n";
+        print "$0 [-s <snmp_version>] -H <host> (-C <snmp_community>) | (-l login -x passwd [-X pass -L <authp>,<privp>) [-p <port>] [-t <timeout>] [-O <base oid>] [-A <status label text>] [-a <alert level>] [--extra_info] [--check_battery] [--multiple_controllers] [-g <num good drives>] [--drive_errors -P <previous performance data> -S <previous state>] [-v [DebugLogFile] || -d DebugLogFile] [--debug_time] [--snmp_optimize] [--bulk_snmp_queries=<optimize|std|on|off>] [--msgsize=<num octets>] [-T megaraid|sasraid|perc3|perc4|perc5|perc6|mptfusion|sas6ir|sas6|adaptec|smartarray|eti|ultrastor|synology\n OR \n";
         print "$0 --version | $0 --help (use this to see get more detailed documentation of above options)\n";
 }
 
@@ -773,13 +796,16 @@ sub help {
         print "    Note: This option should not be used any more and will be depreciated in 3.x version\n";
         print "          type of alert depending on SNMP status from MIB is now specified in arrays for each card type\n";
         print "          (except old special cases like megaraid & sasraid drive error counts for which it still applies)\n"; 
+        print "  -m, --multiple_controllers\n";
+        print "    Enables better support of multiple controllers. Retrieves several additional controller->drive map\n";
+        print "    and status tables. Curretly valid only for sasraid cards\n";
         print "  -b, --check_battery\n";
         print "    Check and output information on hard drive batteries (BBU) for supported cards\n";
         print "    'sasraid' and 'adaptec' card types are currently supported, more maybe added later\n"; 
         print "  -i, --extra_info\n";
         print "    Extra information in output. This may include rebuild rate, product & drive vendor names, etc\n";
         print "  -g, --good_drive <number>\n";
-        print "    How many good drives should the system have. If its less than this, error alert is issued\n";
+        print "    For sasraid check how many good drives should the system have. If its less than this, alert is issued\n";
         print "  -e, --drive_errors\n";
         print "    Do additonal checks for medium and other errors on each drive (only megaraid cards).\n";
         print "    This is about 2x as many SNMP check and so can slow plugin down.\n";
@@ -800,7 +826,7 @@ sub help {
         print "  -O, --oid <base oid>\n";
         print "    Base OID is normally set based on your controller and you almost never need to change it\n";
         print "    unless you custom-set it different for your card (the only case I know is when you have both\n";
-	print "    percsnmp and sassnmp cards since normally each one would want to use same megarad OID)\n";
+        print "    percsnmp and sassnmp cards since normally each would want to use same megarad OID)\n";
         print "  -s, --snmp_version 1 | 2 | 2c | 3\n";
         print "    Version of SNMP protocol to use (default is 1 if -C and 3 if -l specified)\n";
         print "  -p, --port <port>\n";
@@ -815,11 +841,25 @@ sub help {
         print "  -L, --protocols=<authproto>,<privproto>\n";
         print "    <authproto> : Authentication protocol (md5|sha : default md5)\n";
         print "    <privproto> : Priv protocols (des|aes : default des)\n";
+        print "  --octetlength=INTEGER, --msgsize=INTEGER\n";
+        print "    Max-size of the SNMP message. Be carefull with network filters.\n";
+        print "    Range 484 - 65535. Default is usually 1472,1452,1460 or 1440 depending on your system.\n";
+        print "    If bulk_snmp_queries (see below) OR --multiple_controllers option (see above)\n";
+        print "    are used then, it is reset to 15 times default or minimum of 16384.\n";
         print "  -t, --timeout <timeout>\n";
-        print "    Seconds before timing out (defaults to Nagios timeout value)\n";
+        print "    Seconds before timing out (defaults to Nagios timeout value or 30 seconds)\n";
         print "  -o, --snmp_optimize\n";
         print "    Try to minimize number of SNMP queries replacing snmp_walk with retrieval of OIDs at once\n";
         print "    !! EXPERIMENTAL, USE AT YOUR OWN RISK !!! Use --debug_time to check it is actually faster.\n";
+        print "  --bulk_snmp_queries[=optimize|std|on|off]\n";
+        print "    Enables or disables using GET_BULK_REQUEST to retrieve SNMP data. Options:\n";
+        print "      'on' will always try to use BULK_REQUESTS\n";
+        print "      'off' means do not use BULK_REQUESTS at all\n";
+        print "      'std' means bulk queries to get table with snmp v2 and v3 but not get requests\n";
+        print "      'optimize' means bulk queries for table and for get requests of > 30 OIDs\n";
+        print "    Default setting (if --bulk_snmp_queries is not specified) is 'std' without -o\n";
+        print "    and 'optimize' if -o option is specified. If you specify --bulk_snmp_queries\n";
+        print "    without text option after =, this enables 'optimize' even if -o is not used.\n";
         print "\nDebug Options:\n";
         print "  --debug[=FILENAME] | --verbose[=FILENAME]\n";
         print "    Enables verbose debug output printing exactly what data was retrieved from SNMP\n";
@@ -897,6 +937,7 @@ sub check_options {
         'i'     => \$opt_extrainfo,     'extra_info'        => \$opt_extrainfo,
         'b'     => \$opt_battery,       'check_battery'     => \$opt_battery,
         'T:s'   => \$opt_cardtype,      'controller_type:s' => \$opt_cardtype,
+        'm'     => \$opt_multcontrollers, 'multiple_controllers' => \$opt_multcontrollers,
         'C:s'   => \$o_community,       'community:s'       => \$o_community,
         's:s'   => \$opt_snmpversion,   'snmp_version:s'    => \$opt_snmpversion,
         'H:s'   => \$o_host,            'hostname:s'        => \$o_host,
@@ -904,7 +945,9 @@ sub check_options {
         'l:s'   => \$o_login,           'login:s'           => \$o_login,
         'x:s'   => \$o_passwd,          'passwd:s'          => \$o_passwd,
         'X:s'   => \$o_privpass,        'privpass:s'        => \$o_privpass,
-        'L:s'   => \$v3protocols,       'protocols:s'       => \$v3protocols
+        'L:s'   => \$v3protocols,       'protocols:s'       => \$v3protocols,
+        'msgsize:i' => \$o_octetlength, 'octetlength:i'     => \$o_octetlength,
+        'bulk_snmp_queries:s' => \$o_bulksnmp,
   );
 
   if (defined($o_help)) { help(); exit $ERRORS{"UNKNOWN"}; };
@@ -970,6 +1013,11 @@ sub check_options {
         usage("Invalid controller type specified: $opt_cardtype");
      }
   }
+  # make sure gooddrive alert threshold is set incase we use sasraid and multiple controllers option.
+  if (!defined($opt_gooddrives) && $opt_cardtype eq 'sasraid' && defined($opt_multcontrollers)) {
+  	usage("sasraid is used with multiple controllers option, must specify good drive alert threshold");
+  }
+  
   # if baseoid is specified as a parameter, set it first. otherwise its set by set_oids
   $baseoid = $opt_baseoid if $opt_baseoid;
   # set baseoid and and all other oids for plugin execution
@@ -991,9 +1039,28 @@ sub check_options {
             usage("Invalid alert: $opt_alert\n");
         }
   }
-
+  
   # set label
   $label = $opt_label if defined($opt_label) && $opt_label;
+  
+  # bulksnmp option
+  $o_bulksnmp = '' if defined($opt_optimize) && !defined($o_bulksnmp);
+  if (defined($o_bulksnmp)) {
+      if ($o_bulksnmp eq '' || $o_bulksnmp eq 'optimize') {
+          $o_bulksnmp = 'optimize';
+      }
+      elsif ($o_bulksnmp ne 'std' && $o_bulksnmp ne 'on' && $o_bulksnmp ne 'off') {
+          usage("bulksnmp option $o_bulksnmp is not known, valid are: optimize|std|on|off\n");
+      }
+      else {
+          if (defined($opt_optimize)) {
+              $o_bulksnmp='optimize';
+          }
+	  else {
+              $o_bulksnmp='std';
+          }
+      }
+  }
   
   # previos performance data string and previous state
   %prev_perf=process_perf($opt_perfdata) if $opt_perfdata;
@@ -1042,26 +1109,29 @@ sub create_snmp_session {
       -timeout          => $timeout
      );
     }
+    $snmp_session_v = 3;
   }
   elsif ($opt_snmpversion eq '2') {
     # SNMPv2c Login
-      verb("SNMP v2c login");
-      ($session, $error) = Net::SNMP->session(
-       -hostname  => $o_host,
-       -version   => 2,
-       -community => $o_community,
-       -port      => $o_port,
-       -timeout   => $timeout
-      );
+    verb("SNMP v2c login");
+    ($session, $error) = Net::SNMP->session(
+      -hostname        => $o_host,
+      -version         => 2,
+      -community       => $o_community,
+      -port            => $o_port,
+      -timeout         => $timeout
+    );
+    $snmp_session_v = 3;
   } else {
     # SNMPV1 login
-      verb("SNMP v1 login");
-      ($session, $error) = Net::SNMP->session(
-       -hostname  => $o_host,
-       -community => $o_community,
-       -port      => $o_port,
-       -timeout   => $timeout
-      );
+    verb("SNMP v1 login");
+    ($session, $error) = Net::SNMP->session(
+      -hostname        => $o_host,
+      -community       => $o_community,
+      -port            => $o_port,
+      -timeout         => $timeout
+    );
+    $snmp_session_v = 1;
   }
   if (!defined($session)) {
      printf("ERROR opening session: %s.\n", $error);
@@ -1069,6 +1139,136 @@ sub create_snmp_session {
   }
 
   return $session;
+}
+
+sub set_snmp_window {
+  my ($session, $is_bulk) = @_;
+  if (defined($session) && (defined($o_octetlength) || (defined($is_bulk) && $is_bulk))) {
+     my $oct_resultat=undef;
+     my $oct_test=$session->max_msg_size();
+     if (!defined($oct_test)) {
+        printf("ERROR getting SNMP window msg size : %s.\n", $session->error);
+        $session->close;
+        exit $ERRORS{"UNKNOWN"};
+     }
+     verb(" actual max octets:: $oct_test");
+     if (defined($o_octetlength)) {
+        $oct_resultat = $session->max_msg_size($o_octetlength);
+     }
+     elsif (defined($is_bulk) && $is_bulk) { # for bulksnmp we set message size to 15 times its default
+	$oct_test = $oct_test * 15;
+	$oct_test = 16384 if $oct_test < 16384;
+	$oct_resultat = $session->max_msg_size($oct_test);
+     }
+     else {
+	$oct_resultat = $oct_test;
+     }
+     if (!defined($oct_resultat)) {
+        printf("ERROR setting SNMP window msg size : %s.\n", $session->error);
+        $session->close;
+        exit $ERRORS{"UNKNOWN"};
+     }
+     $oct_test= $session->max_msg_size();
+     if (!defined($oct_test)) {
+        printf("ERROR getting SNMP window msg size : %s.\n", $session->error);
+        $session->close;
+        exit $ERRORS{"UNKNOWN"};
+     }
+     verb(" new max octets:: $oct_test");
+  }
+}
+
+# function that does snmp get request for a list of OIDs
+# 1st argument is session
+# 2nd is ref to list of OIDs
+# 3rd is optional text for error & debug info
+# 4th argument is optional hash of array to be filled with results
+# 5th argument to enable to disable processing this with bulk snmp if possible
+sub snmp_get_request {
+  my ($snmpsession, $oids_ref, $table_name, $results, $do_bulk_snmp) = @_;
+  my $result = undef;
+
+  if (!defined($snmpsession)) {
+      verb("call to snmp_get_request with snmpsession not defined");
+      return undef;
+  }
+  verb("Doing snmp request on ".$table_name." OIDs: ".join(' ',@{$oids_ref}));
+  $debug_time{'snmpgetrequest_'.$table_name}=time() if $opt_debugtime;
+  if (defined($do_bulk_snmp) && $do_bulk_snmp==1 && $snmp_session_v > 1) {
+    my @oids_bulk=();
+    my ($oid_part1,$oid_part2);
+    foreach(@{$oids_ref}) {
+       if (/^(.*)\.(\d+)$/) {
+           $oid_part1=$1;
+           $oid_part2=$2;
+           $oid_part2-- if $oid_part2 ne '0';
+           $oid_part1.='.'.$oid_part2;
+           push @oids_bulk,$oid_part1;
+       }
+    }
+    verb("Converted to bulk request on OIDs: ".join(' ',@oids_bulk));
+    $result = $snmpsession->get_bulk_request(
+      -nonrepeaters => scalar(@oids_bulk),
+      -maxrepetitions => 0,
+      -varbindlist => \@oids_bulk,
+    );
+  }
+  else {
+    $result = $snmpsession->get_request(
+      -varbindlist => $oids_ref
+    );
+  }
+  if (!defined($result)) {
+    printf("SNMP ERROR getting %s : %s.\n", $table_name, $snmpsession->error);
+    $snmpsession->close;
+    exit $ERRORS{"UNKNOWN"};
+  }
+
+  verb("Finished SNMP request. Result contains ".scalar(keys %$result)." entries:");
+  foreach(keys %$result) {
+      $results->{$_} = $result->{$_} if defined($results);
+      verb(" ".$_." = ".$result->{$_});
+  }
+  $debug_time{'snmpgetrequest_'.$table_name}=time()-$debug_time{'snmpgetreuest_'.$table_name} if $opt_debugtime;
+
+  return $result;
+}
+
+# this function does snmp get_table request and chekcs if we got an error
+# 1st argument is session
+# 2nd is an OID of the table to get
+# 3rd is optional text for error & debug info
+# 4th is optional, if it is present and set to 1 an error is not issued
+#                  if the table is not available
+sub snmp_get_table {
+  my ($snmpsession, $oid, $table_name, $ignore_error) = @_;
+  my $result = undef;
+
+  if (!defined($snmpsession)) {
+      verb("call to snmp_get_table with snmpsession not defined");
+      return undef;
+  }
+  verb("Doing snmp get_table request on ".$table_name." OID: ".$oid);
+  $debug_time{'snmpgettable_'.$table_name}=time() if $opt_debugtime;
+  if ($o_bulksnmp eq 'off') {
+      $result = $snmpsession->get_table(
+           -baseoid => $oid,
+           -maxrepetitions => 1
+      );
+   }
+   else {
+      $result = $snmpsession->get_table(
+           -baseoid => $oid,
+      );
+   }
+   if ((!defined($ignore_error) || !$ignore_error) && !defined($result)) {
+      $table_name = $oid if !defined($table_name);
+      printf("SNMP ERROR getting table %s : %s.\n", $table_name, $snmpsession->error); 
+      $snmpsession->close;
+      exit $ERRORS{"UNKNOWN"};
+   }
+   $debug_time{'snmpgettable_'.$table_name}=time()-$debug_time{'snmpgettable_'.$table_name} if $opt_debugtime;
+   return $result;
 }
 
 ################## START OF THE MAIN CODE ##############################
@@ -1083,124 +1283,90 @@ $SIG{'ALRM'} = sub {
 alarm($timeout);
 
 my $snmp_result = undef;
+my $do_bulk_snmp = 0;
 my ($logdrv_data_in, $logdrv_task_status_in, $logdrv_task_completion_in) = (undef,undef,undef);
-my ($phydrv_data_in, $phydrv_merr_in, $phydrv_oerr_in) = (undef,undef,undef);
+my ($phydrv_data_in, $phydrv_merr_in, $phydrv_oerr_in,$phydrv_rebuildstats_in) = (undef,undef,undef,undef);
+my ($phydrv_controller_in, $phydrv_channel_in, $phydrv_devid_in, $phydrv_lunid_in) = (undef,undef,undef,undef,undef);
 my ($phydrv_vendor_in, $phydrv_product_in, $battery_data_in) = (undef,undef,undef);
 
 $session = create_snmp_session();
+if (defined($o_bulksnmp) && ($o_bulksnmp eq 'on' || $o_bulksnmp eq 'optimize')) {
+    set_snmp_window($session,1);
+    $do_bulk_snmp = 1;
+}
+elsif (defined($opt_multcontrollers)) {
+    set_snmp_window($session,1); # set larger snmp window in case of multiple conrollers as if we're doing bulk snmp
+}
+else {
+    set_snmp_window($session,0);
+}
 
 # fetch snmp data, first optional readfail & writefail values for megaraid and good/bad drives count for sasraid
 if ($cardtype eq 'megaraid' && defined($opt_drverrors)) {
-        $debug_time{snmpretrieve_readwritefailoids}=time() if $opt_debugtime;
-        $snmp_result=$session->get_request(-Varbindlist => [ $readfail_oid, $writefail_oid, $adpt_readfail_oid, $adpt_writefail_oid ]);
-        $debug_time{snmpretrieve_readwritefailoids}=time()-$debug_time{snmpretrieve_readwritefailoids} if $opt_debugtime;
-        $error.="could not retrieve snmp data OIDs" if !$snmp_result;
+    $snmp_result = snmp_get_request($session, [$readfail_oid, $writefail_oid, $adpt_readfail_oid, $adpt_writefail_oid ], "megaraid_readwriteail_errors", undef, $do_bulk_snmp);
 }
-if ($cardtype eq 'sasraid') {
-        $debug_time{snmpretrieve_readwritefailoids}=time() if $opt_debugtime;
-        $snmp_result=$session->get_request(-Varbindlist => [ $phydrv_count_oid, $phydrv_goodcount_oid, $phydrv_badcount_oid, $phydrv_bad2count_oid ]);
-        $debug_time{snmpretrieve_readwritefailoids}=time()-$debug_time{snmpretrieve_readwritefailoids} if $opt_debugtime;
-        $error.="could not retrieve snmp data OIDs" if !$snmp_result;
+if ($cardtype eq 'sasraid' && defined($opt_gooddrives)) {
+    # below is replaced by lookup in adapter_status_table to support multiple controllers
+    # $snmp_result=$session->get_request(-Varbindlist => [ $phydrv_count_oid, $phydrv_goodcount_oid, $phydrv_badcount_oid, $phydrv_bad2count_oid ]);
+    $snmp_result = snmp_get_table($session,$adapter_status_tableoid,"sasraid_goodbaddrives_status");
 }
 
 # check status of logical disk drive status - this applies to all card types
-$debug_time{snmpgettable_logdrvstatus}=time() if $opt_debugtime;
-$logdrv_data_in = $session->get_table(-baseoid => $logdrv_status_tableoid) if !$error;
-$debug_time{snmpgettable_logdrvstatus}=time()-$debug_time{snmpgettable_logdrvstatus} if $opt_debugtime;
-
 # allow this to not be found for mptfusion cards, as they may have drives which aren't part of any array
-if ($cardtype ne 'mptfusion') {
-        $error.= "could not retrieve logdrv_status snmp table $logdrv_status_tableoid" if !$logdrv_data_in && !$error;
-}
+$logdrv_data_in = snmp_get_table($session,$logdrv_status_tableoid,
+                    "logical_disk_drives_status",($cardtype eq 'mptfusion'));
 
 # get physical disk drive status - all card types
-$debug_time{snmpgettable_phydrvstatus}=time() if $opt_debugtime;
-$phydrv_data_in = $session->get_table(-baseoid => $phydrv_status_tableoid) if !$error;
-$debug_time{snmpgettable_phydrvstatus}=time()-$debug_time{snmpgettable_phydrvstatus} if $opt_debugtime;
-$error.= "could not retrieve phydrv_status snmp table $phydrv_status_tableoid" if !$phydrv_data_in && !$error;
+$phydrv_data_in = snmp_get_table($session,$phydrv_status_tableoid, "physical_drives_status");
 
-# get drive models (supported types when -i option is used)
+# get extra data tables for -i option
 if (defined($opt_extrainfo)) {
+    # get drive models (supported types when -i option is used)
     if (defined($phydrv_product_tableoid) && $phydrv_product_tableoid) {
-        $debug_time{snmpgettable_phydrvproduct}=time() if $opt_debugtime;
-        $phydrv_product_in = $session->get_table(-baseoid => $phydrv_product_tableoid) if !$error;
-        $debug_time{snmpgettable_phydrvproduct}=time()-$debug_time{snmpgettable_phydrvproduct} if $opt_debugtime;
-        $error.= "could not retrieve phydrv_product snmp table $phydrv_product_tableoid" if !$phydrv_product_in && !$error;
+        $phydrv_product_in = snmp_get_table($session,$phydrv_product_tableoid,"phydrv_product_info");
     }
     if(defined($phydrv_vendor_tableoid) && $phydrv_vendor_tableoid) {
-        $debug_time{snmpgettable_phydrvvendor}=time() if $opt_debugtime;
-        $phydrv_vendor_in = $session->get_table(-baseoid => $phydrv_vendor_tableoid) if !$error;
-        $debug_time{snmpgettable_phydrvvendor}=time()-$debug_time{snmpgettable_phydrvvendor} if $opt_debugtime;
-        $error.= "could not retrieve phydrv_vendor snmp table $phydrv_vendor_tableoid" if !$phydrv_vendor_in && !$error;
+        $phydrv_vendor_in = snmp_get_table($session,$phydrv_vendor_tableoid,"phydrv_vendor_info");
     }
-}
-
-# logical drive task (adaptec card has this)
-if (defined($opt_extrainfo)) {
+    # logical drive task (adaptec card has this)
     if (defined($logdrv_task_status_tableoid) && $logdrv_task_status_tableoid) {
-        $debug_time{snmpgettable_logdrvtaskstatus}=time() if $opt_debugtime;
-        $logdrv_task_status_in = $session->get_table(-baseoid => $logdrv_task_status_tableoid) if !$error;
-        $debug_time{snmpgettable_logdrvtaskstatus}=time()-$debug_time{snmpgettable_logdrvtaskstatus} if $opt_debugtime;
-        $error.= "could not retrieve logdrv_task_status snmp table $logdrv_task_status_tableoid" if !$logdrv_task_status_in && !$error;
+        $logdrv_task_status_in = snmp_get_table($session,$logdrv_task_status_tableoid,"logdrv_tasks_status");
     }
     if(defined($logdrv_task_completion_tableoid) && $logdrv_task_completion_tableoid) {
-        $debug_time{snmpgettable_logdrvtaskcompletion}=time() if $opt_debugtime;
-        $logdrv_task_completion_in = $session->get_table(-baseoid => $logdrv_task_completion_tableoid) if !$error;
-        $debug_time{snmpgettable_logdrvtaskcompletion}=time()-$debug_time{snmpgettable_logdrvtaskcompletion} if $opt_debugtime;
-        $error.= "could not retrieve logdrv_task_completion snmp table $logdrv_task_completion_tableoid" if !$logdrv_task_completion_in && !$error;
+        $logdrv_task_completion_in = snmp_get_table($session,$logdrv_task_completion_tableoid,"logdrv_tasks_completion_info");
     }
 }
 
 # battery checks (only for sasraid and adaptec right now)
 if (defined($opt_battery) && defined($battery_status_tableoid) && $battery_status_tableoid) {
-        $debug_time{snmpgettable_batterystatus}=time() if $opt_debugtime;
-        $battery_data_in = $session->get_table(-baseoid => $battery_status_tableoid) if !$error;
-        $debug_time{snmpgettable_batterystatus}=time()-$debug_time{snmpgettable_batterytatus} if $opt_debugtime;
-        $error.= "could not retrieve snmp table $battery_status_tableoid" if !$battery_data_in && !$error;
+    $battery_data_in = snmp_get_table($session,$battery_status_tableoid,"battery_status");
+}
+
+# sasraid tables that properly map drives to controllers when multiple controllers are present
+if (defined($opt_gooddrives) && $cardtype eq 'sasraid') {
+    $phydrv_controller_in = snmp_get_table($session,$phydrv_controller_tableoid,"phydrv_controllers");
+    $phydrv_channel_in = snmp_get_table($session,$phydrv_channel_tableoid,"phydrv_channels");
+    $phydrv_devid_in = snmp_get_table($session,$phydrv_devid_tableoid,"phydrv_devid_map");
+    $phydrv_lunid_in = snmp_get_table($session,$phydrv_lunid_tableoid,"phydrv_lunid_map");
 }
 
 # last are medium and "other" errors reported for physical drives (only old megaraid has this)
 if (defined($opt_drverrors) && defined($opt_perfdata) && !defined($opt_optimize) &&
     (defined($phydrv_mediumerrors_tableoid) || defined($phydrv_othererrors_tableoid))) {
         if (defined($phydrv_mediumerrors_tableoid) && $phydrv_mediumerrors_tableoid) {
-            $debug_time{snmpgettable_mederrors}=time() if $opt_debugtime;
-            $phydrv_merr_in = $session->get_table(-baseoid=>$phydrv_mediumerrors_tableoid) if !$error;
-            $debug_time{snmpgettable_mederrors}=time()-$debug_time{snmpgettable_mederrors} if $opt_debugtime;
-            $error.= "could not retrieve snmp table $phydrv_mediumerrors_tableoid" if !$phydrv_merr_in && !$error;
+            $phydrv_merr_in = snmp_get_table($session,$phydrv_mediumerrors_tableoid,"drive_medium_errors");
         }
         if (defined($phydrv_othererrors_tableoid) && $phydrv_othererrors_tableoid) {
-            $debug_time{snmpgettable_odrverrors}=time() if $opt_debugtime;
-            $phydrv_oerr_in = $session->get_table(-baseoid=>$phydrv_othererrors_tableoid) if !$error;
-            $debug_time{snmpgettable_odrverrors}=time()-$debug_time{snmpgettable_odrverrors} if $opt_debugtime;
-            $error.= "could not retrieve snmp table $phydrv_othererrors_tableoid" if !$phydrv_oerr_in && !$error;
+            $phydrv_oerr_in = snmp_get_table($session,$phydrv_othererrors_tableoid,"drive_other_errors");
         }
 }
 
-if ($error) {
-        verb("snmp error: ". $session->error());
-        $session->close;
-        print_and_exit("UNKNOWN",$error);
-}
-
-#--------------------------------------------------#
-# parse the data and determine status
+# --------- parse the data and determine status ----------
 
 # set the initial output string and ok status
 my $output_data = "";
 my $output_data_end = "";
 
-if ($DEBUG && $cardtype eq 'megaraid') {
-        verb("adpt_readfail: ". $adpt_readfail_oid ." = ". $snmp_result->{$adpt_readfail_oid}) if exists($snmp_result->{$adpt_readfail_oid});
-        verb("adpt_writefail: ". $adpt_writefail_oid ." = ". $snmp_result->{$adpt_writefail_oid}) if exists($snmp_result->{$adpt_writefail_oid});
-        verb("readfail_sec: ". $readfail_oid ." = ". $snmp_result->{$readfail_oid}) if exists($snmp_result->{$readfail_oid});
-        verb("writefail_sec: ". $writefail_oid ." = ". $snmp_result->{$writefail_oid}) if exists($snmp_result->{$writefail_oid});
-}
-if ($DEBUG && $cardtype eq 'sasraid') {
-        verb("phydrv_count_oid: ".$phydrv_count_oid." = ". $snmp_result->{$phydrv_count_oid}) if exists($snmp_result->{$phydrv_count_oid});
-        verb("phydrv_goodcount_oid: ".$phydrv_goodcount_oid." = ". $snmp_result->{$phydrv_goodcount_oid}) if exists($snmp_result->{$phydrv_goodcount_oid});
-        verb("phydrv_badcount_oid: ".$phydrv_badcount_oid." = ". $snmp_result->{$phydrv_badcount_oid}) if exists($snmp_result->{$phydrv_badcount_oid});
-        verb("phydrv_bad2count_oid: ".$phydrv_bad2count_oid." = ". $snmp_result->{$phydrv_bad2count_oid}) if exists($snmp_result->{$phydrv_bad2count_oid});
-}
 if (defined($opt_drverrors) && $cardtype eq 'megaraid') {
     if (exists($snmp_result->{$adpt_readfail_oid}) && $snmp_result->{$adpt_readfail_oid}>0) {
         $output_data.= ", " if $output_data;
@@ -1223,21 +1389,30 @@ if (defined($opt_drverrors) && $cardtype eq 'megaraid') {
         $nagios_status=$alert;
     }
 }
-if ($cardtype eq 'sasraid') {
-    if (exists($snmp_result->{$phydrv_count_oid}) && $snmp_result->{$phydrv_count_oid}>0) {
-        my $total = $snmp_result->{$phydrv_count_oid};
-        my $good = $snmp_result->{$phydrv_goodcount_oid}||0;
-        my $bad = ($snmp_result->{$phydrv_badcount_oid}||0)+($snmp_result->{$phydrv_bad2count_oid}||0);
-        verb("Good $good $bad $bad Total $total \n");
-        if (defined($opt_gooddrives) and $opt_gooddrives>0) {
-            $output_data.= ", " if $output_data;
-            if ($good<$opt_gooddrives) {
+if (defined($opt_gooddrives) && $cardtype eq 'sasraid') {
+    my ($total,$good,$bad) = (0,0,0);
+    if ($snmp_result) {
+        foreach my $l_key (Net::SNMP::oid_lex_sort(keys(%{$snmp_result}))) {
+               $total += $snmp_result->{$l_key} if Net::SNMP::oid_base_match($phydrv_count_oid,$l_key);
+               $good += $snmp_result->{$l_key} if Net::SNMP::oid_base_match($phydrv_goodcount_oid,$l_key);
+               $bad += $snmp_result->{$l_key} if Net::SNMP::oid_base_match($phydrv_badcount_oid,$l_key);
+               $bad += $snmp_result->{$l_key} if Net::SNMP::oid_base_match($phydrv_bad2count_oid,$l_key);
+        }
+        # below is OLD way of getting total number of good and bad drives, it is replaced with above code
+        # contributed by Erez Zarum to support multiple sasraid controllers
+        #  if (exists($snmp_result->{$phydrv_count_oid}) && $snmp_result->{$phydrv_count_oid}>0) {
+        #    $total = $snmp_result->{$phydrv_count_oid};
+        #    $good = $snmp_result->{$phydrv_goodcount_oid}||0;
+        #    $bad = ($snmp_result->{$phydrv_badcount_oid}||0)+($snmp_result->{$phydrv_bad2count_oid}||0);
+        #  }
+        verb("Good $good Bad $bad Total $total \n");
+        $output_data.= ", " if $output_data;
+        if ($opt_gooddrives ne "" && $opt_gooddrives>0 && $good<$opt_gooddrives) {
                 $output_data.= ", " if $output_data;
                 $output_data.= "$good good drives (must have $opt_gooddrives)";
                 $nagios_status = $alert;
-            }  else {
+        }  else {
                 $output_data.= "$good good drives";
-            }
         }
     }
 }
@@ -1257,26 +1432,34 @@ foreach $line (Net::SNMP::oid_lex_sort(keys(%{$phydrv_data_in}))) {
         $code = $phydrv_data_in->{$line};
         verb("phydrv_status: $line = $code");
         $line = substr($line,length($phydrv_status_tableoid)+1);
-        ($controller_id,$channel_id,$drive_id,$lun_id) = split(/\./,$line,4);
-        if (!$drive_id) {
-                if (!$channel_id) {
-                        $drive_id = $controller_id;
-                        $controller_id = 0;
-                        $channel_id = 0;
-                }
-                else {
-                        $drive_id = $channel_id;
-                        $channel_id = $controller_id;
-                        $controller_id = 0;
-                }
-                # this is for SASRAID to skip first id if its non-disk
-                # (I think they fixed this bug in newest release though)
-                if ($cardtype eq 'sasraid' || $cardtype eq 'mptfusion') {
-                    $phy_skipids++ if $code==0;
-                    $drive_id-=$phy_skipids;
-                }
+        # code contributed by Erez Zarum to support multiple sasraid controllers
+        if (defined($opt_multcontrollers) && $cardtype eq 'sasraid') {
+                $controller_id = $phydrv_controller_in->{$phydrv_controller_tableoid.'.'.$line};
+                $channel_id = $phydrv_channel_in->{$phydrv_channel_tableoid.'.'.$line};
+                $drive_id = $phydrv_devid_in->{$phydrv_devid_tableoid.'.'.$line};
+                $lun_id = $phydrv_lunid_in->{$phydrv_lunid_tableoid.'.'.$line};
+        } else {
+                ($controller_id,$channel_id,$drive_id,$lun_id) = split(/\./,$line,4);   
+                if (!$drive_id) {
+                        if (!$channel_id) {
+                                $drive_id = $controller_id;
+                                $controller_id = 0;
+                                $channel_id = 0;
+                        }
+                        else {
+                                $drive_id = $channel_id;
+                                $channel_id = $controller_id;
+                                $controller_id = 0;
+                        }
+                        # this is for SASRAID to skip first id if its non-disk
+                        # (I think they fixed this bug in newest release though)
+                        if ($cardtype eq 'sasraid' || $cardtype eq 'mptfusion') {
+                                $phy_skipids++ if $code==0;
+                                $drive_id-=$phy_skipids;
+                        }
+                  }
+                  $lun_id = 0 if !defined($lun_id);
         }
-        $lun_id = 0 if !defined($lun_id);
         verb("| suffix = $line, controller = $controller_id, channel = $channel_id, drive = $drive_id, lun = $lun_id");
         $h_controllers{$controller_id}=1;
         $h_channels{$controller_id.'_'.$channel_id}=1;
@@ -1342,22 +1525,15 @@ foreach (keys %controller_status_oids) {
 
 # now we can do additional SNMP queries
 if (scalar(@extra_oids)>0) {
-    $error="";
-    $debug_time{snmpretrieve_extraoids}=time() if $opt_debugtime;
-    $snmp_result=$session->get_request(-Varbindlist => \@extra_oids);
-    $debug_time{snmpretrieve_extraoids}=time()-$debug_time{snmpretrieve_extraoids} if $opt_debugtime;
-    if (!$snmp_result) {
-        $error.=sprintf("could not retrieve extra data snmp OIDs: %s\n", $session->error());
-        $session->close;
-        print_and_exit('UNKNOWN',$error);
-    }
+    $snmp_result=snmp_get_request($session,\@extra_oids,"combinedextra_oids", undef, $do_bulk_snmp);
     if (defined($opt_drverrors)) {
         $phydrv_merr_in = $snmp_result;
         $phydrv_oerr_in = $snmp_result;
+        $phydrv_rebuildstats_in = $snmp_result;
     }
 }
 
-# additional controller status checks
+# processing of data from additional controller status checks (query done right above)
 my $controller_status_info="";
 my $controller_nagios_status = $nagios_status;
 if (scalar(keys %controller_status_oids)>0) {
@@ -1381,7 +1557,7 @@ if (scalar(keys %controller_status_oids)>0) {
     }
 }
 
-# second loop as we now can find what physical id to use
+# second loop as we now can find what physical id to use (may do snmp query to get rate of rebuild)
 my $phd_nagios_status = $nagios_status;
 foreach $line (Net::SNMP::oid_lex_sort(keys(%{$phydrv_data_in}))) {
         $line = substr($line,length($phydrv_status_tableoid)+1);
@@ -1412,23 +1588,16 @@ foreach $line (Net::SNMP::oid_lex_sort(keys(%{$phydrv_data_in}))) {
                 # optionally check rate of rebuild
                 if (defined($opt_extrainfo) && defined($phydrv_rebuildstats_tableoid) &&
                     defined($PHYDRV_CODES{$code}) && $PHYDRV_CODES{$code}[0] eq 'rebuild') {
-                         my $eoid = $phydrv_rebuildstats_tableoid.'.'.$line;
-                         if (!defined($opt_optimize)) {
-                                $debug_time{'snmpretrieve_rebuild_'.$phydrv_id}=time() if $opt_debugtime;
-                                $snmp_result=$session->get_request(-Varbindlist => [ $eoid ]);
-                                $debug_time{'snmpretrieve_rebuild_'.$phydrv_id}=time()-$debug_time{'snmpretrieve_rebuild_'. $phydrv_id} if $opt_debugtime;
-                                if (!$snmp_result) {
-                                    $error=sprintf("could not retrieve OID $eoid: %s\n", $session->error());
-                                    $session->close;
-                                    print_and_exit('UNKNOWN',$error);
-                                }
-                         }
-                         $output_data.= ' ('.$snmp_result->{$eoid}.')' if defined($snmp_result->{$eoid});
+                      my $eoid = $phydrv_rebuildstats_tableoid.'.'.$line;
+                      if (!defined($opt_optimize)) {
+                          $phydrv_rebuildstats_in=snmp_get_request($session,[ $eoid ],"rebuildrate_drv_".$phydrv_id, undef, 0);
+                      }
+                      $output_data.= ' ('.$phydrv_rebuildstats_in->{$eoid}.')' if defined($phydrv_rebuildstats_in->{$eoid});
                 }
         }
 }
 
-# check battery replacement status
+# check battery replacement status (no snmp queries)
 if (defined($opt_battery)) {
     foreach $line (Net::SNMP::oid_lex_sort(keys(%{$battery_data_in}))) {
         $code = $battery_data_in->{$line};
@@ -1445,7 +1614,7 @@ if (defined($opt_battery)) {
     }
 }
 
-# check logical drive status
+# check logical drive status (no snmp queries)
 foreach $line (Net::SNMP::oid_lex_sort(keys(%{$logdrv_data_in}))) {
         $code = $logdrv_data_in->{$line};
         verb("logdrv_status: $line = $code");
@@ -1534,14 +1703,15 @@ $debug_time{plugin_finish}=time() if $opt_debugtime;
 $debug_time{plugin_totaltime}=$debug_time{plugin_finish}-$debug_time{plugin_start} if $opt_debugtime;
 
 # output text results
-$output_data.= " - " if $output_data;
-$output_data.= sprintf("%d logical disks, %d physical drives, %d controllers", scalar(keys %{$logdrv_data_in}), $phydrv_total, $num_controllers);
-$output_data.= sprintf(", %d batteries", scalar(keys %{$battery_data_in})) if defined($opt_battery);
-$output_data.= " found";
-$output_data.= $controller_status_info if $controller_status_info;
-$output_data.= ", tasks [".$logdrv_task_info."]" if defined($opt_extrainfo) && $logdrv_task_info;
-$output_data.= ", models [".$models."]" if defined($opt_extrainfo);
-$output_data.= " - ". $output_data_end if $output_data_end;
+$output_data .= " - " if $output_data;
+$output_data .= sprintf("%d logical disks, %d physical drives", scalar(keys %{$logdrv_data_in}), $phydrv_total, $num_controllers);
+$output_data .= sprintf(", %d controllers", $num_controllers) if defined($opt_multcontrollers) || $num_controllers > 1;
+$output_data .= sprintf(", %d batteries", scalar(keys %{$battery_data_in})) if defined($opt_battery);
+$output_data .= " found";
+$output_data .= $controller_status_info if $controller_status_info;
+$output_data .= ", tasks [".$logdrv_task_info."]" if defined($opt_extrainfo) && $logdrv_task_info;
+$output_data .= ", models [".$models."]" if defined($opt_extrainfo);
+$output_data .= " - ". $output_data_end if $output_data_end;
 
 # combine status from checking physical and logical drives and print everything
 $nagios_status = $phd_nagios_status if $ERRORS{$nagios_status}<$ERRORS{$phd_nagios_status};

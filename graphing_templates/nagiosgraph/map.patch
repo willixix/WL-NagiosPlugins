@@ -1,0 +1,29 @@
+--- map.orig    2013-06-24 01:35:54.900944081 -0300
++++ map 2013-06-24 01:38:43.960129611 -0300
+@@ -150,6 +150,25 @@
+ and push @s, [ 'zombies',
+                [ 'data', GAUGE, $1 ] ];
+ 
++# VIALINK
++# Rule for netint. This plugins returns a lot of perfdata for cache purposes, and only two
++# real values that must be saved. If you save all, RRD will increase indefinitely.
++# So, we remove all the extra perfdata.
++#
++# Service type: netint
++#   output:ether1:UP (5.4Mbps/5.0Mbps) (1 UP): OK
++#   perfdata:'ether1_in_bps'=5419402;;; 'ether1_out_bps'=4980391;;; 'ether1_in_octet'=2038090564c 
++#               'ether1_out_octet'=926090819c  cache_descr_ids=3 cache_descr_names=ether1 cache_descr_time=1372007794 
++#               'ether1_in_octet.1371961288'=1834810694 'ether1_out_octet.1371961288'=745450159 ptime=1371961588
++#
++# New perfdata:
++#   perfdata:'ether1_in_bps'=5419402;;; 'ether1_out_bps'=4980391;;;
++if (/perfdata:.*_in_octet.*_out_octet/ or /perfdata:.*_out_octet.*_in_octet/) {
++    s/ ?\'\w+_octet\.?\d*\'=\d+c?//g;
++    s/ cache_descr\w*=\w*//g;
++    s/ ptime=\d+//g;
++}
++
+ # default rule.  if none of the other rules did anything, then check for
+ # perfdata that meets the standard format.
+ #
+

@@ -4,7 +4,7 @@
 #
 # Program : check_snmp_raid / check_sasraid_megaraid / check_megaraid
 # Version : 2.3
-# Date    : June 20, 2013
+# Date    : June 28, 2013
 # Author  : William Leibzon - william@leibzon.org
 # Copyright: (C) 2006-2013 William Leibzon
 # Summary : This is a nagios plugin to monitor Raid controller cards with SNMP
@@ -223,7 +223,7 @@
 #           - reordering of output: # of controllders, drives, batteries first, then new additional controller status
 #             such as 'powersupply is ok' and last model & tasks info which are now labeled as 'tasks []' before data
 #        * Code contributions for this release: Michael Cook, Stanislav German-Evtushenko, William Leibzon *
-#   23. [2.3 - June 20, 2013] The following are additions in this version:
+#   23. [2.3 - June 28, 2013] The following are additions in this version:
 #        a. Applied patch by Erez Zarum to properly support multiple sasraid controllers
 #         . added option -m to enable retrieving extra tabbles for multi-controller support
 #        b .Imported snmp_get_table(), snmp_get_request(), set_snmp_window() functions from check_netint 2.4b3
@@ -1182,10 +1182,9 @@ sub set_snmp_window {
 # 1st argument is session
 # 2nd is ref to list of OIDs
 # 3rd is optional text for error & debug info
-# 4th argument is optional hash of array to be filled with results
-# 5th argument to enable to disable processing this with bulk snmp if possible
+# 4th argument to enable to disable processing of bulk snmp to override auto
 sub snmp_get_request {
-  my ($snmpsession, $oids_ref, $table_name, $results, $do_bulk_snmp) = @_;
+  my ($snmpsession, $oids_ref, $table_name, $bulk_snmp_on) = @_;
   my $result = undef;
 
   if (!defined($snmpsession)) {
@@ -1225,10 +1224,7 @@ sub snmp_get_request {
   }
 
   verb("Finished SNMP request. Result contains ".scalar(keys %$result)." entries:");
-  foreach(keys %$result) {
-      $results->{$_} = $result->{$_} if defined($results);
-      verb(" ".$_." = ".$result->{$_});
-  }
+  verb(" ".$_." = ".$result->{$_}) foreach(keys %$result);
   $debug_time{'snmpgetrequest_'.$table_name}=time()-$debug_time{'snmpgetreuest_'.$table_name} if $opt_debugtime;
 
   return $result;
@@ -1303,7 +1299,7 @@ else {
 
 # fetch snmp data, first optional readfail & writefail values for megaraid and good/bad drives count for sasraid
 if ($cardtype eq 'megaraid' && defined($opt_drverrors)) {
-    $snmp_result = snmp_get_request($session, [$readfail_oid, $writefail_oid, $adpt_readfail_oid, $adpt_writefail_oid ], "megaraid_readwriteail_errors", undef, $do_bulk_snmp);
+    $snmp_result = snmp_get_request($session, [$readfail_oid, $writefail_oid, $adpt_readfail_oid, $adpt_writefail_oid ], "megaraid_readwriteail_errors", $do_bulk_snmp);
 }
 if ($cardtype eq 'sasraid' && defined($opt_gooddrives)) {
     # below is replaced by lookup in adapter_status_table to support multiple controllers
@@ -1525,7 +1521,7 @@ foreach (keys %controller_status_oids) {
 
 # now we can do additional SNMP queries
 if (scalar(@extra_oids)>0) {
-    $snmp_result=snmp_get_request($session,\@extra_oids,"combinedextra_oids", undef, $do_bulk_snmp);
+    $snmp_result = snmp_get_request($session, \@extra_oids, "combinedextra_oids", $do_bulk_snmp);
     if (defined($opt_drverrors)) {
         $phydrv_merr_in = $snmp_result;
         $phydrv_oerr_in = $snmp_result;
@@ -1590,7 +1586,7 @@ foreach $line (Net::SNMP::oid_lex_sort(keys(%{$phydrv_data_in}))) {
                     defined($PHYDRV_CODES{$code}) && $PHYDRV_CODES{$code}[0] eq 'rebuild') {
                       my $eoid = $phydrv_rebuildstats_tableoid.'.'.$line;
                       if (!defined($opt_optimize)) {
-                          $phydrv_rebuildstats_in=snmp_get_request($session,[ $eoid ],"rebuildrate_drv_".$phydrv_id, undef, 0);
+                          $phydrv_rebuildstats_in = snmp_get_request($session, [ $eoid ], "rebuildrate_drv_".$phydrv_id, 0);
                       }
                       $output_data.= ' ('.$phydrv_rebuildstats_in->{$eoid}.')' if defined($phydrv_rebuildstats_in->{$eoid});
                 }

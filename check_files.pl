@@ -3,8 +3,8 @@
 # ============================== SUMMARY =====================================
 #
 # Program  : check_files.pl
-# Version  : 0.416
-# Date     : May 05, 2013
+# Version  : 0.417
+# Date     : July 17, 2013
 # Author   : William Leibzon - william@leibzon.org
 # Summary  : This is a nagios plugin that counts files in a directory and
 #            checks their age an size. Various thresholds on this can be set.
@@ -133,8 +133,10 @@
 #  [0.39] Jan 23, 2013 - Added -H option for execute ls -l by ssh (Patrick Bailat)
 #  [0.40] Feb 10, 2013 - Documentation cleanup. New release.
 #  [0.41] Mar 23, 2013 - Fixed bug in parse_threshold function
-#  [0.416] May 3, 2013 - Fixed bugs reported by Joerg Heinemann that caused failures under
-#                        embedded perl. Bugs were in open_shell_stream() and parse_lsline()
+#  [0.416] May 3, 2013 - Fixed bugs reported by Joerg Heinemann that caused
+#                        failures under embedded perl. Bugs were in
+#                        open_shell_stream() and parse_lsline() functions 
+#  [0.417] Jun 17, 2013 - More bug fixes that showed up with embedded perl
 #
 #  TODO: This plugin is using early threshold check code that became the base
 #        of Naglio library and should be updated to use the library later
@@ -168,7 +170,7 @@ if ($@) {
  %ERRORS = ('OK'=>0,'WARNING'=>1,'CRITICAL'=>2,'UNKNOWN'=>3,'DEPENDENT'=>4);
 }
 
-my $Version='0.416';
+my $Version='0.417';
 
 my $o_help=         undef; # help option
 my $o_timeout=      10;    # Default 10s Timeout
@@ -224,6 +226,12 @@ sub perf_name {
   my $iname = shift;
   $iname =~ s/'\/\(\)/_/g; #' get rid of special characters in performance description name
   return "'".$iname."'";
+}
+
+sub todebugstr {
+  my $in = shift;
+  return 'undef' if !defined($in);
+  return $in;
 }
 
 # help function used when checking data against critical and warn values
@@ -751,7 +759,7 @@ if ($nlines eq 0) {
 
 # Check time
 my $tnow = time();
-verb("Date ".$tnow." Oldest_filetime: ".$oldest_filetime." Newest_filetime: ".$newest_filetime);
+verb("Date ".$tnow." Oldest_filetime: ".todebugstr($oldest_filetime)." Newest_filetime: ".todebugstr($newest_filetime));
 my $oldest_secold=$tnow-$oldest_filetime if defined($oldest_filetime);
 my $newest_secold=$tnow-$newest_filetime if defined($newest_filetime);
 verb("Oldest file has age of ".$oldest_secold." seconds and newest ".$newest_secold." seconds");

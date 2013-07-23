@@ -81,7 +81,7 @@
 #
 #   Memory utilization is percent of real memory used by Redis out of total
 #   memory on the system. To be able to calculate it plugin needs to known
-#   amount of memory your system has which you specify with "-M" or "--memory="
+#   amount of memory your system has which you specify with "-M" or "--total_memory="
 #   option. Memory utilization option itself is lower "-m" or "--memory_utilization="
 #   and you can specify threshold for it as "-m warn,crit"
 #
@@ -697,7 +697,7 @@ Measured/Calculated Data:
    If you specify -m by itself, the plugin will just output this info,
    with '-f' it will also include this in performance data. You can also specify
    parameter values which are interpreted as WARNING and CRITICAL thresholds.
- -M, --memory=NUM[B|K|M|G]
+ -M, --total_memory=NUM[B|K|M|G]
    Amount of memory on a system for memory utilization calculations above.
    If it does not end with K,M,G then its assumed to be B (bytes)
  -r, --replication_delay=WARN,CRIT

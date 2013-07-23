@@ -31,7 +31,7 @@
 # hitrate, memory utilization, check replication sync and more. It can also test
 # data in a specified key (if necessary doing average or sum on range).
 #
-# Plugin returns stats variables as perfomance data for further nagios 2.0
+# Plugin returns stats variables as performance data for further nagios 2.0
 # post-processing, you can find graph templates for PNP4Nagios at:
 #   http://william.leibzon.org/nagios/
 #
@@ -45,9 +45,9 @@
 # Next for help and to see what parameters this plugin accepts do:
 #  ./check_redis.pl --help
 #
-# This plugin checks Redis NoSQL database status varialbes, measures its response
+# This plugin checks Redis NoSQL database status variables, measures its response
 # time and if specified allows to set thresholds on one or more key data. You can
-# set thresholds for data in stats varialbles and some of them are also conviently
+# set thresholds for data in stats variables and some of them are also conveniently
 # available as long options with special threshold syntax. Plugin also calculates
 # statistics such as Hitrate (calculated as rate of change of hits/misses) and
 # memory use and can check replication delay.
@@ -68,14 +68,14 @@
 # 2. Response Time, HitRate, Memory Utilization, Replication Delay
 #
 #   To get response time you use "-T" or "--response_time=" option. By itself
-#   it will cause output of respose time at the status line. You can also use
+#   it will cause output of response time at the status line. You can also use
 #   it as "-T warn,crit" to specify warning and critical thresholds.
 #
 #   To get hitrate the option is "-R" or "--hitrate=". If previous performance
 #   data is not feed to plugin (-P option, see below) the plugin calculates
 #   it as total hitrate over life of redis process. If -P is specified and
-#   previous performance data is feed back, the data is based on real hitrate
-#   (which can show spikes and downs) with lifelong info also given in paramphesis
+#   previous performance data is fed back, the data is based on real hitrate
+#   (which can show spikes and downs) with lifelong info also given in paranthesis
 #   The data is based on keyspace_hits and keyspace_misses stats variables.
 #   As with -T you can specify -R by itself or with thresholds as -R warn,crit
 #
@@ -88,8 +88,8 @@
 #   Replication delay threshold option "-R" or "--replication_delay=" is used
 #   to check replication with data from "master_last_io_seconds_ago" stats and
 #   valid only on slave servers. Other variables maybe checked for this later
-#   with more complex funcationality, so it was chosen to do this as separate
-#   option rather than drecting people to check that variable.
+#   with more complex functionality, so it was chosen to do this as separate
+#   option rather than directing people to check that variable.
 #
 # 3. Checks on Redis Status Variables
 #
@@ -105,12 +105,12 @@
 #   with exactly number of thresholds as a number of variables specified
 #   in -a. If you simply want variable values on status line without specifying
 #   any threshold, use ~ in place of threshold value or skip value but specify
-#   all apropriate commas. For example:
+#   all appropriate commas. For example:
 #           -a connected_clients,blocked_clients -w ~,~ -c ~,~
 #      OR   -a connected_clients,blocked_clients -w , -c ,
 #
 #   If you use new syntax with a long option for specific stats variables, you
-#   can specify list of one or more trhreshold specifiers which can be any of:
+#   can specify list of one or more threshold specifiers which can be any of:
 #       NAME:<string>   - Overrides name for this variable for use in status and PERF output
 #       PATTERN:<regex> - Regular Expression that allows to match multiple data results
 #       WARN:threshold  - warning alert threshold
@@ -128,7 +128,7 @@
 #       DISPLAY:YES|NO - Specifies if data should be included in nagios status line output
 #       PERF:YES|NO    - Output in performance data or not (always YES if -F option is used)
 #       UOM:<string>   - Unit Of Measurement symbol to add to perf data - 'c','%','s','B'
-#			 This is used by prorams that graph perf data such as PNP
+#			 This is used by programs that graph perf data such as PNP
 #
 #   These can be specified in any order separated by ",". For example:
 #      --connected_clients=CRIT:>100,WARN:>50,ABSENT:CRITICAL,ZERO:OK,DISPLAY:YES,PERF:YES
@@ -193,14 +193,14 @@
 #
 #   With '-f' option values of all variables you specified in -a as well as
 #      response time from -T (response time),
-#      hirate from -R,
+#      hitrate from -R,
 #      memory utilization from -m
 #   and other data are reported back out as performance data for Nagios graphing programs.
 #
 #   You may also directly specify which variables are to be return as performance data
 #   with '-A' option. If you use '-A' by itself and not specify any variables or use
 #   special value of '*' (as in '-A *') the plugin will output all variables which is useful
-#   for finding what data you can chck with this plugin.
+#   for finding what data you can check with this plugin.
 #
 #   The plugin will output threshold values as part of performance data as specified at
 #     http://nagiosplug.sourceforge.net/developer-guidelines.html#AEN201
@@ -208,12 +208,12 @@
 #   converted into nagios threshold format for performance output
 #
 #   The plugin is smart enough to add 'c' suffix for known COUNTER variables to
-#   values in performance data. Known variables are specifed in an array you can
+#   values in performance data. Known variables are specified in an array you can
 #   find at the top of the code (further below) and plugin author does not claim
 #   to have identified all variables correctly. Please email if you find an error
 #   or want to add more variables.
 #
-#   As noted above performance data is also used to calcualte rate of change
+#   As noted above performance data is also used to calculate rate of change
 #   by feeding it back with -P option. In that regard even if you did not specify
 #   -f or -A but you have specified &variable, its actual data would be sent out
 #   in performance output. Additionally last time plugin was run is also in
@@ -246,14 +246,14 @@
 #       ZRANGE:AVG:min:max - retrieve sorted set members from min to max and average results
 #       ZRANGE:SUM:min:max - retrieve sorted set members from min to max and sum results
 #       ZRANGE:MIN:min:max - retrieve sorted set members from min to max list and return minimum
-#       ZRANGE:MAX:min:max- retrieve sorted set memers from min to max and return maximum
+#       ZRANGE:MAX:min:max- retrieve sorted set members from min to max and return maximum
 #   For LRANGE if you do not specify start and end, then start will be  0 and end
 #   is last value in the list pointed to by this key (found by using llen).
 #
 #   Key is the Redis key name to be retrieved and optionally you can add ":varname"
-#   after it which spcecifies what to name plugin variable based on this data -
+#   after it which specifies what to name plugin variable based on this data -
 #   based on what you specify here is how it will be displayed in the status
-#   line and perormance data, default is same as Redis key name.
+#   line and performance data, default is same as Redis key name.
 #
 #   After these key name you specify list of thresholds in the same format as
 #   variable-based long options described in section 3. Again the list of the
@@ -261,11 +261,11 @@
 #      WARN:threshold
 #      CRIT:threshold
 #      ABSENT:OK|WARNING|CRITICAL|UNKNOWN  - what to do if data is not available
-#      ZERO:OK|WARNING|CRIICAL|UNKNOWN	   - what do do if data is 0 (rarely needed)
+#      ZERO:OK|WARNING|CRIICAL|UNKNOWN	   - what to do if data is 0 (rarely needed)
 #      DISPLAY:YES|NO			   - display on status line or not (default YES)
 #      PERF:YES|NO	 		   - output in perf data or not
 #
-#   You can also optionally use -a, -w and -c to theck data from the query instead
+#   You can also optionally use -a, -w and -c to check data from the query instead
 #   of specifying thresholds as part of query option itself And remember that you if
 #   you need to check multiple keys you just repeat --query option more than once.
 #
@@ -308,7 +308,7 @@
 # In above the -v option means "verbose" and with it plugin will output some debugging information
 # about what it is doing. The option is not intended to be used when plugin is called from nagios itself.
 #
-# Example of using query and varialbe-based long options with debug enabled as well (-v):
+# Example of using query and variable-based long options with debug enabled as well (-v):
 #
 # ./check_redis.pl -H localhost -p 6379 -D 1 --query LRANGE:AVG:0:,MyColumn1:Q1,ABSENT:WARNING,WARN:300,CRIT:500,DISPLAY:YES,PERF:NO
 #   --query GET,MyKey:K1,ABSENT:CRITICAL "--connected_clients=WARN:<2,CRIT:>100,ZERO:OK,ABSENT:WARNING,DISPLAY:YES,PERF:YES"
@@ -377,7 +377,7 @@
 #     (b) [DONE]
 #	  In plans are to allow long options to specify thresholds for known variables.
 #         These would mean you specify '--connected_clients' in similar way to '--hitrate'
-#         Internally these would be convered into -A, -w, -c as appropriate an used
+#         Internally these would be converged into -A, -w, -c as appropriate and used
 #         together with these options. So in practice it will now allow to get any data
 #         just a different way to specify options for this plugin.
 #     (c) Allow regex when selecting variable name(s) with -a, this will be enabled with
@@ -392,7 +392,7 @@
 #         without directly specifying it
 #     (d) Maybe special options to measure cpu use and set thresholds
 #
-#  Others are welcome recommand a new feature to be added here. If so please email to
+#  Others are welcome recommend a new feature to be added here. If so please email to
 #         william@leibzon.org.
 #  And don't worry, I'm not a company with some hidden agenda to use your idea
 #  but an actual person who you can easily get hold of by email, find on forums
@@ -517,7 +517,7 @@ my $o_help=     undef;          # help option
 my $o_verb=     undef;          # verbose mode
 my $o_version=  undef;          # version info option
 my $o_variables=undef;          # list of variables for warn and critical
-my $o_perfvars= undef;          # list of variables to include in perfomance data
+my $o_perfvars= undef;          # list of variables to include in performance data
 my $o_warn=     undef;          # warning level option
 my $o_crit=     undef;          # Critical level option
 my $o_perf=     undef;          # Performance data option

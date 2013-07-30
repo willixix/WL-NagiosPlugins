@@ -3,8 +3,8 @@
 # ============================== SUMMARY =====================================
 #
 # Program  : check_files.pl
-# Version  : 0.417
-# Date     : July 17, 2013
+# Version  : 0.42
+# Date     : July 30, 2013
 # Author   : William Leibzon - william@leibzon.org
 # Summary  : This is a nagios plugin that counts files in a directory and
 #            checks their age an size. Various thresholds on this can be set.
@@ -137,6 +137,8 @@
 #                        failures under embedded perl. Bugs were in
 #                        open_shell_stream() and parse_lsline() functions 
 #  [0.417] Jun 17, 2013 - More bug fixes that showed up with embedded perl
+#  [0.42] July 30, 2013 - Several bugs fixed. Main was git issue #36 by 
+#                         bradcavanagh when -l is used and no files in directory.
 #
 #  TODO: This plugin is using early threshold check code that became the base
 #        of Naglio library and should be updated to use the library later
@@ -170,7 +172,7 @@ if ($@) {
  %ERRORS = ('OK'=>0,'WARNING'=>1,'CRITICAL'=>2,'UNKNOWN'=>3,'DEPENDENT'=>4);
 }
 
-my $Version='0.417';
+my $Version='0.42';
 
 my $o_help=         undef; # help option
 my $o_timeout=      10;    # Default 10s Timeout
@@ -546,7 +548,8 @@ sub parse_filespec {
 # ls -l line example:
 #   -rwxr-xr-x  1 WLeibzon users    21747 Apr 20 23:04 check_files.pl
 sub parse_lsline {
-    my @parsed = split (/\s+/, shift);
+    my $line = shift;
+    my @parsed = split (/\s+/, $line);
     my %ret = ('type' => 'unset');
     # parse file mode into std number
     if (defined($parsed[0]) && $parsed[0] =~ /([-d])(.{3})(.{3})(.{3})/) {
@@ -575,6 +578,9 @@ sub parse_lsline {
         $ret{'time_line'} = $parsed[5].' '.$parsed[6].' '.$parsed[7] if defined($parsed[5]) && defined($parsed[6]) && defined($parsed[7]);
         $ret{'filename'} = $parsed[8] if defined($parsed[8]);
         $ret{'time'} = str2time($ret{'time_line'}) if defined($ret{'time_line'});
+    }
+    elsif ($line =~ /No such file or directory/) {
+	$ret{'nofilesfound'}=1;
     }
     return \%ret;
 }
@@ -700,13 +706,13 @@ $READTHIS = open_shell_stream(\$shell_command);
 while (<$READTHIS>) {
     chomp($_);
 
-    verb("got line: $_");
     $ls[$nlines]=parse_lsline($_);
+    # $ls[$nlines]{'ls_text'}=$_;
 
-    foreach my $k (keys %{$ls[$nlines]}) {
-        $temp .= ' '.$k .'='. $ls[$nlines]{$k};
-    }
-    verb ("    parsed:".$temp);
+    verb('got line: '.$_);
+    $temp=""; # these 3 lines are all for debug output
+    $temp .= ' '.$_.'='. $ls[$nlines]{$_} foreach (keys %{$ls[$nlines]});
+    verb ("  processed:".$temp);
 
     if (defined($ls[$nlines]{'filename'}) && (!defined($o_filetype) ||
        (defined($o_filetype) && $ls[$nlines]{'type'} eq $o_filetype))) {
@@ -746,15 +752,20 @@ while (<$READTHIS>) {
     }
     $nlines++;
 }
-
-if (!defined($o_stdin) && !close(SHELL_DATA)) {
-    print "UNKNOWN ERROR - execution of $shell_command resulted in an error $? - $!";
-    exit $ERRORS{'UNKNOWN'};
+if (defined($ls[0]{'nofilesfound'}) && $ls[0]{'nofilesfound'}) {
+   close($READTHIS) if defined($o_stdin);
+   $nlines=1;
 }
+else {
+    if (!defined($o_stdin) && defined($READTHIS) && !close($READTHIS)) {
+       print "UNKNOWN ERROR - execution of $shell_command resulted in an error $? - $!";
+       exit $ERRORS{'UNKNOWN'};
+    }
 
-if ($nlines eq 0) {
-    print "UNKNOWN ERROR - did not receive any results";
-    exit $ERRORS{'UNKNOWN'};
+    if ($nlines eq 0) {
+       print "UNKNOWN ERROR - did not receive any results";
+       exit $ERRORS{'UNKNOWN'};
+    }
 }
 
 # Check time

@@ -369,9 +369,9 @@ File and Directory Selection options:
     only files you specified with -F where as by default 'ls -l' will
     list all files in directory and choose some with regex. This option
     should be used if there are a lot of files in a directory.
-    WARNING: using this option will cause -r not to work on most system
+    WARNING: using this option will cause -r not to work on most systems
 
-Exection Options:
+Execution Options:
 
 -C, --cmd=STR
     By default the plugin will chdir to specified directory, do 'ls -l'

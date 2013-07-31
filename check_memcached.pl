@@ -387,6 +387,7 @@ my %KNOWN_STATUS_VARS = (
 	 'response_time' => [ 'time_measure', 'GAUGE', 's' ],	# measured by plugin
 	 'curr_connections' => [ 'misc', 'GAUGE', '', "Number of Current Connections" ],
 	 'evictions' => [ 'misc', 'COUNTER', 'c', "Total Number of Evictions from Start" ],
+	 'reclaimed' => [ 'misc', 'COUNTER', 'c', "Total Number of Reclaimed Entries from Start" ],
 	 'bytes' => [ 'misc', 'GAUGE', 'B', "Amount of Data Stored in Bytes" ],
 	 'connection_structures' => [ 'misc', 'GAUGE', '', "Number of Connection Structures" ],
 	 'time' => [ 'misc', 'COUNTER', 's' ],

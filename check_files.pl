@@ -3,8 +3,8 @@
 # ============================== SUMMARY =====================================
 #
 # Program  : check_files.pl
-# Version  : 0.42
-# Date     : July 30, 2013
+# Version  : 0.421
+# Date     : Aug 20, 2013
 # Author   : William Leibzon - william@leibzon.org
 # Summary  : This is a nagios plugin that counts files in a directory and
 #            checks their age an size. Various thresholds on this can be set.
@@ -139,6 +139,7 @@
 #  [0.417] Jun 17, 2013 - More bug fixes that showed up with embedded perl
 #  [0.42] July 30, 2013 - Several bugs fixed. Main was git issue #36 by 
 #                         bradcavanagh when -l is used and no files in directory.
+#  [0.421] Aug 20, 2013 - More bug fixes for embedded perl, see issue #32
 #
 #  TODO: This plugin is using early threshold check code that became the base
 #        of Naglio library and should be updated to use the library later
@@ -172,7 +173,7 @@ if ($@) {
  %ERRORS = ('OK'=>0,'WARNING'=>1,'CRITICAL'=>2,'UNKNOWN'=>3,'DEPENDENT'=>4);
 }
 
-my $Version='0.42';
+my $Version='0.421';
 
 my $o_help=         undef; # help option
 my $o_timeout=      10;    # Default 10s Timeout
@@ -773,7 +774,7 @@ my $tnow = time();
 verb("Date ".$tnow." Oldest_filetime: ".todebugstr($oldest_filetime)." Newest_filetime: ".todebugstr($newest_filetime));
 my $oldest_secold=$tnow-$oldest_filetime if defined($oldest_filetime);
 my $newest_secold=$tnow-$newest_filetime if defined($newest_filetime);
-verb("Oldest file has age of ".$oldest_secold." seconds and newest ".$newest_secold." seconds");
+verb("Oldest file has age of ".$oldest_secold." seconds and newest ".$newest_secold." seconds") if defined($oldest_secold) && defined($newest_secold);
 if (defined($o_age) && defined($oldest_secold)) {
     if (defined($o_age_crit) && ($chk = check_threshold($oldest_filename." ",$oldest_secold,$o_age_crit)) ) {
         $statuscode = "CRITICAL";

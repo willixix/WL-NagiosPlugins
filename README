@@ -1,7 +1,6 @@
 Hi there,
 
-This is a public code repository for nagios plugins I've been writing since 2004. Most of these plugins have been available on my site, on nagios exchange and
-on monitoring exchange for years.
+This is a public code repository for nagios plugins I've been writing since 2004. Most of these plugins have been available on my site, on nagios exchange and on monitoring exchange for years.
 
 On my site plugins and other nagios related material can be found at:
   http://william.leibzon.org/nagios/
@@ -9,17 +8,22 @@ On my site plugins and other nagios related material can be found at:
 On nagios exchange plugins and graphing templates can be found at:
   http://exchange.nagios.org/directory/Owner/willix/1
 
-Git is updated more often than either of the above. On github there are two branches - master aand dev. Generally all plugins in the master branch are stable and you can download and use them. Dev branch may have code that is not ready yet and may not work at all. I merge dev into master evey few months.
+Git is updated more often than either of the above. On github there are two branches - master and dev. Generally all plugins in the master branch are stable and you can download and use them. Dev branch may have code that is not ready yet and may not work at all. I merge dev into master evey few months. Bugs are fixed directly in master and its merged into dev even more often.
 
-Each plugin has its own "README" and HELP in the header section before the code.
-Plugins are released under GPL 2.0 or GPL 3.0 License as specified in that header. Library code is released under LGPL.
+Each plugin has its own "README" and HELP in the header section before the code. This serves as a primary documentation for that plugin and you're highly encouraged to read it before using the plugin. Wiki maybe available here later for similar purpose but that is not ready yet.
 
-While I continue to accept patches by email as before, if you use git, I'll be happy to accept your contributions by pull requests too.
+Plugins are released under GPL 2.0 or GPL 3.0 License as specified in that header. Library code is released under LGPL. 
+
+While I continue to accept patches by email as before, if you use git, I'd be happy to accept your contributions by pull requests too. Please make pull requests with more substantial contributions to dev brach, bug fixes can go into either dev or master.
 
 If you're forking this repository please remember to sync your branch to my own regularly.
 
 If you need to reach me, email to: william@leibzon.org
 
+I'm a freelance developer and do not have any company supporting what I do. If you would like to make a donation to help with my work please do so at: https://www.gittip.com/willixix/
+
 Thanks for reading and using my plugins,
 
 William
+
+P.S. Recruiters please note that you are prohibited from using my contact information and other info here. If you're caught doing so, you will be reported and permanently blocked.

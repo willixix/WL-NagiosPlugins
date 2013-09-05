@@ -3,8 +3,8 @@
 # ============================== SUMMARY =====================================
 #
 # Program : check_snmp_raid / check_sasraid_megaraid / check_megaraid
-# Version : 2.3
-# Date    : June 28, 2013
+# Version : 2.301
+# Date    : Sep 5, 2013
 # Author  : William Leibzon - william@leibzon.org
 # Copyright: (C) 2006-2013 William Leibzon
 # Summary : This is a nagios plugin to monitor Raid controller cards with SNMP
@@ -231,6 +231,7 @@
 #	 c. Code refactoring to replace direct calls to net::snmp get_table and get_request
 #           functions with above ones that do bulk snmp if desired
 #        * Code contributions for this release: William Leibzon, Erez Zarum *
+#   24. [2.301 - Sep 5, 2013] Fix bug with bulk snmp variable names
 #
 # ========================== LIST OF CONTRIBUTORS =============================
 #
@@ -251,7 +252,7 @@
 #
 # ========================== START OF PROGRAM CODE ===========================
 
-my $version = "2.3";
+my $version = "2.301";
 
 use strict;
 use Getopt::Long;
@@ -326,6 +327,7 @@ my @prev_state=            ();  # state based on above
 my %debug_time=            ();  # for debugging of how long execution takes
 my $session=            undef;  # SNMP session
 my $snmp_session_v=         0;  # if no snmp session, its 0, otherwise 1 2 or 3 depending on version of SNMP session opened
+my $do_bulk_snmp = 	    0;  # 1 for bulk snmp queries
 
 # Mapping of multipe acceptable names for cards that people can specify with -T to single card type
 my %cardtype_map = (
@@ -1193,7 +1195,7 @@ sub snmp_get_request {
   }
   verb("Doing snmp request on ".$table_name." OIDs: ".join(' ',@{$oids_ref}));
   $debug_time{'snmpgetrequest_'.$table_name}=time() if $opt_debugtime;
-  if (defined($do_bulk_snmp) && $do_bulk_snmp==1 && $snmp_session_v > 1) {
+  if (defined($bulk_snmp_on) && $bulk_snmp_on==1 && $snmp_session_v > 1) {
     my @oids_bulk=();
     my ($oid_part1,$oid_part2);
     foreach(@{$oids_ref}) {
@@ -1279,7 +1281,6 @@ $SIG{'ALRM'} = sub {
 alarm($timeout);
 
 my $snmp_result = undef;
-my $do_bulk_snmp = 0;
 my ($logdrv_data_in, $logdrv_task_status_in, $logdrv_task_completion_in) = (undef,undef,undef);
 my ($phydrv_data_in, $phydrv_merr_in, $phydrv_oerr_in,$phydrv_rebuildstats_in) = (undef,undef,undef,undef);
 my ($phydrv_controller_in, $phydrv_channel_in, $phydrv_devid_in, $phydrv_lunid_in) = (undef,undef,undef,undef,undef);

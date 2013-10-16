@@ -1018,7 +1018,7 @@ sub check_options {
      }
   }
   # make sure gooddrive alert threshold is set incase we use sasraid and multiple controllers option.
-  if (!defined($opt_gooddrives) && $fcardtype eq 'sasraid' && defined($opt_multcontrollers)) {
+  if (!defined($opt_gooddrives) && $cardtype eq 'sasraid' && defined($opt_multcontrollers)) {
   	usage("sasraid is used with multiple controllers option, must specify good drive alert threshold");
   }
   

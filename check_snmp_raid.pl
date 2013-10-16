@@ -3,8 +3,8 @@
 # ============================== SUMMARY =====================================
 #
 # Program : check_snmp_raid / check_sasraid_megaraid / check_megaraid
-# Version : 2.301
-# Date    : Sep 5, 2013
+# Version : 2.302
+# Date    : Oct 16, 2013
 # Author  : William Leibzon - william@leibzon.org
 # Copyright: (C) 2006-2013 William Leibzon
 # Summary : This is a nagios plugin to monitor Raid controller cards with SNMP
@@ -232,6 +232,7 @@
 #           functions with above ones that do bulk snmp if desired
 #        * Code contributions for this release: William Leibzon, Erez Zarum *
 #   24. [2.301 - Sep 5, 2013] Fix bug with bulk snmp variable names
+#       [2.302 - Oct 16, 2013] Additional small bug fix, patch by Adrian Frühwirth
 #
 # ========================== LIST OF CONTRIBUTORS =============================
 #
@@ -239,6 +240,7 @@
 # this plugin (listed in last-name alphabetical order):
 #
 #    Michael Cook
+#    Adrian Frühwirth
 #    Stanislav German-Evtushenko
 #    Joe Gooch
 #    William Leibzon
@@ -252,7 +254,7 @@
 #
 # ========================== START OF PROGRAM CODE ===========================
 
-my $version = "2.301";
+my $version = "2.302";
 
 use strict;
 use Getopt::Long;
@@ -281,7 +283,7 @@ my $timeout=$TIMEOUT;      # default is nagios exported $TIMEOUT variable
 my $DEBUG = 0;             # to print debug messages, set this to 1
 my $MAX_OUTPUTSTR = 2048;  # maximum number of characters in otput
 my $alert = "CRITICAL";    # default alert type if error condition is found
-my $label = "Raid";	    # Label to start output with
+my $label = "Raid";	   # Label to start output with
 
 # SNMP authentication options and their derfault values
 my $o_port=               161;  # SNMP port
@@ -292,8 +294,8 @@ my $v3protocols=        undef;  # V3 protocol list.
 my $o_authproto=        'md5';  # Auth protocol
 my $o_privproto=        'des';  # Priv protocol
 my $o_privpass=         undef;  # priv password
-my $o_octetlength=      undef;	 # SNMP Message size parameter
-my $o_bulksnmp=         undef;	 # do snmp bulk request
+my $o_octetlength=      undef;	# SNMP Message size parameter
+my $o_bulksnmp=         undef;	# do snmp bulk request
 my $opt_snmpversion=    undef;  # SNMP version option, default "1" when undef
 my $opt_baseoid=        undef;  # allows to override default $baseoid above
 
@@ -1016,7 +1018,7 @@ sub check_options {
      }
   }
   # make sure gooddrive alert threshold is set incase we use sasraid and multiple controllers option.
-  if (!defined($opt_gooddrives) && $opt_cardtype eq 'sasraid' && defined($opt_multcontrollers)) {
+  if (!defined($opt_gooddrives) && $fcardtype eq 'sasraid' && defined($opt_multcontrollers)) {
   	usage("sasraid is used with multiple controllers option, must specify good drive alert threshold");
   }
   
@@ -1248,25 +1250,25 @@ sub snmp_get_table {
   }
   verb("Doing snmp get_table request on ".$table_name." OID: ".$oid);
   $debug_time{'snmpgettable_'.$table_name}=time() if $opt_debugtime;
-  if ($o_bulksnmp eq 'off') {
+  if (defined($o_bulksnmp) && $o_bulksnmp eq 'off') {
       $result = $snmpsession->get_table(
            -baseoid => $oid,
            -maxrepetitions => 1
       );
-   }
-   else {
+  }
+  else {
       $result = $snmpsession->get_table(
            -baseoid => $oid,
       );
    }
-   if ((!defined($ignore_error) || !$ignore_error) && !defined($result)) {
+  if ((!defined($ignore_error) || !$ignore_error) && !defined($result)) {
       $table_name = $oid if !defined($table_name);
       printf("SNMP ERROR getting table %s : %s.\n", $table_name, $snmpsession->error); 
       $snmpsession->close;
       exit $ERRORS{"UNKNOWN"};
-   }
-   $debug_time{'snmpgettable_'.$table_name}=time()-$debug_time{'snmpgettable_'.$table_name} if $opt_debugtime;
-   return $result;
+  }
+  $debug_time{'snmpgettable_'.$table_name}=time()-$debug_time{'snmpgettable_'.$table_name} if $opt_debugtime;
+  return $result;
 }
 
 ################## START OF THE MAIN CODE ##############################

@@ -2,8 +2,11 @@ Hi there,
 
 This is a public code repository for nagios plugins I've been writing since 2004. Most of these plugins have been available on my site, on nagios exchange and on monitoring exchange for years.
 
-On my site plugins and other nagios related material can be found at:
-  http://william.leibzon.org/nagios/
+The plugins were originally made available on github in the repository WL-NagiosPlugins:
+(https://github.com/willixix/WL-NagiosPlugins) until in 2014 I've chosen to use name "Naglio" for this project. Naglio originally referred to only the library which came out of code in my plugins with meaning being that of "yet another ugly nagios library". Both the library and plugins as a project will now use this name. If you got to my plugins using old name beware that this is now only a cloned secondary branch, but I'll try to keep it in sync with master repository.
+
+On my site plugins and other nagios related material can also be found at:
+  http://william.leibzon.org/monitoring/ and http://william.leibzon.org/nagios/
 
 On nagios exchange plugins and graphing templates can be found at:
   http://exchange.nagios.org/directory/Owner/willix/1

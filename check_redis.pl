@@ -3,8 +3,8 @@
 # ============================== SUMMARY =====================================
 #
 # Program : check_redis.pl
-# Version : 0.73
-# Date    : Mar 23, 2013
+# Version : 0.74
+# Date    : May 28, 2014
 # Author  : William Leibzon - william@leibzon.org
 # Licence : GPL - summary below, full text at http://www.fsf.org/licenses/gpl.txt
 #
@@ -41,6 +41,8 @@
 # ============================= SETUP NOTES ====================================
 #
 # Make sure to install Redis perl library from CPAN first.
+# If you use the sentinels parameter ensure you've at least the library version 
+# Redis-1.972 or higher.
 #
 # Next for help and to see what parameters this plugin accepts do:
 #  ./check_redis.pl --help
@@ -57,13 +59,16 @@
 
 # 1. Connection Parameters
 #
-#   The connection parameters are "-H hostname", "-p port", "-D database" and
-#   "-C password_file" or "-x password". Specifying hostname is required, if you
-#   run locally specify it as -H 127.0.0.1. Everything else is optional and rarely
-#   needed. Default port is 6337. Database name (usually a numeric id) is probably
-#   only needed if you use --query option. Password can be passed on a command
-#   line with -x but its safer to read read it from a file or change in the code
-#   itself if you do use authentication.
+#   The connection parameters are "-H hostname", "-S hostname:port,hostname2:port",
+#   "-p port", "-D database" and "-C password_file" or "-x password" and "-s service". Specifying 
+#   hostname is required, if you run locally specify it as -H 127.0.0.1. Everything 
+#   else is optional and rarely needed. Default port is 6337. Database name (usually 
+#   a numeric id) is probably only needed if you use --query option. Password can be 
+#   passed on a command line with -x but its safer to read read it from a file or 
+#   change in the code itself if you do use authentication. For connections with redis sentinel
+#   you should use a comma separate parameters with the hostname or ip and specify the port
+#   with the colon character. With -s you should specify the sentinel service to use 
+#   during the connection. If is not specified by default use "mymaster".
 #
 # 2. Response Time, HitRate, Memory Utilization, Replication Delay
 #
@@ -304,6 +309,8 @@
 #
 # Example of command-line use:
 #   /usr/lib/nagios/plugins/check_redis.pl -H localhost -a 'connected_clients,blocked_clients' -w ~,~ -c ~,~ -m -M 4G -A -R -T -f -v
+# Example of command-line use using Redis Sentinel:
+#   /usr/lib/nagios/plugins/check_redis.pl -S redis1:26379,redis2:26379,redis3:26379 -s mymaster
 #
 # In above the -v option means "verbose" and with it plugin will output some debugging information
 # about what it is doing. The option is not intended to be used when plugin is called from nagios itself.
@@ -369,6 +376,21 @@
 #			 having double 'c' or '%' in perfdata. Added contributors section.
 #  [0.73 - Mar 23, 2013] Fixed bug in parse_threshold function of embedded library
 #
+#
+#  [0.74 - May 28, 2014] Added support to connect to a list of sentinels with -S parameter
+#			 and to a specific service given with -s parameter. Shows in the 
+#			 default output the ip and port of the current master server and the 
+#			 total number and reachable sentinels.
+#			 Added the checkin 'sentinels_available' which contains the number of
+#			 sentinels reachable. If some of them are down the plugin
+#			 returns a WARNING and shows the number of sentinels down. In case
+#			 that all of them are down returns a CRIT. In case of use the script
+#			 to connect with servers via sentinel is necessary to use at least the library
+#			 version Redis-1.972 which comes with the Sentinel interface.
+#			 Check parameters to ensure you use "-H host" or "-S sentinel1:port,sentinel2:port"
+#			 and not both at the same time.
+#			 
+#
 # TODO or consider for future:
 #
 #  1. Library Enhancements (will apply to multiple plugins that share common code)
@@ -410,6 +432,7 @@
 #   Matt McMillan
 #   Jon Schulz
 #   M Spiegle
+#   Ivan Mora Perez
 #
 # ============================ START OF PROGRAM CODE =============================
 
@@ -420,11 +443,13 @@ use Text::ParseWords;
 use Getopt::Long qw(:config no_ignore_case);
 use Redis;
 
-# default hostname, port, database, user and password, see NOTES above
+# default hostname, port, database, user, password and service name, see NOTES above
 my $HOSTNAME= 'localhost';
 my $PORT=     6379;
+my $SERVICE= 'mymaster';
 my $PASSWORD= undef;
 my $DATABASE= undef;
+my @SENTINELS;
 
 # Add path to additional libraries if necessary
 use lib '/usr/lib/nagios/plugins';
@@ -436,7 +461,7 @@ if ($@) {
  %ERRORS = ('OK'=>0,'WARNING'=>1,'CRITICAL'=>2,'UNKNOWN'=>3,'DEPENDENT'=>4);
 }
 
-my $Version='0.73';
+my $Version='0.74';
 
 # This is a list of known stat and info variables including variables added by plugin,
 # used in order to designate COUNTER variables with 'c' in perfout for graphing programs
@@ -456,6 +481,7 @@ my %KNOWN_STATUS_VARS = (
 	 'vm_enabled' => [ 'status', 'BOOLEAN', '' ],
 	 'uptime_in_seconds' => [ 'status', 'COUNTER', 'c' ],
 	 'total_connections_received' => [ 'status', 'COUNTER', 'c', 'Total Connections Received' ],
+	 'sentinels_available' => [ 'status', 'COUNTER', 'c', 'Total of Sentinel Servers Available' ],
 	 'used_memory_rss' => [ 'status', 'GAUGE', 'B', 'Resident Set Size, Used Memory in Bytes' ],  	# RSS - Resident Set Size
 	 'used_cpu_sys' => [ 'status', 'GAUGE', '', 'Main Process Used System CPU' ],
 	 'redis_git_dirty' => [ 'status', 'BOOLEAN', '', 'Git Dirty Set Bit' ],
@@ -509,6 +535,8 @@ my $PERF_OK_STATUS_REGEX = 'GAUGE|COUNTER|^DATA$|BOOLEAN';
 # ============= MAIN PROGRAM CODE - DO NOT MODIFY BELOW THIS LINE ==============
 
 my $o_host=     undef;		# hostname
+my $o_sentinels= undef;		# Sentinel servers list
+my $o_service=  undef;          # Service for sentinel server
 my $o_port=     undef;		# port
 my $o_pwfile=   undef;          # password file
 my $o_password= undef;		# password as parameter
@@ -543,7 +571,7 @@ my @query=();                   # array of queries with each entry being keyed h
 sub p_version { print "check_redis.pl version : $Version\n"; }
 
 sub print_usage_line {
-   print "Usage: $0 [-v [debugfilename]] -H <host> [-p <port>] [-x password | -C credentials_file] [-D <database>] [-a <statistics variables> -w <variables warning thresholds> -c <variables critical thresholds>] [-A <performance output variables>] [-T [conntime_warn,conntime_crit]] [-R [hitrate_warn,hitrate_crit]] [-m [mem_utilization_warn,mem_utilization_crit] [-M <maxmemory>[B|K|M|G]]] [-r replication_delay_time_warn,replication_delay_time_crit]  [-f] [-T <timeout>] [-V] [-P <previous performance data in quoted string>] [-q (GET|LLEN|HLEN|SLEN|ZLEN|HGET:name|HEXISTS:name|SEXISTS:name|LRANGE:(AVG|SUM|MIN|MAX):start:end|ZRANGE:(AVG|SUM|MIN|MAX):start:end),query_type,query_key_name[:data_name][,ABSENT:WARNING|CRITICAL][,WARN:threshold,CRIT:threshold]] [-o <threshold specification with name or pattern>]\n";
+   print "Usage: $0 [-v [debugfilename]] -H <host> [-S <address:port,address:port>] [-s <sentinel service name>] [-p <port>] [-x password | -C credentials_file] [-D <database>] [-a <statistics variables> -w <variables warning thresholds> -c <variables critical thresholds>] [-A <performance output variables>] [-T [conntime_warn,conntime_crit]] [-R [hitrate_warn,hitrate_crit]] [-m [mem_utilization_warn,mem_utilization_crit] [-M <maxmemory>[B|K|M|G]]] [-r replication_delay_time_warn,replication_delay_time_crit]  [-f] [-T <timeout>] [-V] [-P <previous performance data in quoted string>] [-q (GET|LLEN|HLEN|SLEN|ZLEN|HGET:name|HEXISTS:name|SEXISTS:name|LRANGE:(AVG|SUM|MIN|MAX):start:end|ZRANGE:(AVG|SUM|MIN|MAX):start:end),query_type,query_key_name[:data_name][,ABSENT:WARNING|CRITICAL][,WARN:threshold,CRIT:threshold]] [-o <threshold specification with name or pattern>]\n";
 }
 
 sub print_usage {
@@ -570,6 +598,10 @@ General and Server Connection Options:
    Print this detailed help screen
  -H, --hostname=ADDRESS
    Hostname or IP Address to check
+ -S, --sentinels=ADDRESS:PORT,ADDRESS:PORT
+   Sentinel servers to check the master address and availability
+ -s, --service=NAME
+   Service name provided to connect with sentinel
  -p, --port=INTEGER
    port number (default: 6379)
  -D, --database=NAME
@@ -2475,7 +2507,7 @@ sub option_query {
 
 # sets password, host, port and other data based on options entered
 sub options_setaccess {
-    if (!defined($o_host)) { print "Please specify hostname (-H)\n"; print_usage(); exit $ERRORS{"UNKNOWN"}; }
+    if (!defined($o_host) and !defined($o_sentinels) or (defined($o_host) and defined($o_sentinels))) { print "Please specify hostname (-H) or sentinel server list (-S)\n"; print_usage(); exit $ERRORS{"UNKNOWN"}; }
     if (defined($o_pwfile) && $o_pwfile) {
         if ($o_password) {
 	    print "use either -x or -C to enter credentials\n"; print_usage(); exit $ERRORS{"UNKNOWN"};
@@ -2496,6 +2528,8 @@ sub options_setaccess {
     }
     $HOSTNAME = $o_host if defined($o_host);
     $PORT     = $o_port if defined($o_port);
+    @SENTINELS = split(',',$o_sentinels) if defined($o_sentinels);
+    $SERVICE = $o_service if defined($o_service);
     $TIMEOUT  = $o_timeout if defined($o_timeout);
     $DATABASE = $o_database if defined($o_database);
 }
@@ -2510,6 +2544,8 @@ sub check_options {
    	'v:s'	=> \$o_verb,		'verbose:s' => \$o_verb, "debug:s" => \$o_verb,
         'h'     => \$o_help,            'help'          => \$o_help,
         'H:s'   => \$o_host,            'hostname:s'    => \$o_host,
+	'S:s'   => \$o_sentinels,	'sentinels:s'   => \$o_sentinels,
+	's:s'   => \$o_service,         'service:s'   	=> \$o_service,
         'p:i'   => \$o_port,            'port:i'        => \$o_port,
         'C:s'   => \$o_pwfile,          'credentials:s' => \$o_pwfile,
         'x:s'   => \$o_password,	'password:s'	=> \$o_password,
@@ -2632,26 +2668,86 @@ my $vval;
 my %dbs=();	# database-specific info, this is almost unused right now
 my %slaves=();
 my $avar;
+my $sock;
+my %sentinel_status;
 
-# connect using tcp and verify the port is working
-my $sock = new IO::Socket::INET(
-  PeerAddr => $HOSTNAME,
-  PeerPort => $PORT,
-  Proto => 'tcp',
-);
-if (!$sock) {
-  print "CRITICAL ERROR - Can not connect to '$HOSTNAME' on port $PORT\n";
-  exit $ERRORS{'CRITICAL'};
+# Check if script connects via sentinel. Tries to connect with all the servers
+# given, retrieves the ip and port of the current master server and save the
+# current status of the sentinel server '1'=> up and '0'=> down 
+
+if(scalar(@SENTINELS)>0){
+        foreach(@SENTINELS){
+                my ($host,$port) = split(':',$_);
+		$sock = new IO::Socket::INET(
+                	PeerAddr => $host,
+                	PeerPort => $port,
+                	Proto => 'tcp',
+        	);
+		if (!$sock){
+			$sentinel_status{sentinels}{$host} = 0;
+		} else{
+			my $buffer = "";
+			$sock->send("SENTINEL get-master-addr-by-name $SERVICE\n quit\n");
+			$sock->recv($buffer,1024);
+			close($sock);
+			my @recv = split(/\n/,$buffer);
+			my ($master_ip,$master_port);
+			foreach(@recv){ 
+				$master_ip = $_ if($_=~ /(\d{1,3}\.){3}\d{1,3}/);
+				$master_port = $_ if($_ =~ /\d{2,}/);
+			}
+			$master_ip=~ s/\s*$// if defined $master_ip;
+			$master_port=~ s/\s*$// if defined $master_port;
+			$sentinel_status{master_ip} = $master_ip;
+			$sentinel_status{master_port} = $master_port;
+			$sentinel_status{sentinels}{$host} = 1;
+		}
+	}
+} else{
+	# connect using tcp and verify the port is working
+	$sock = new IO::Socket::INET(
+  		PeerAddr => $HOSTNAME,
+  		PeerPort => $PORT,
+  		Proto => 'tcp',
+	);
+	if (!$sock) {
+  		print "CRITICAL ERROR - Can not connect to '$HOSTNAME' on port $PORT\n";
+  		exit $ERRORS{'CRITICAL'};
+	}
+	close($sock);
 }
-close($sock);
+
+# Check & count if any of sentinel servers is down
+my $n_sentinels;
+if (scalar(@SENTINELS)>0){
+	$n_sentinels = scalar keys %{$sentinel_status{sentinels}};
+	my $count_down = 0;
+	foreach my $sentinel (keys %{$sentinel_status{sentinels}}){
+        	if(!$sentinel_status{sentinels}{$sentinel}){
+                	$count_down += 1;
+        	}
+	}
+	if($count_down == $n_sentinels){
+        	print "CRITICAL ERROR - Can not connect to any of the sentinel servers\n";
+        	exit $ERRORS{'CRITICAL'};
+	} elsif (($count_down > 0) && ($count_down < $n_sentinels)){
+		$nlib->set_statuscode('WARNING');
+		$nlib->addto_statusinfo_output('sentinels_available',"$count_down sentinels are unreachable");
+	}
+	$nlib->add_data('sentinels_available', $n_sentinels-$count_down);
+}
 
 # now do connection using Redis library
 my $start_time;
 my $dsn = $HOSTNAME.":".$PORT;
-$nlib->verb("connecting to $dsn");
 $start_time = [ Time::HiRes::gettimeofday() ] if defined($o_timecheck);
 
-$redis = Redis-> new ( server => $dsn, 'debug' => (defined($o_verb))?1:0 );
+if(scalar(@SENTINELS)>0){
+	$nlib->verb("connecting to redis @SENTINELS");
+	$redis = Redis->new(sentinels => \@SENTINELS,
+                           service => $SERVICE,
+			  'debug' => (defined($o_verb))?1:0);
+} else { $nlib->verb("connecting to $dsn"); $redis = Redis-> new ( server => $dsn, 'debug' => (defined($o_verb))?1:0 ); }
 
 if ($PASSWORD) {
     $redis->auth($PASSWORD);
@@ -2900,15 +2996,28 @@ $nlib->main_checkvars();
 $nlib->main_perfvars();
 
 # now output the results
-print $nlib->statuscode() . ': '.$nlib->statusinfo();
-print " - " if $nlib->statusinfo();
-print "REDIS " . $dbversion . ' on ' . $HOSTNAME. ':'. $PORT;
-print ' has '.scalar(keys %dbs).' databases ('.join(',',keys(%dbs)).')';
-print " with $total_keys keys" if $total_keys > 0;
-print ', up '.$nlib->uptime_info($nlib->vardata('uptime_in_seconds')) if defined($nlib->vardata('uptime_in_seconds'));
-print " - " . $nlib->statusdata() if $nlib->statusdata();
-print $nlib->perfdata();
-print "\n";
+if(scalar(@SENTINELS) > 0){
+	print $nlib->statuscode() . ': '.$nlib->statusinfo();
+	print " - " if $nlib->statusinfo();
+	print "REDIS SENTINEL " . $dbversion . ' with Master ' . $sentinel_status{master_ip}. ':'. $sentinel_status{master_port};
+	print ' has '.scalar(keys %dbs).' databases ('.join(',',keys(%dbs)).')';
+	print " with $total_keys keys" if $total_keys > 0;
+	print ', up '.$nlib->uptime_info($nlib->vardata('uptime_in_seconds')) if defined($nlib->vardata('uptime_in_seconds'));
+	print ', sentinels_available '.$nlib->vardata('sentinels_available').'/'.$n_sentinels if defined($nlib->vardata('sentinels_available'));
+	print " - " . $nlib->statusdata() if $nlib->statusdata();
+	print $nlib->perfdata();
+	print "\n";
+} else{
+	print $nlib->statuscode() . ': '.$nlib->statusinfo();
+        print " - " if $nlib->statusinfo();
+        print "REDIS " . $dbversion . ' on ' . $HOSTNAME. ':'. $PORT;
+        print ' has '.scalar(keys %dbs).' databases ('.join(',',keys(%dbs)).')';
+        print " with $total_keys keys" if $total_keys > 0;
+        print ', up '.$nlib->uptime_info($nlib->vardata('uptime_in_seconds')) if defined($nlib->vardata('uptime_in_seconds'));
+        print " - " . $nlib->statusdata() if $nlib->statusdata();
+        print $nlib->perfdata();
+        print "\n";
+}
 
 # end exit
 exit $ERRORS{$nlib->statuscode()};

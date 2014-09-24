@@ -29,7 +29,7 @@
 # ===================== INFORMATION ABOUT THIS PLUGIN ========================
 #
 # This is a nagios plugin that checks number of files of specified type
-# in a directory and can give an error if there are too few or too few.
+# in a directory and can give an error if there are too few or too many.
 # It can also check files age, file size and set thresholds based on these
 # parameters such as report an error if files are too old.
 #

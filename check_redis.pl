@@ -2869,6 +2869,17 @@ if (defined($o_repdelay) && defined($nlib->vardata('master_last_io_seconds_ago')
 
 # Memory Use Utilization
 if (defined($o_memutilization) && defined($nlib->vardata('used_memory_rss'))) {
+
+    #if we are on the local host, get total memory from procfs
+    if ($HOSTNAME eq "localhost" and -r "/proc/meminfo") {
+        open(MEMINFO, "< /proc/meminfo");
+	while (<MEMINFO>) {
+	    if (m/^MemTotal:\s+(\d+) kB/) {
+		$o_totalmemory=$1*1024;
+	    }
+	}
+    }
+
     if (defined($o_totalmemory)) {
         $nlib->add_data('memory_utilization',$nlib->vardata('used_memory_rss')/$o_totalmemory*100);
 	$nlib->verb('memory utilization % : '.$nlib->vardata('memory_utilization').' = '.$nlib->vardata('used_memory_rss').' (used_memory_rss) / '.$o_totalmemory.' * 100');

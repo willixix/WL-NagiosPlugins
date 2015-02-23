@@ -515,11 +515,11 @@ else {
 
 foreach $line (@lines) {
         verb("Processing line: ".$line);
-        if ( $line =~ /(cpu\d{0,2})\s*(\d+)\s*(\d+)\s*(\d+)\s*(\d+)\s*(\d+)\s*(\d+)\s*(\d+)/ ) {
+        if ( $line =~ /(cpu\d{0,2})\s*(\d+)\s*(\d+)\s*(\d+)\s*(\d+)\s*(\d+)\s*(\d+)\s*(\d+)\s*(\d+)?/ ) {
                 ($stats{"$1_user"},$stats{"$1_nice"},$stats{"$1_system"},$stats{"$1_idle"},
-		  $stats{"$1_iowait"},$stats{"$1_irq"},$stats{"$1_softirq"}) = ($2,$3,$4,$5,$6,$7,$8);
+		  $stats{"$1_iowait"},$stats{"$1_irq"},$stats{"$1_softirq"}, $stats{"$1_steal"}) = ($2,$3,$4,$5,$6,$7,$8,$9);
 		##without bigint## $stats{"$1_used"}=$stats{"$1_user"}+$stats{"$1_nice"}+$stats{"$1_system"}+$stats{"$1_iowait"}+$stats{"$1_irq"}+$stats{"$1_softirq"};
-		my $bnum = bint($stats{"$1_user"})+bint($stats{"$1_system"})+bint($stats{"$1_iowait"})+bint($stats{"$1_irq"})+bint($stats{"$1_softirq"});
+		my $bnum = bint($stats{"$1_user"})+bint($stats{"$1_system"})+bint($stats{"$1_iowait"})+bint($stats{"$1_irq"})+bint($stats{"$1_softirq"})+bint($stats{"$1_steal"});
 		if (exists($stats{"$1_used"})) {
 		    $stats{"$1_used"}=$bnum;
 		}
@@ -528,7 +528,7 @@ foreach $line (@lines) {
 		    $cn=$1;
                     $countcpus++;
 		    if ($cn =~ /cpu\d{1,2}/) {
-			foreach my $cp ("used", "user", "nice", "system", "idle", "iowait", "irq", "softirq") {
+			foreach my $cp ("used", "user", "nice", "system", "idle", "iowait", "irq", "softirq", "steal") {
 				if (defined($stats{"csum_".$cp})) {
 					$stats{"csum_".$cp} = $stats{"csum_".$cp}->badd($stats{$cn."_".$cp});
 				} else {
@@ -612,7 +612,7 @@ if ((defined($o_virtcpus) && $o_virtcpus!=$countcpus) || (!defined($o_virtcpus) 
 # I've noticed that in some cases cpu_idle counter overloads since its 32-bit on 2.4 kernel
 # the below will at least catch those cases on SMP systems if it seems cpu_idle not the same
 # as total calculated by adding all of cpu?_idle
-foreach my $cp ("used", "user", "nice", "system", "idle", "iowait", "irq", "softirq") {
+foreach my $cp ("used", "user", "nice", "system", "idle", "iowait", "irq", "softirq", "steal") {
 	if (defined($stats{"csum_".$cp})) {
 	   # $stats{"origcpu_".$cp} = $stats{"cpu_".$cp};
 	   if ($stats{"csum_".$cp}->bcmp($stats{"cpu_".$cp})!=0) {

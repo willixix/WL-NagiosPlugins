@@ -85,7 +85,7 @@ for ($i=0; $i<count($CORE); $i++) {
         $def[$gkey] .= rrd::def($K, $V['RRDFILE'], $V['DS'], "AVERAGE");
     }
 
-    $def[$gkey] .= rrd::cdef("total", "idle,nice,+,user,+,system,+,iowait,+,irq,+,softirq,+");
+    $def[$gkey] .= rrd::cdef("total", "idle,nice,+,user,+,system,+,iowait,+,irq,+,softirq,+,steal,+");
     $def[$gkey] .= rrd::cdef("percent_used", "total,idle,-,total,/,100,*");
     $def[$gkey] .= rrd::cdef("percent_idle", "idle,total,/,100,*");
     $def[$gkey] .= rrd::cdef("percent_nice", "nice,total,/,100,*");
@@ -94,6 +94,7 @@ for ($i=0; $i<count($CORE); $i++) {
     $def[$gkey] .= rrd::cdef("percent_iowait", "iowait,total,/,100,*");
     $def[$gkey] .= rrd::cdef("percent_irq", "irq,total,/,100,*");
     $def[$gkey] .= rrd::cdef("percent_softirq", "softirq,total,/,100,*");
+    $def[$gkey] .= rrd::cdef("percent_steal", "steal,total,/,100,*");
 
     $def[$gkey] .= rrd::cdef("user_area", $pre."used");
     $def[$gkey] .= rrd::cdef("nice_area_temp", "user_area,".$pre."user,-");

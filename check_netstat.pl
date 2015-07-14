@@ -223,7 +223,7 @@ my $o_timeout=  10;             # Default 10s Timeout
 my $o_verb=     undef;          # verbose mode
 my $o_version=  undef;          # version info option
 my $o_version2= undef;          # use snmp v2c
-# SNMPv3 specific - not supported right now
+# SNMPv3 specific
 my $o_login=    undef;          # Login for snmpv3
 my $o_passwd=   undef;          # Pass for snmpv3
 
@@ -406,6 +406,10 @@ sub help {
 	community name for SNMP - can only be used if -H is also specified
 -2, --v2c
         use SNMP v2 (instead of SNMP v1)
+-l, --login
+	SNMPv3 login
+-x, --password
+	SNMPv3 password
 -P, --snmpport=PORT
 	port number for SNMP - can only be used if -H is specified
 -N, --netsnmp_version=VERSION
@@ -483,6 +487,8 @@ sub check_options {
         'a:s'   => \$o_attr,         	'attributes:s' 	=> \$o_attr,
         'p:s'   => \$o_attr,         	'ports:s' 	=> \$o_attr,
 	'r:s'	=> \$o_proto,		'protocol:s'	=> \$o_proto,
+	'l:s'	=> \$o_login,		'login:s'	=> \$o_login,
+	'x:s'	=> \$o_passwd,		'password:s'	=> \$o_passwd,
 	'A:s'	=> \$o_perfattr,	'perf_attributes:s' => \$o_perfattr,
 	'e'	=> \$o_established,	'established_sessions' => \$o_established,
 	's:s'	=> \$o_state,		'state:s' 	=> \$o_state
@@ -672,13 +678,15 @@ my $shell_command_auth="";
 my $netstat_format;
 my $nlines=0;
 
-if (defined($o_host) && defined($o_community)) {
+if (defined($o_host) && (defined($o_community)) || (defined($o_login))) {
     $shell_command = $snmpnetstat . " $o_host -t $o_timeout";
+    $shell_command.=" -u $o_login" if $o_login;
+    $shell_command.=" -v3 -l authNoPriv -a SHA -x AES -A '$o_passwd' -X '$o_passwd'" if $o_passwd;
     $shell_command.=" -n -P $o_proto" if !$o_netsnmpv;
     $shell_command.=" -Cn -Cp $o_proto" if $o_netsnmpv;
     $shell_command.= " -v 2c" if defined($o_version2);
     $shell_command.= " -p $o_snmpport" if defined($o_snmpport);
-    $shell_command_auth= "-c $o_community ";
+    $shell_command_auth= "-c $o_community " if defined($o_community);
     $netstat_format = 2;
 }
 else {

@@ -540,7 +540,7 @@ if ($check_type==1) {  # local
   elsif ($uptime_output =~ /up\s+(\d+)\s+min/) {
      ($days, $hrs, $mins) = (0,0,$1);
   }
-  elsif ($uptime_output =~ /up\s+(\d+)s+days?,s+(\d+)s+min/) {
+  elsif ($uptime_output =~ /up\s+(\d+)\s+days?,\s+(\d+)\s+min/) {
      ($days, $hrs, $mins) = ($1,0,$2);
   }
   else {

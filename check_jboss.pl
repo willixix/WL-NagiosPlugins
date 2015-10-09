@@ -3,9 +3,9 @@
 # ============================== SUMMARY =====================================
 #
 # Program : check_jboss.pl
-# Version : 0.4
+# Version : 0.5
 # Date    : Oct 09, 2015
-# Author  : William Leibzon - william@leibzon.org, Joel Rangsmo - jrangsmo@op5.com
+# Author  : William Leibzon - william@leibzon.org, Joel Rangsmo - jrangsmo@op5.com, Ingemar Nilsson - ingemar.nilsson@r2m.se
 # Summary : This is a nagios plugin to check jboss parameters by means
 #           of twindle utility on the same host
 # Licence : GPL - summary below, full text at http://www.fsf.org/licenses/gpl.txt
@@ -126,16 +126,22 @@ my $o_twiddle=  "/opt/twiddle-standalone/bin/twiddle.sh"; # Twiddle executable
 my $o_jboss=  "/opt/wildfly";   # JBoss home, required by twiddle-standalone
 
 my $tw_pid=undef;
-my $Version='0.4';
+my $Version='0.5';
 
 sub p_version { print "check_jboss version : $Version\n"; }
 
 sub print_usage {
-    print "Usage: $0 [-v] -J <jmx mbean name> -T <data type from specified mbean> ",
-        "[-u <user>] [-p <password>] [-H <host/servce url>] ",
-        "[-a <attribute list> -w <warn levels> -c <critical levels> [-f]] ",
-	"[-A <attributes for perfomance data>] [-t <timeout>] ",
-	"[-P <twiddle executable>] [-j <jboss home>] [-V]\n";
+    print "\nUsage: $0 \n-J <jmx mbean name> -T <data type from specified mbean>\n",
+        "[-u <user>] [-p <password>] [-H <host/servce url>]\n",
+        "[-a <attribute list> -w <warn levels> -c <critical levels> [-f]]\n",
+	"[-A <attributes for perfomance data>] [-t <timeout>]\n",
+	"[-P <twiddle executable>] [-j <jboss home>] [-v] [-V]\n\n";
+
+    print "---------------------------------------------------------------------\n\n",
+        "check_jboss - Monitoring plugin for JBoss/WildFly application servers\n\n",
+        "The script utilises the twiddle-standalone utility under the hood to\n",
+        "query the server for JMX MBeans and related information\n",
+        "Additional information: https://github.com/swesource/twiddle-standalone\n\n";
 }
 
 # Return true if arg is a number
@@ -146,10 +152,12 @@ sub isnum {
 }
 
 sub help {
-   print "\nJBoss Monitor for Nagios version ",$Version,"\n";
-   print " by William Leibzon - william(at)leibzon.org\n";
-   print " and Joel Rangsmo - jrangsmo(at)op5.com\n\n";
    print_usage();
+   print "Check plugin version: ",$Version,"\n\n";
+   print "Developed by:\n",
+       "William Leibzon <william(at)leibzon.org>\n",
+       "Ingemar Nilsson <ingermar.nilsson(at)r2m.se>\n",
+       "Joel Rangsmo <jrangsmo(at)op5.com>\n\n";
 }
 
 # For verbose output - don't use it right now
@@ -340,7 +348,7 @@ if (!$tw_pid) {
 }
 while (<SHELL_PROCESS>) {
   foreach $i (keys %dataresults) {
-    $dataresults{$i}[1] = $1 if /$i=(\w+)\s/;
+    $dataresults{$i}[1] = $1 if /$i=(\S+)\s/;
   }
 }
 close(SHELL_PROCESS);

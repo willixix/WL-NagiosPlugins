@@ -3,9 +3,9 @@
 # ============================== SUMMARY =====================================
 #
 # Program : check_jboss.pl
-# Version : 0.31
-# Date    : May 16, 2007
-# Author  : William Leibzon - william@leibzon.org
+# Version : 0.4
+# Date    : Oct 09, 2015
+# Author  : William Leibzon - william@leibzon.org, Joel Rangsmo - jrangsmo@op5.com
 # Summary : This is a nagios plugin to check jboss parameters by means
 #           of twindle utility on the same host
 # Licence : GPL - summary below, full text at http://www.fsf.org/licenses/gpl.txt
@@ -89,7 +89,6 @@
 use strict;
 use Getopt::Long;
 
-my $twiddle = "/opt/jboss/bin/twiddle.sh";
 my $tempdir = "/tmp";
 
 # Nagios specific
@@ -101,6 +100,8 @@ my %ERRORS=('OK'=>0,'WARNING'=>1,'CRITICAL'=>2,'UNKNOWN'=>3,'DEPENDENT'=>4);
 ################# DO NOT MODIFY BELOW THIS LINE ########################
 
 my $o_host=     undef;          # hostname
+my $o_user=     undef;          # user
+my $o_password= undef;          # password
 my $o_help=     undef;          # help option
 my $o_verb=     undef;          # verbose mode
 my $o_version=  undef;          # version info option
@@ -120,14 +121,21 @@ my $o_jmxattr=  undef;		# Specific MBean attributes to monitor
 my @o_jmxattrL= ();		# array from above list
 my $o_perfattr= undef;		# JMX Mbean attribute that is only displayed in performance data
 my @o_perfattrL= ();		# array from above list
-my $tw_pid=undef;
 
-my $Version='0.3';
+my $o_twiddle=  "/opt/twiddle-standalone/bin/twiddle.sh"; # Twiddle executable
+my $o_jboss=  "/opt/wildfly";   # JBoss home, required by twiddle-standalone
+
+my $tw_pid=undef;
+my $Version='0.4';
 
 sub p_version { print "check_jboss version : $Version\n"; }
 
 sub print_usage {
-    print "Usage: $0 [-v] -J <jmx mbean name> -T <data type from specified mbean> [-H <host>] [-a <attribute list> -w <warn levels> -c <critical levels> [-f]] [-A <attributes for perfomance data>] [-t <timeout>] [-V]\n";
+    print "Usage: $0 [-v] -J <jmx mbean name> -T <data type from specified mbean> ",
+        "[-u <user>] [-p <password>] [-H <host/servce url>] ",
+        "[-a <attribute list> -w <warn levels> -c <critical levels> [-f]] ",
+	"[-A <attributes for perfomance data>] [-t <timeout>] ",
+	"[-P <twiddle executable>] [-j <jboss home>] [-V]\n";
 }
 
 # Return true if arg is a number
@@ -139,7 +147,8 @@ sub isnum {
 
 sub help {
    print "\nJBoss Monitor for Nagios version ",$Version,"\n";
-   print " by William Leibzon - william(at)leibzon.org\n\n";
+   print " by William Leibzon - william(at)leibzon.org\n";
+   print " and Joel Rangsmo - jrangsmo(at)op5.com\n\n";
    print_usage();
 }
 
@@ -159,6 +168,8 @@ sub check_options {
         'v'     => \$o_verb,            'verbose'       => \$o_verb,
         'h'     => \$o_help,            'help'          => \$o_help,
         'H:s'   => \$o_host,            'hostname:s'    => \$o_host,
+        'u:s'   => \$o_user,            'user:s'        => \$o_user,
+        'p:s'   => \$o_password,        'password:s'    => \$o_password,
 	'J:s'   => \$o_jmxmbean,	'jmx_mbean:s'   => \$o_jmxmbean,
 	'T:s'	=> \$o_datatype,	'data_type:s'	=> \$o_datatype,
         'S:s'   => \$o_servicetype,     'service_type:s' => \$o_servicetype,
@@ -169,6 +180,8 @@ sub check_options {
 	'a:s'   => \$o_jmxattr,		'attributes:s'  => \$o_jmxattr,
         'f'     => \$o_perf,            'perfdata'      => \$o_perf,
 	'A:s'	=> \$o_perfattr,	'perf_attributes:s' => \$o_perfattr,
+	'P:s'	=> \$o_twiddle, 	'twiddle:s'	=> \$o_twiddle,
+	'j:s'	=> \$o_jboss,		'jboss:s'	=> \$o_jboss,
     );
     if (defined($o_help) ) { help(); exit $ERRORS{"UNKNOWN"}};
     if (defined($o_version)) { p_version(); exit $ERRORS{"UNKNOWN"}};
@@ -296,8 +309,14 @@ my $perfdata = "";
 my $chk = "";
 my $i;
 
+# sets the JBOSS_HOME environment variable for twiddler-standalone
+my $orgjboss=$ENV{"JBOSS_HOME"};
+$ENV{"JBOSS_HOME"}=$o_jboss; 
+
 # prepare command line that will be called and list of attributes hash array
-my $twcall=$twiddle;
+my $twcall=$o_twiddle;
+$twcall .= " -u $o_user" if defined($o_user);
+$twcall .= " -p $o_password" if defined($o_password);
 $twcall .= " -s $o_host" if defined($o_host);
 $twcall .= " get " . $o_jmxmbean;
 $twcall .= ":type=" . $o_datatype if $o_datatype;
@@ -325,6 +344,9 @@ while (<SHELL_PROCESS>) {
   }
 }
 close(SHELL_PROCESS);
+
+# restores the JBOSS_HOME environment variable to original value
+$ENV{"JBOSS_HOME"}=$orgjboss;
 
 # main loop to check if warning & critical attributes are ok
 for ($i=0;$i<scalar(@o_jmxattrL);$i++) {
@@ -356,7 +378,7 @@ for ($i=0;$i<scalar(@o_perfattrL);$i++) {
   }
 }
 
-print "JBOSS " . $statuscode . $statusinfo;
+print "JBOSS " . $statuscode . ":" . $statusinfo;
 print " -".$statusdata if $statusdata;
 print " |".$perfdata if $perfdata;
 print "\n";

@@ -3,7 +3,7 @@
 # ============================== SUMMARY =====================================
 #
 # Program : check_jboss.pl
-# Version : 0.5
+# Version : 0.5.1
 # Date    : Oct 15, 2015
 # Author  : William Leibzon - william@leibzon.org, Joel Rangsmo - jrangsmo@op5.com, 
 #           Ingemar Nilsson - ingemar.nilsson@r2m.se
@@ -89,6 +89,7 @@
 
 use strict;
 use Getopt::Long;
+use Digest::MD5 qw(md5_hex);
 
 # Per-user temporary folder to avoid permission issues
 my $checkuser = $$ENV{"USER"} || $ENV{"LOGNAME"};
@@ -130,7 +131,7 @@ my $o_twiddle=  "/opt/twiddle-standalone/bin/twiddle.sh"; # Twiddle executable
 my $o_jboss=  "/opt/wildfly";   # JBoss home, required by twiddle-standalone
 
 my $tw_pid=undef;
-my $Version='0.5';
+my $Version="0.5.1";
 
 sub p_version { print "check_jboss version : $Version\n"; }
 
@@ -367,7 +368,8 @@ if ($o_cache > 0) {
   
   # Loops through each JMX attribute and compares it to the cache
   foreach my $attrname (@o_jmxattrL) {
-    my $cachefile = "$tempdir/$o_jmxmbean-$o_datatype-$attrname.cache";
+    my $fingerprint = md5_hex($o_host);
+    my $cachefile = "$tempdir/$fingerprint-$o_jmxmbean-$o_datatype-$attrname.cache";
     my $currentresult = $dataresults{$attrname}[1];
 
     verb("Current result for attribute at $currenttime: $currentresult");

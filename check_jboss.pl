@@ -4,8 +4,9 @@
 #
 # Program : check_jboss.pl
 # Version : 0.5
-# Date    : Oct 09, 2015
-# Author  : William Leibzon - william@leibzon.org, Joel Rangsmo - jrangsmo@op5.com, Ingemar Nilsson - ingemar.nilsson@r2m.se
+# Date    : Oct 15, 2015
+# Author  : William Leibzon - william@leibzon.org, Joel Rangsmo - jrangsmo@op5.com, 
+#           Ingemar Nilsson - ingemar.nilsson@r2m.se
 # Summary : This is a nagios plugin to check jboss parameters by means
 #           of twindle utility on the same host
 # Licence : GPL - summary below, full text at http://www.fsf.org/licenses/gpl.txt
@@ -89,7 +90,9 @@
 use strict;
 use Getopt::Long;
 
-my $tempdir = "/tmp";
+# Per-user temporary folder to avoid permission issues
+my $checkuser = $$ENV{"USER"} || $ENV{"LOGNAME"};
+my $tempdir = "/tmp/check_jboss-" . $checkuser;
 
 # Nagios specific
 # use lib "/usr/lib/nagios/plugins";
@@ -114,6 +117,7 @@ my @o_critLp=   ();             # array of critical data processing modifiers
 my $o_perf=     undef;          # Performance data option
 my $o_timeout=  5;              # Default 5s Timeout
 
+my $o_cache=    0;              # Cache results and compare to previous sampling
 my $o_jmxmbean= undef;		# JMX MBean to check
 my $o_datatype= undef;		# Data type from specified JMX MBean
 my $o_servicetype= undef;       # Service type for specified Mbean (use in place of -T)
@@ -135,6 +139,7 @@ sub print_usage {
         "[-u <user>] [-p <password>] [-H <host/servce url>]\n",
         "[-a <attribute list> -w <warn levels> -c <critical levels> [-f]]\n",
 	"[-A <attributes for perfomance data>] [-t <timeout>]\n",
+	"[-C <seconds for cache sampling window>]\n",
 	"[-P <twiddle executable>] [-j <jboss home>] [-v] [-V]\n\n";
 
     print "---------------------------------------------------------------------\n\n",
@@ -161,7 +166,7 @@ sub help {
 }
 
 # For verbose output - don't use it right now
-sub verb { my $t=shift; print $t,"\n" if defined($o_verb) ; }
+sub verb { my $t=shift; print "Debug: " . $t,"\n" if defined($o_verb) ; }
 
 # Get the alarm signal (just in case this plugin screws up)
 $SIG{'ALRM'} = sub {
@@ -178,6 +183,7 @@ sub check_options {
         'H:s'   => \$o_host,            'hostname:s'    => \$o_host,
         'u:s'   => \$o_user,            'user:s'        => \$o_user,
         'p:s'   => \$o_password,        'password:s'    => \$o_password,
+	'C:i'   => \$o_cache,	        'cache:i'       => \$o_cache,
 	'J:s'   => \$o_jmxmbean,	'jmx_mbean:s'   => \$o_jmxmbean,
 	'T:s'	=> \$o_datatype,	'data_type:s'	=> \$o_datatype,
         'S:s'   => \$o_servicetype,     'service_type:s' => \$o_servicetype,
@@ -273,9 +279,6 @@ sub changedir {
   my $maxtry=20;
   my $twdir_prefix="twlog";
 
-  if (!defined($tempdir) || ! -d $tempdir) {
-	$tempdir="/tmp"
-  }
   my $cnt=0;
   my $twextra="";
   do {
@@ -356,6 +359,72 @@ close(SHELL_PROCESS);
 # restores the JBOSS_HOME environment variable to original value
 $ENV{"JBOSS_HOME"}=$orgjboss;
 
+# Checks cache file for previous results
+if ($o_cache > 0) {
+  my $currenttime = time();
+  my $newcaches = 0;
+  my $resetcounters = 0;
+  
+  # Loops through each JMX attribute and compares it to the cache
+  foreach my $attrname (@o_jmxattrL) {
+    my $cachefile = "$tempdir/$o_jmxmbean-$o_datatype-$attrname.cache";
+    my $currentresult = $dataresults{$attrname}[1];
+
+    verb("Current result for attribute at $currenttime: $currentresult");
+  
+    if (!-f $cachefile) {
+      verb("Creating cache file $cachefile with result $currentresult");
+  
+      open(my $filehandler, '>', $cachefile);
+      print $filehandler "$currenttime $currentresult";
+      close $filehandler;
+  
+      $newcaches .= 1;
+    }
+    else {
+      verb("Checking data in cache file $cachefile");
+  
+      open(my $filehandler, '<', $cachefile);
+      my $resultstring = <$filehandler>;
+      close $filehandler;
+  
+      verb("Raw result string: $resultstring");
+      my ($previoustime, $previousresult) = split(" ", $resultstring, 2);
+      verb("PT: $previoustime, PR: $previousresult");
+  
+      my $timediff = $currenttime - $previoustime;
+      my $resultdiff = $currentresult - $previousresult;   
+      verb("Time diff: $timediff, Result diff: $resultdiff");
+  
+      my $intervalresult = ($resultdiff / $timediff) * $o_cache;
+      verb("Interval result: $intervalresult");
+  
+      if ($intervalresult < 0) {
+        verb("Data was negative - value must be reset");
+        $resetcounters .= 1;
+      }
+  
+      verb("Updating cache with new result");
+      open($filehandler, '>', $cachefile);
+      print $filehandler "$currenttime $currentresult";
+      close $filehandler;
+
+      verb("Updating results array with new value");
+      $dataresults{$attrname}[1] = $intervalresult;
+    }
+  }
+  # Exits plugin if we have created new cache files
+  if ($newcaches > 0) {
+    print "JBOSS OK: Found no previous results, waiting for new data in cache files\n";
+    exit $ERRORS{"OK"};
+  }
+  # Exits if any cached counters have been reset
+  elsif ($resetcounters > 0) {
+    print "JBOSS OK: Counters have been reset, waiting for new data in cache files\n";
+    exit $ERRORS{"OK"};
+  }
+}
+
 # main loop to check if warning & critical attributes are ok
 for ($i=0;$i<scalar(@o_jmxattrL);$i++) {
   if (defined($dataresults{$o_jmxattrL[$i]}[1])) {
@@ -388,6 +457,12 @@ for ($i=0;$i<scalar(@o_perfattrL);$i++) {
 
 print "JBOSS " . $statuscode . ":" . $statusinfo;
 print " -".$statusdata if $statusdata;
+
+# Adds the change interval
+if ($o_cache > 0) {
+  print " (average change during $o_cache seconds window)";
+}
+
 print " |".$perfdata if $perfdata;
 print "\n";
 

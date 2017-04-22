@@ -186,7 +186,7 @@ my $Version='0.52';
 my $oid_sysSystem = '1.3.6.1.2.1.1.1.0';	     # windows and some unix
 my $oid_hostUptime = '1.3.6.1.2.1.25.1.1.0';         # hostUptime, usually unix systems
 my $oid_sysUptime = '1.3.6.1.2.1.1.3.0';             # sysUpTime, windows
-my $oid_engineTime = '1.3.6.1.6.3.10.2.1.3';         # SNMP-FRAMEWORK-MIB
+my $oid_engineTime = '1.3.6.1.6.3.10.2.1.3.0';       # SNMP-FRAMEWORK-MIB
 
 my @oid_uptime_types = ( ['', '', ''],		      	      # type 0 is reserved
 	   [ 'local', '', ''],                                # type 1 is local

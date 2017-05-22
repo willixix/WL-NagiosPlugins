@@ -477,7 +477,7 @@ my %KNOWN_STATUS_VARS = (
 	 'pubsub_channels' => [ 'status', 'GAUGE', '', 'Number of Pubsub Channels' ],
 	 'redis_git_sha1' => [ 'status', 'TEXTDATA', '' ],
 	 'used_cpu_user_children' => [ 'status', 'GAUGE', '', 'Child Processes Used User CPU' ],
-	 'process_id' => [ 'status', 'GAUGE', '' ],
+	 'process_id' => [ 'status', 'TEXTDATA', '' ],
 	 'used_memory_human' => [ 'status', 'GAUGE', '' ],
 	 'keyspace_misses' => [ 'status', 'COUNTER', 'c', 'Keyspace Misses' ],
 	 'used_cpu_user' => [ 'status', 'GAUGE', '', 'Main Process Used User CPU' ],
@@ -499,6 +499,14 @@ my %KNOWN_STATUS_VARS = (
 	 'slave1' => [ 'status', 'TEXTINFO', '' ],
 	 'slave2' => [ 'status', 'TEXTINFO', '' ],
 	 'slave3' => [ 'status', 'TEXTINFO', '' ],
+	 'config_file' => [ 'status', 'TEXTDATA', '' ],
+	 'executable' => [ 'status', 'TEXTDATA', '' ],
+	 'maxmemory_policy' => [ 'status', 'TEXTDATA', '' ],
+	 'os' => [ 'status', 'TEXTDATA', '' ],
+	 'rdb_last_bgsave_status' => [ 'status', 'TEXTINFO', '' ],
+	 'redis_build_id' => [ 'status', 'TEXTDATA', '' ],
+	 'redis_mode' => [ 'status', 'TEXTDATA', '' ],
+	 'run_id' => [ 'status', 'TEXTDATA', '' ],
 	);
 
 # Here you can also specify which variables should go into perf data,

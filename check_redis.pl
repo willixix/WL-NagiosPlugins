@@ -85,7 +85,7 @@
 #   option. Memory utilization option itself is lower "-m" or "--memory_utilization="
 #   and you can specify threshold for it as "-m warn,crit"
 #
-#   Replication delay threshold option "-R" or "--replication_delay=" is used
+#   Replication delay threshold option "-r" or "--replication_delay=" is used
 #   to check replication with data from "master_last_io_seconds_ago" stats and
 #   valid only on slave servers. Other variables maybe checked for this later
 #   with more complex functionality, so it was chosen to do this as separate

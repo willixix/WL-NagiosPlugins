@@ -2162,6 +2162,8 @@ else {
   $exit_status="CRITICAL";
   print $print_out,": ", $num_int-$num_ok, " int NOK : CRITICAL";
 }
+# Remove double white space in perfdata output, fixing webinterface's output for Icinga2.
+$perf_out =~ s/  / /g;
 print " | ",$perf_out if defined($perf_out);
 print "\n";
 exit $ERRORS{$exit_status};

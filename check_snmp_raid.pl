@@ -1703,7 +1703,7 @@ $debug_time{plugin_totaltime}=$debug_time{plugin_finish}-$debug_time{plugin_star
 
 # output text results
 $output_data .= " - " if $output_data;
-$output_data .= sprintf("%d logical disks, %d physical drives", scalar(keys %{$logdrv_data_in}), $phydrv_total, $num_controllers);
+$output_data .= sprintf("%d logical disks, %d physical drives", scalar(keys %{$logdrv_data_in}), $phydrv_total);
 $output_data .= sprintf(", %d controllers", $num_controllers) if defined($opt_multcontrollers) || $num_controllers > 1;
 $output_data .= sprintf(", %d batteries", scalar(keys %{$battery_data_in})) if defined($opt_battery);
 $output_data .= " found";

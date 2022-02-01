@@ -3,8 +3,8 @@
 # ============================== SUMMARY =====================================
 #
 # Program : check_netstat.pl
-# Version : 0.353
-# Date    : Mar 23, 2013
+# Version : 0.4
+# Date    : Jan 31, 2022
 # Author  : William Leibzon - william@leibzon.org
 # Summary : This is a nagios plugin that allows to check number of TCP
 #           connections on or to given set of ports. It is using
@@ -76,9 +76,9 @@
 #
 # Supported are also two specifications of range formats:
 #   number1:number2   issue alert if data is OUTSIDE of range [number1..number2]
-#	              i.e. alert if data<$number1 or data>$number2
+#                     i.e. alert if data<$number1 or data>$number2
 #   @number1:number2  issue alert if data is WITHIN range [number1..number2]
-#		      i.e. alert if data>=$number and $data<=$number2
+#                     i.e. alert if data>=$number and $data<=$number2
 #
 # A special modifier '^' can also be used to disable checking that warn values
 # are less than (or greater than) critical values (it is rarely needed).
@@ -161,16 +161,18 @@
 #        Please note that UDP and UDP6 are not session protocols, so any data
 #        reported is quite inconsistant
 #  [0.33] Nov 2011 - Bug fixed. Warning was being issued by Critical conditions.
-#		     Thank you for reporting the bug: Giuliano Ippoliti, Steven Back
+#                    Thank you for reporting the bug: Giuliano Ippoliti, Steven Back
 #  [0.34] Dec 2011 - release and update of documentation
 #  [0.35] Mar 2012 - Bug fix: updated snmpnetstat options from '-CP' to '-Cp'
-#  		     Threshold parsing and check code has been rewritten with new code
-#		     from check_mysqld and now supports ranges in similar way to nagios
-#		     plugin specification. Also plugin now adds threshold info to
-#	             performance data i.e. "var=data:warn:crit" in perfdata
+#                    Threshold parsing and check code has been rewritten with new code
+#                    from check_mysqld and now supports ranges in similar way to nagios
+#                    plugin specification. Also plugin now adds threshold info to
+#                    performance data i.e. "var=data:warn:crit" in perfdata
 #  [0.351] Mar 2012 - Bug fixes in new threshold spec code
 #  [0.352] Jun 2012 - Another bug fix in threshold check
 #  [0.353] Mar 2013 - Bug fix in parse_threshold function
+#  [0.4] Jan 2022 - Added the option to check for both incoming and outgoing
+#                   connections and raise an alarm based on total connections count
 #
 # TODO (mostly written between 0.1 and 0.2 and still valid):
 #  0. Support SNMP v3 (login,authpass,privpass)
@@ -229,25 +231,27 @@ my $o_passwd=   undef;          # Pass for snmpv3
 
 my $o_perf=     undef;          # Performance data option
 my $o_perfcopy= undef;          # Opposite to o_perf to cause perfomance attributes be listed within main output
-my $o_attr=	undef;  	# What port(s) to check (specify more than one separated by '.')
+my $o_attr=     undef;          # What port(s) to check (specify more than one separated by '.')
 my @o_attrL=    ();             # array for above list
 my @o_attrLn=   ();             # array of port to check in numeric form
 my @o_attrLp=   ();             # array of attribute name modifiers ('>' or '<')
-my $o_perfattr= undef;		# List of attributes to only provide values in perfomance data but no checking
-my @o_perfattrL=();		# array for above list
+my $o_perfattr= undef;          # List of attributes to only provide values in perfomance data but no checking
+my @o_perfattrL=();             # array for above list
 my @o_perfattrLp=();            # array of modifiers for perfomance attribute modifiers ('>' or '<')
 my @o_perfattrLn=();            # array of ports in numeric form
 my $o_warn=     undef;          # warning level option
 my @o_warnLv=   ();             # array from warn options, before further processing
-my @o_warnL=	();		# array of warn options, each array element is an array of threshold spec
+my @o_warnL=    ();             # array of warn options, each array element is an array of threshold spec
 my $o_crit=     undef;          # Critical level option
 my @o_critLv=   ();             # array of critical options before processing
-my @o_critL=	();		# array of critical options, each element is an array of threshold spec
+my @o_critL=    ();             # array of critical options, each element is an array of threshold spec
 my $o_label=    '';             # Label used to show what is in plugin output
 my $o_established=undef;        # only count established TCP sessions
-my $o_state=	undef;		# Only count TCP sessions in this state
-my $o_proto=	'tcp';		# Protocol, default is TCP
-my $o_netsnmpv= undef;		# Net-SNMP package version
+my $o_state=    undef;          # Only count TCP sessions in this state
+my $o_proto=    'tcp';          # Protocol, default is TCP
+my $o_netsnmpv= undef;          # Net-SNMP package version
+
+my $o_total=    undef;          # Total both incoming & outgoing connections and determine alert
 
 my $netstat_pid=undef;
 
@@ -257,38 +261,38 @@ sub verb { my $t=shift; print $t,"\n" if defined($o_verb) ; }
 sub print_version { print "$0: $Version\n" };
 
 sub print_usage {
-	print "Usage: $0 [-v] [-H <host> -C <snmp_community> [-2] [-P <snmp port>] [-N <netsnmp version>]] [-t <timeout>] [-r TCP|TCP6|UDP|UDP6] [-p <ports to check> -w <warn levels> -c <crit levels> [-f]] [-A <ports for perfdata> [-F]] [-e] [-s <state> [-V]\n";
+        print "Usage: $0 [-v] [-H <host> -C <snmp_community> [-2] [-P <snmp port>] [-N <netsnmp version>]] [-t <timeout>] [-r TCP|TCP6|UDP|UDP6] [-p <ports to check> -w <warn levels> -c <crit levels> [-f]] [-A <ports for perfdata> [-F]] [-e] [-s <state> [-V]\n";
 }
 
 sub autodetect_netsnmpversion {
-	my $nver='0.0';
-	verb("Trying to determine version of Net-SNMP by running: $snmpnetstat -V");
-	open(SHELL_DATA,"$snmpnetstat -V 2>&1 |");
-	my $fver=<SHELL_DATA>;
-	close(SHELL_DATA);
-	verb("Got: $fver");
-	if ($fver =~ /version: (\d\.\d)/) {
-	  $nver=$1;
-	  verb("Version autodetermined as: $nver");
-	}
-	return $nver;
+        my $nver='0.0';
+        verb("Trying to determine version of Net-SNMP by running: $snmpnetstat -V");
+        open(SHELL_DATA,"$snmpnetstat -V 2>&1 |");
+        my $fver=<SHELL_DATA>;
+        close(SHELL_DATA);
+        verb("Got: $fver");
+        if ($fver =~ /version: (\d\.\d)/) {
+          $nver=$1;
+          verb("Version autodetermined as: $nver");
+        }
+        return $nver;
 }
 
 sub isnew_netsnmp {
-	my $arg = shift;
-	$arg =~ /(\d)\.(\d)/;
-	if ($1>5 || ($1 eq 5 && $2>2)) {
-	   verb("NET-SNMP Version later than 5.3");
-	   return 1;
-	}
-	return 0;
+        my $arg = shift;
+        $arg =~ /(\d)\.(\d)/;
+        if ($1>5 || ($1 eq 5 && $2>2)) {
+           verb("NET-SNMP Version later than 5.3");
+           return 1;
+        }
+        return 0;
 }
 
 # Return true if arg is a number - in this case negative and real numbers are not allowed
 sub isnum {
-	my $num = shift;
-	if ( $num =~ /^[+]?(\d*)$/ ) { return 1 ;}
-	return 0;
+        my $num = shift;
+        if ( $num =~ /^[+]?(\d*)$/ ) { return 1 ;}
+        return 0;
 }
 
 # help function used when checking data against critical and warn values
@@ -298,8 +302,9 @@ sub check_threshold {
     my $lv1 = $th_array->[1];
     my $lv2 = $th_array->[2];
 
-    # verb("debug check_threshold: $mod : ".(defined($lv1)?$lv1:'')." : ".(defined($lv2)?$lv2:''));
+    verb("debug check_threshold: $mod : ".(defined($lv1)?$lv1:'')." : ".(defined($lv2)?$lv2:''));
     return "" if !defined($lv1) || ($mod eq '' && $lv1 eq '');
+    return " " . $attrib . " is " . $data . " (total gt $lv1)" if $mod eq '@' && $data>$lv1;
     return " " . $attrib . " is " . $data . " (equal to $lv1)" if $mod eq '=' && $data eq $lv1;
     return " " . $attrib . " is " . $data . " (not equal to $lv1)" if $mod eq '!' && $data ne $lv1;
     return " " . $attrib . " is " . $data . " (more than $lv1)" if $mod eq '>' && $data>$lv1;
@@ -325,47 +330,47 @@ sub parse_threshold {
     $th_array->[3]='^' if $at =~ s/\^//; # deal with ^ option
     $at =~ s/~//; # ignore ~ if it was entered
     if ($th =~ /^\:([-|+]?\d+\.?\d*)/) { # :number format per nagios spec
-	$th_array->[1]=$1;
-	$th_array->[0]=($at !~ /@/)?'>':'<=';
-	$th_array->[5]=($at !~ /@/)?('~:'.$th_array->[1]):($th_array->[1].':');
+        $th_array->[1]=$1;
+        $th_array->[0]=($at !~ /@/)?'>':'<=';
+        $th_array->[5]=($at !~ /@/)?('~:'.$th_array->[1]):($th_array->[1].':');
     }
     elsif ($th =~ /([-|+]?\d+\.?\d*)\:$/) { # number: format per nagios spec
         $th_array->[1]=$1;
-	$th_array->[0]=($at !~ /@/)?'<':'>=';
-	$th_array->[5]=($at !~ /@/)?'':'@';
-	$th_array->[5].=$th_array->[1].':';
+        $th_array->[0]=($at !~ /@/)?'<':'>=';
+        $th_array->[5]=($at !~ /@/)?'':'@';
+        $th_array->[5].=$th_array->[1].':';
     }
     elsif ($th =~ /([-|+]?\d+\.?\d*)\:([-|+]?\d+\.?\d*)/) { # nagios range format
-	$th_array->[1]=$1;
-	$th_array->[2]=$2;
-	if ($th_array->[1] > $th_array->[2]) {
+        $th_array->[1]=$1;
+        $th_array->[2]=$2;
+        if ($th_array->[1] > $th_array->[2]) {
                 print "Incorrect format in '$thin' - in range specification first number must be smaller then 2nd\n";
                 print_usage();
                 exit $ERRORS{"UNKNOWN"};
-	}
-	$th_array->[0]=($at !~ /@/)?':':'@';
-	$th_array->[5]=($at !~ /@/)?'':'@';
-	$th_array->[5].=$th_array->[1].':'.$th_array->[2];
+        }
+        $th_array->[0]=($at !~ /@/)?':':'@';
+        $th_array->[5]=($at !~ /@/)?'':'@';
+        $th_array->[5].=$th_array->[1].':'.$th_array->[2];
     }
     if (!defined($th_array->[1])) {
-	$th_array->[0] = ($at eq '@')?'<=':$at;
-	$th_array->[1] = $th;
-	$th_array->[5] = '~:'.$th_array->[1] if ($th_array->[0] eq '>' || $th_array->[0] eq '>=');
-	$th_array->[5] = $th_array->[1].':' if ($th_array->[0] eq '<' || $th_array->[0] eq '<=');
-	$th_array->[5] = '@'.$th_array->[1].':'.$th_array->[1] if $th_array->[0] eq '=';
-	$th_array->[5] = $th_array->[1].':'.$th_array->[1] if $th_array->[0] eq '!';
+        $th_array->[0] = ($at eq '@')?'<=':$at;
+        $th_array->[1] = $th;
+        $th_array->[5] = '~:'.$th_array->[1] if ($th_array->[0] eq '>' || $th_array->[0] eq '>=');
+        $th_array->[5] = $th_array->[1].':' if ($th_array->[0] eq '<' || $th_array->[0] eq '<=');
+        $th_array->[5] = '@'.$th_array->[1].':'.$th_array->[1] if $th_array->[0] eq '=';
+        $th_array->[5] = $th_array->[1].':'.$th_array->[1] if $th_array->[0] eq '!';
     }
     if ($th_array->[0] =~ /[>|<]/ && !isnum($th_array->[1])) {
-	print "Numeric value required when '>' or '<' are used !\n";
+        print "Numeric value required when '>' or '<' are used !\n";
         print_usage();
         exit $ERRORS{"UNKNOWN"};
     }
     verb("debug parse_threshold: $th_array->[0], $th_array->[1], $th_array->[2], $th_array->[3], $th_array->[4], $th_array->[5]");
     $th_array->[0] = '=' if !$th_array->[0] && !isnum($th_array->[1]) && $th_array->[1] ne '';
     if (!$th_array->[0] && isnum($th_array->[1])) { # this is just the number by itself, becomes 0:number check per nagios guidelines
-	$th_array->[2]=$th_array->[1];
-	$th_array->[1]=0;
-	$th_array->[0]=':';
+        $th_array->[2]=$th_array->[1];
+        $th_array->[1]=0;
+        $th_array->[0]=':';
         $th_array->[5]=$th_array->[2];
     }
     return $th_array;
@@ -390,75 +395,75 @@ sub threshold_specok {
 }
 
 sub help {
-	print "\nNetstat (TCP Connections) Monitor Plugin for Nagios version ",$Version,"\n";
-	print " by William Leibzon - william(at)leibzon.org\n";
-	print_usage();
-	print <<EOD;
+        print "\nNetstat (TCP Connections) Monitor Plugin for Nagios version ",$Version,"\n";
+        print " by William Leibzon - william(at)leibzon.org\n";
+        print_usage();
+        print <<EOD;
 -v, --verbose
-	print extra debugging information
+        print extra debugging information
 -h, --help
-	print this help message
+        print this help message
 -L, --label
         Plugin output label
 -H, --hostname=HOST
-	name or IP address of host to check with SNMP (using snmpnetstat)
+        name or IP address of host to check with SNMP (using snmpnetstat)
 -C, --community=COMMUNITY NAME
-	community name for SNMP - can only be used if -H is also specified
+        community name for SNMP - can only be used if -H is also specified
 -2, --v2c
         use SNMP v2 (instead of SNMP v1)
 -P, --snmpport=PORT
-	port number for SNMP - can only be used if -H is specified
+        port number for SNMP - can only be used if -H is specified
 -N, --netsnmp_version=VERSION
-	for SNMP, specify version of your NET-SNMP package here, note that version of
-	snmpnetstat included with NET-SNMP 5.3 is different than prior versions
+        for SNMP, specify version of your NET-SNMP package here, note that version of
+        snmpnetstat included with NET-SNMP 5.3 is different than prior versions
 -r, --protocol=TCP|TCP6|UDP|UDP6
-	query the specified protocol, default is TCP
-	combinations of protocols will be supported in the future, but not right now
+        query the specified protocol, default is TCP
+        combinations of protocols will be supported in the future, but not right now
 -p, --ports=STR[,STR[,STR[..]]] or --attributes=STR[,STR[,[STR[...]]]
-	Which tcp ports (attributes) to check. The value here can be either
-	numeric or name that would be come from /etc/services.
-	The value should be prefixed with:
-	   > : check outgoing TCP connections
-	   < : check incoming TCP connections (default)
-	Special value of '>\@' or just '>' allow to specify that you
+        Which tcp ports (attributes) to check. The value here can be either
+        numeric or name that would be come from /etc/services.
+        The value should be prefixed with:
+           > : check outgoing TCP connections
+           < : check incoming TCP connections (default)
+        Special value of '>\@' or just '>' allow to specify that you
         want to check on total number of of TCP connections
-	(this is reported in perfomance data as 'all_out').
+        (this is reported in perfomance data as 'all_out').
 -A, --perf_attributes=STR[,STR[,STR[..]]]
-	Which tcp ports to add as part of performance data output.
-	These names can be different than the ones listed in '--ports'
-	to only output these ports in perf data but not check.
+        Which tcp ports to add as part of performance data output.
+        These names can be different than the ones listed in '--ports'
+        to only output these ports in perf data but not check.
 -w, --warn=STR[,STR[,STR[..]]]
-	Warning level(s) - must be a number
-	Warning values can have the following prefix modifiers:
-	   > : warn if data is above this value (default)
-	   < : warn if data is below this value
-	   = : warn if data is equal to this value
-	   ! : warn if data is not equal to this value
-	   ~ : do not check this data (must be by itself)
-	   ^ : this disables checks that warning is less than critical
-	Threshold values can also be specified as range in two forms:
-	   num1:num2  - warn if data is outside range i.e. if data<num1 or data>num2
-	   \@num1:num2 - warn if data is in range i.e. data>=num1 && data<=num2
+        Warning level(s) - must be a number
+        Warning values can have the following prefix modifiers:
+           > : warn if data is above this value (default)
+           < : warn if data is below this value
+           = : warn if data is equal to this value
+           ! : warn if data is not equal to this value
+           ~ : do not check this data (must be by itself)
+           ^ : this disables checks that warning is less than critical
+        Threshold values can also be specified as range in two forms:
+           num1:num2  - warn if data is outside range i.e. if data<num1 or data>num2
+           \@num1:num2 - warn if data is in range i.e. data>=num1 && data<=num2
 -c, --crit=STR[,STR[,STR[..]]]
-	critical level(s) (if more than one attrib, must have multiple values)
-	Critical values can have the same prefix modifiers as warning
-	(see above) except '^'
+        critical level(s) (if more than one attrib, must have multiple values)
+        Critical values can have the same prefix modifiers as warning
+        (see above) except '^'
 -t, --timeout=INTEGER
-	timeout for SNMP in seconds (Default : 5)
+        timeout for SNMP in seconds (Default : 5)
 -e, --established_sessions
         specifies that listing should include only ESTABLISHED state sessions
-	This is older option kept for compatibility. Equivalent to: -s='ESTABLISHED'
+        This is older option kept for compatibility. Equivalent to: -s='ESTABLISHED'
 -s, --state=TCP_STATE
-	Report only sessions in specific state. The most common states used
-	here are "ESTABLISHED' and 'CLOSE_WAIT'
+        Report only sessions in specific state. The most common states used
+        here are "ESTABLISHED' and 'CLOSE_WAIT'
 -V, --version
-	prints version number
+        prints version number
 -f, --perfparse
         Used only with '-p'. Causes to output data not only in main status line
-	but also as perfparse output
--F, --perf_copy				
+        but also as perfparse output
+-F, --perf_copy
         Used only with '-A'. Can be used so that that ports listed '-A' also
-	get reported as normal plugin output
+        get reported as normal plugin output
 EOD
 }
 
@@ -471,60 +476,61 @@ sub check_options {
         'H:s'   => \$o_host,            'hostname:s'    => \$o_host,
         'P:i'   => \$o_snmpport,        'snmpport:i'    => \$o_snmpport,
         'C:s'   => \$o_community,       'community:s'   => \$o_community,
-	'N:s'	=> \$o_netsnmpv,	'netsnmp_version:s' => \$o_netsnmpv,
+        'N:s'   => \$o_netsnmpv,        'netsnmp_version:s' => \$o_netsnmpv,
         't:i'   => \$o_timeout,         'timeout:i'     => \$o_timeout,
         'V'     => \$o_version,         'version'       => \$o_version,
         '2'     => \$o_version2,        'v2c'           => \$o_version2,
-	'L:s'   => \$o_label,           'label:s'       => \$o_label,
+        'L:s'   => \$o_label,           'label:s'       => \$o_label,
         'c:s'   => \$o_crit,            'critical:s'    => \$o_crit,
         'w:s'   => \$o_warn,            'warn:s'        => \$o_warn,
         'f'     => \$o_perf,            'perfparse'     => \$o_perf,
         'F'     => \$o_perfcopy,        'perf_copy'     => \$o_perfcopy,
-        'a:s'   => \$o_attr,         	'attributes:s' 	=> \$o_attr,
-        'p:s'   => \$o_attr,         	'ports:s' 	=> \$o_attr,
-	'r:s'	=> \$o_proto,		'protocol:s'	=> \$o_proto,
-	'A:s'	=> \$o_perfattr,	'perf_attributes:s' => \$o_perfattr,
-	'e'	=> \$o_established,	'established_sessions' => \$o_established,
-	's:s'	=> \$o_state,		'state:s' 	=> \$o_state
+        'a:s'   => \$o_attr,            'attributes:s'  => \$o_attr,
+        'p:s'   => \$o_attr,            'ports:s'       => \$o_attr,
+        'r:s'   => \$o_proto,           'protocol:s'    => \$o_proto,
+        'A:s'   => \$o_perfattr,        'perf_attributes:s' => \$o_perfattr,
+        'e'     => \$o_established,     'established_sessions' => \$o_established,
+        's:s'   => \$o_state,           'state:s'       => \$o_state,
+        't:s'   => \$o_total,           'total:s'       => \$o_total
     );
     if (defined($o_help) ) { help(); exit $ERRORS{"UNKNOWN"}; }
     if (defined($o_version)) { print_version(); exit $ERRORS{"UNKNOWN"}; }
     if (defined($o_host))
     {
-	if (!defined($o_community) && (!defined($o_login) || !defined($o_passwd)) )
-	{ print "Specify SNMP community!\n"; print_usage(); exit $ERRORS{"UNKNOWN"}; }
-	if (!defined($o_netsnmpv)) { $o_netsnmpv=autodetect_netsnmpversion(); }
-	$o_netsnmpv=isnew_netsnmp($o_netsnmpv);
+        if (!defined($o_community) && (!defined($o_login) || !defined($o_passwd)) )
+        { print "Specify SNMP community!\n"; print_usage(); exit $ERRORS{"UNKNOWN"}; }
+        if (!defined($o_netsnmpv)) { $o_netsnmpv=autodetect_netsnmpversion(); }
+        $o_netsnmpv=isnew_netsnmp($o_netsnmpv);
     }
     elsif (defined($o_community) || defined($o_version2) || defined($o_snmpport) ||
-	    defined($o_login) || defined($o_passwd)) {
-	print "Can not use snmp-specific attributes without specifying host!\n";
-	print_usage();
-	exit $ERRORS{"UNKNOWN"};
+            defined($o_login) || defined($o_passwd)) {
+        print "Can not use snmp-specific attributes without specifying host!\n";
+        print_usage();
+        exit $ERRORS{"UNKNOWN"};
     }
     if (defined($o_perfattr)) {
         @o_perfattrL=split(/,/ ,$o_perfattr) if defined($o_perfattr);
         for ($i=0; $i<scalar(@o_perfattrL); $i++) {
-	    my ($name,$aliases);
-	    $o_perfattrL[$i] =~ s/^([>|<]?)//;
-	    $o_perfattrLp[$i] = $1;
-	    if ($o_perfattrL[$i] eq '@' || !$o_perfattrL[$i]) {
-		$o_perfattrLn[$i] = 0;
-		$o_perfattrL[$i]='all';
-	    }
-	    elsif (isnum($o_perfattrL[$i])) {
-		$o_perfattrLn[$i] = $o_perfattrL[$i];
-	    } else {
-		($name, $aliases, $o_perfattrLn[$i]) = getservbyname($o_perfattrL[$i],'tcp');
-		if ($? || !$o_perfattrLn[$i]) {
-		    print "Failed to find port number for service named \"$o_perfattrL[$i]\"\n";
-		    print_usage();
-		    exit $ERRORS{"UNKNWON"};
+            my ($name,$aliases);
+            $o_perfattrL[$i] =~ s/^([>|<]?)//;
+            $o_perfattrLp[$i] = $1;
+            if ($o_perfattrL[$i] eq '@' || !$o_perfattrL[$i]) {
+                $o_perfattrLn[$i] = 0;
+                $o_perfattrL[$i]='all';
+            }
+            elsif (isnum($o_perfattrL[$i])) {
+                $o_perfattrLn[$i] = $o_perfattrL[$i];
+            } else {
+                ($name, $aliases, $o_perfattrLn[$i]) = getservbyname($o_perfattrL[$i],'tcp');
+                if ($? || !$o_perfattrLn[$i]) {
+                    print "Failed to find port number for service named \"$o_perfattrL[$i]\"\n";
+                    print_usage();
+                    exit $ERRORS{"UNKNWON"};
 
-		}
-	    }
-	    $o_perfattrLp[$i] = '<' if !$o_perfattrLp[$i];
-	}
+                }
+            }
+            $o_perfattrLp[$i] = '<' if !$o_perfattrLp[$i];
+        }
     }
     if (defined($o_warn) || defined($o_crit) || defined($o_attr)) {
         if (defined($o_attr)) {
@@ -538,51 +544,51 @@ sub check_options {
           exit $ERRORS{"UNKNOWN"};
         }
         if (scalar(@o_warnLv)!=scalar(@o_attrL) || scalar(@o_critLv)!=scalar(@o_attrL)) {
-	    if (scalar(@o_warnLv)==0 && scalar(@o_critLv)==scalar(@o_attrL)) {
-		verb('Only critical value check is specified - setting warning to ~');
-		for($i=0;$i<scalar(@o_attrL);$i++) { $o_warnLv[$i]='~'; }
-	    }
-	    elsif (scalar(@o_critLv)==0 && scalar(@o_warnLv)==scalar(@o_attrL)) {
-		verb('Only warning value check is specified - setting critical to ~');
-		for($i=0;$i<scalar(@o_attrL);$i++) { $o_critLv[$i]='~'; }
-	    }
-	    else {
-		printf "Number of specified warning levels (%d) and critical levels (%d) must be equal to the number of attributes specified at '-p' (%d). If you need to ignore some attribute specify it as '~'\n", scalar(@o_warnLv), scalar(@o_critLv), scalar(@o_attrL);
-		print_usage();
-		exit $ERRORS{"UNKNOWN"};
-	    }
-	}
-	for (my $i=0; $i<scalar(@o_warnLv); $i++) {
+            if (scalar(@o_warnLv)==0 && scalar(@o_critLv)==scalar(@o_attrL)) {
+                verb('Only critical value check is specified - setting warning to ~');
+                for($i=0;$i<scalar(@o_attrL);$i++) { $o_warnLv[$i]='~'; }
+            }
+            elsif (scalar(@o_critLv)==0 && scalar(@o_warnLv)==scalar(@o_attrL)) {
+                verb('Only warning value check is specified - setting critical to ~');
+                for($i=0;$i<scalar(@o_attrL);$i++) { $o_critLv[$i]='~'; }
+            }
+            else {
+                printf "Number of specified warning levels (%d) and critical levels (%d) must be equal to the number of attributes specified at '-p' (%d). If you need to ignore some attribute specify it as '~'\n", scalar(@o_warnLv), scalar(@o_critLv), scalar(@o_attrL);
+                print_usage();
+                exit $ERRORS{"UNKNOWN"};
+            }
+        }
+        for (my $i=0; $i<scalar(@o_warnLv); $i++) {
           $o_warnL[$i] = parse_threshold($o_warnLv[$i]);
           $o_critL[$i] = parse_threshold($o_critLv[$i]);
-	  if (threshold_specok($o_warnL[$i],$o_critL[$i])) {
-		 print "Problem with warn threshold '".$o_warnL[$i][5]."' and/or critical threshold '".$o_critL[$i][5]."'\n";
+          if (threshold_specok($o_warnL[$i],$o_critL[$i])) {
+                 print "Problem with warn threshold '".$o_warnL[$i][5]."' and/or critical threshold '".$o_critL[$i][5]."'\n";
                  print "All warning and critical values must be numeric or ~. Warning must be less then critical\n";
-		 print "or greater then when '<' is used or within or outside of range for : and @ specification\n";
+                 print "or greater then when '<' is used or within or outside of range for : and @ specification\n";
                  print "Note: to override less than check prefix warning value with ^\n";
                  print_usage();
                  exit $ERRORS{"UNKNOWN"};
            }
-	}
+        }
         for ($i=0; $i<scalar(@o_attrL); $i++) {
-	    my ($name,$aliases);
-	    $o_attrL[$i] =~ s/^([>|<]?)//;
-	    $o_attrLp[$i] = $1;
-	    if ($o_attrL[$i] eq '@' || !$o_attrL[$i]) {
-		$o_attrLn[$i] = 0;
-		$o_attrL[$i] = 'all';
-	    }
-	    elsif (isnum($o_attrL[$i])) {
-		$o_attrLn[$i] = $o_attrL[$i];
-	    }
-	    else {
-		($name, $aliases, $o_attrLn[$i]) = getservbyname($o_attrL[$i],'tcp');
-		if ($? || !$o_attrLn[$i]) {
-		    print "Failed to find port number for service named \"$o_attrL[$i]\"\n";
-		    print_usage();
-		    exit $ERRORS{"UNKNWON"};
-		}
-	    }
+            my ($name,$aliases);
+            $o_attrL[$i] =~ s/^([>|<|@]?)//;
+            $o_attrLp[$i] = $1;
+            if ($o_attrL[$i] eq '@' || !$o_attrL[$i]) {
+                $o_attrLn[$i] = 0;
+                $o_attrL[$i] = 'all';
+            }
+            elsif (isnum($o_attrL[$i])) {
+                $o_attrLn[$i] = $o_attrL[$i];
+            }
+            else {
+                ($name, $aliases, $o_attrLn[$i]) = getservbyname($o_attrL[$i],'tcp');
+                if ($? || !$o_attrLn[$i]) {
+                    print "Failed to find port number for service named \"$o_attrL[$i]\"\n";
+                    print_usage();
+                    exit $ERRORS{"UNKNWON"};
+                }
+            }
         }
     }
     if (scalar(@o_attrL)==0 && scalar(@o_perfattrL)==0) {
@@ -592,9 +598,9 @@ sub check_options {
     }
     $o_proto =~ tr/A-Z/a-z/;
     if ($o_proto ne 'tcp' && $o_proto ne 'tcp6' && $o_proto ne 'udp' && $o_proto ne 'udp6') {
-	print "Supported protocols are: TCP, TCP6, UDP, UDP6\n";
-	print_usage();
-	exit $ERRORS{"UNKNOWN"};
+        print "Supported protocols are: TCP, TCP6, UDP, UDP6\n";
+        print_usage();
+        exit $ERRORS{"UNKNOWN"};
     }
 }
 
@@ -603,7 +609,7 @@ sub parse_netstatline {
 
     my @ar = split(/\s+/, $line);
     my ($loc, $rem, $state);
-	
+
     switch ($type) {
        case 1 {
         ($loc, $rem, $state) = ($ar[3],$ar[4],$ar[5]);
@@ -621,7 +627,7 @@ sub parse_netstatline {
         $rem = $1 if $rem =~ /\.(\d+)$/;
        }
        case 4 {
-	($loc, $rem, $state) = ($ar[3],$ar[4],$ar[5]);
+        ($loc, $rem, $state) = ($ar[3],$ar[4],$ar[5]);
         $loc = $1 if $loc =~ /\.(\d+)$/;
         $rem = $1 if $rem =~ /\.(\d+)$/;
        }
@@ -734,15 +740,15 @@ while (<SHELL_DATA>) {
     if ($port_local ne '' && $port_remote ne '') {
       verb("local_port: $port_local | remote_port: $port_remote | state: $conn_state");
       if ((defined($o_established) && $conn_state eq "ESTABLISHED") ||
-	  (defined($o_state) && $conn_state eq $o_state) ||
-	  (!defined($o_established) && !defined($o_state))) {
-	      $locports{0}++;
-	      if (defined($locports{$port_local})) { $locports{$port_local}++; }
-	        else { $locports{$port_local}=1; }
-	      $remports{0}++;
-	      if (defined($remports{$port_remote})) { $remports{$port_remote}++; }
-	        else { $remports{$port_remote}=1; }
-      	}
+          (defined($o_state) && $conn_state eq $o_state) ||
+          (!defined($o_established) && !defined($o_state))) {
+              $locports{0}++;
+              if (defined($locports{$port_local})) { $locports{$port_local}++; }
+                else { $locports{$port_local}=1; }
+              $remports{0}++;
+              if (defined($remports{$port_remote})) { $remports{$port_remote}++; }
+                else { $remports{$port_remote}=1; }
+        }
      }
 }
 if (!close(SHELL_DATA)) {
@@ -757,56 +763,76 @@ if ($nlines eq 0) {
 # loop to check if warning & critical attributes are ok
 for ($i=0;$i<scalar(@o_attrL);$i++) {
     if ($o_attrLp[$i] eq '<') {
-	$locports{$o_attrLn[$i]}=0 if !defined($locports{$o_attrLn[$i]});
-	if ($chk = check_threshold(tcpportname($o_attrL[$i],"in"),$locports{$o_attrLn[$i]},$o_critL[$i])) {
-		$statuscode = "CRITICAL";
-		$statusinfo .= $chk;
-	}
-	elsif ($chk = check_threshold(tcpportname($o_attrL[$i],"in"),$locports{$o_attrLn[$i]},$o_warnL[$i])) {
-               	$statuscode="WARNING" if $statuscode eq "OK";
+        $locports{$o_attrLn[$i]}=0 if !defined($locports{$o_attrLn[$i]});
+        print " locports : $locports{$o_attrLn[$i]} :  : \n";
+        if ($chk = check_threshold(tcpportname($o_attrL[$i],"in"),$locports{$o_attrLn[$i]},$o_critL[$i])) {
+                $statuscode = "CRITICAL";
                 $statusinfo .= $chk;
         }
-    	else {
-		$statusdata .= "," if ($statusdata);
-		$statusdata .= " ". tcpportname($o_attrL[$i],"in") ." is ". $locports{$o_attrLn[$i]};
-    	}
+        elsif ($chk = check_threshold(tcpportname($o_attrL[$i],"in"),$locports{$o_attrLn[$i]},$o_warnL[$i])) {
+                $statuscode="WARNING" if $statuscode eq "OK";
+                $statusinfo .= $chk;
+        }
+        else {
+                $statusdata .= "," if ($statusdata);
+                $statusdata .= " ". tcpportname($o_attrL[$i],"in") ." is ". $locports{$o_attrLn[$i]};
+        }
         $perfdata .= " ". tcpportname($o_attrL[$i],"in") ."=". $locports{$o_attrLn[$i]} if defined($o_perf);
     }
     if ($o_attrLp[$i] eq '>') {
-	$remports{$o_attrLn[$i]}=0 if !defined($remports{$o_attrLn[$i]});
-	if ($chk = check_threshold(tcpportname($o_attrL[$i],"out"),$remports{$o_attrLn[$i]},$o_critL[$i])) {
-		$statuscode = "CRITICAL";
-		$statusinfo .= $chk;
-	}
-	elsif ($chk = check_threshold(tcpportname($o_attrL[$i],"out"),$remports{$o_attrLn[$i]},$o_warnL[$i])) {
-               	$statuscode="WARNING" if $statuscode eq "OK";
+        $remports{$o_attrLn[$i]}=0 if !defined($remports{$o_attrLn[$i]});
+        print "remports : $remports{$o_attrLn[$i]} : \n";
+        if ($chk = check_threshold(tcpportname($o_attrL[$i],"out"),$remports{$o_attrLn[$i]},$o_critL[$i])) {
+                $statuscode = "CRITICAL";
                 $statusinfo .= $chk;
         }
-    	else {
-		$statusdata .= "," if ($statusdata);
-		$statusdata .= " ". tcpportname($o_attrL[$i],"out") ." is ". $remports{$o_attrLn[$i]};
-    	}
+        elsif ($chk = check_threshold(tcpportname($o_attrL[$i],"out"),$remports{$o_attrLn[$i]},$o_warnL[$i])) {
+                $statuscode="WARNING" if $statuscode eq "OK";
+                $statusinfo .= $chk;
+        }
+        else {
+                $statusdata .= "," if ($statusdata);
+                $statusdata .= " ". tcpportname($o_attrL[$i],"out") ." is ". $remports{$o_attrLn[$i]};
+        }
         $perfdata .= " ". tcpportname($o_attrL[$i], "out") ."=". $remports{$o_attrLn[$i]} if defined($o_perf);
     }
+    if ($o_attrLp[$i] eq '@') {
+        $locports{$o_attrLn[$i]}=0 if !defined($locports{$o_attrLn[$i]});
+        $remports{$o_attrLn[$i]}=0 if !defined($remports{$o_attrLn[$i]});
+        my $totalports = $locports{$o_attrLn[$i]} + $remports{$o_attrLn[$i]};
+        if ($chk = check_threshold(tcpportname($o_attrL[$i],"total"),$totalports,$o_critL[$i])) {
+                $statuscode = "CRITICAL";
+                $statusinfo .= $chk;
+        }
+        elsif ($chk = check_threshold(tcpportname($o_attrL[$i],"total"),$totalports,$o_warnL[$i])) {
+                $statuscode="WARNING" if $statuscode eq "OK";
+                $statusinfo .= $chk;
+        }
+        else {
+                $statusdata .= "," if ($statusdata);
+                $statusdata .= " ". tcpportname($o_attrL[$i],"total") ." is ". $totalports;
+        }
+        $perfdata .= " ". tcpportname($o_attrL[$i], "total") ."=". $remports{$o_attrLn[$i]} if defined($o_perf);
+    }
     if (defined($o_perf) && defined($o_warnL[$i][5]) && defined($o_critL[$i][5])) {
-	  $perfdata .= ';' if $o_warnL[$i][5] ne '' || $o_critL[$i][5] ne '';
-	  $perfdata .= $o_warnL[$i][5] if $o_warnL[$i][5] ne '';
-	  $perfdata .= ';'.$o_critL[$i][5] if $o_critL[$i][5] ne '';
+          $perfdata .= ';' if $o_warnL[$i][5] ne '' || $o_critL[$i][5] ne '';
+          $perfdata .= $o_warnL[$i][5] if $o_warnL[$i][5] ne '';
+          $perfdata .= ';'.$o_critL[$i][5] if $o_critL[$i][5] ne '';
     }
 }
 # add data for performance-only attributes
 for ($i=0;$i<scalar(@o_perfattrL);$i++) {
     if ($o_perfattrLp[$i] eq '<') {
-	$locports{$o_perfattrLn[$i]}=0 if !defined($locports{$o_perfattrLn[$i]});
-	$perfdata .= " " . tcpportname($o_perfattrL[$i],"in") ."=". $locports{$o_perfattrLn[$i]};
-	$statusdata.= "," if ($statusdata) && defined($o_perfcopy);
-	$statusdata.= " ". tcpportname($o_perfattrL[$i],"in") ." is ". $locports{$o_perfattrLn[$i]} if defined($o_perfcopy);
+        $locports{$o_perfattrLn[$i]}=0 if !defined($locports{$o_perfattrLn[$i]});
+        $perfdata .= " " . tcpportname($o_perfattrL[$i],"in") ."=". $locports{$o_perfattrLn[$i]};
+        $statusdata.= "," if ($statusdata) && defined($o_perfcopy);
+        $statusdata.= " ". tcpportname($o_perfattrL[$i],"in") ." is ". $locports{$o_perfattrLn[$i]} if defined($o_perfcopy);
     }
     if ($o_perfattrLp[$i] eq '>') {
-	$remports{$o_perfattrLn[$i]}=0 if !defined($remports{$o_perfattrLn[$i]});
-	$perfdata .= " " . tcpportname($o_perfattrL[$i],"out") ."=". $remports{$o_perfattrLn[$i]};
-	$statusdata.= "," if ($statusdata) && defined($o_perfcopy);
-	$statusdata.= " ". tcpportname($o_perfattrL[$i],"out") ." is ". $remports{$o_perfattrLn[$i]} if defined($o_perfcopy);
+        $remports{$o_perfattrLn[$i]}=0 if !defined($remports{$o_perfattrLn[$i]});
+        $perfdata .= " " . tcpportname($o_perfattrL[$i],"out") ."=". $remports{$o_perfattrLn[$i]};
+        $statusdata.= "," if ($statusdata) && defined($o_perfcopy);
+        $statusdata.= " ". tcpportname($o_perfattrL[$i],"out") ." is ". $remports{$o_perfattrLn[$i]} if defined($o_perfcopy);
     }
 }
 

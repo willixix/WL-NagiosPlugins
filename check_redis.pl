@@ -3,8 +3,8 @@
 # ============================== SUMMARY =====================================
 #
 # Program : check_redis.pl
-# Version : 0.73
-# Date    : Mar 23, 2013
+# Version : 0.74
+# Date    : Jul 13, 2023
 # Author  : William Leibzon - william@leibzon.org
 # Licence : GPL - summary below, full text at http://www.fsf.org/licenses/gpl.txt
 #
@@ -368,6 +368,7 @@
 # 			 results in keyspace_hits, keyspace_misses, memory_utilization
 #			 having double 'c' or '%' in perfdata. Added contributors section.
 #  [0.73 - Mar 23, 2013] Fixed bug in parse_threshold function of embedded library
+#  [0.74 - Jul 13, 2023] Add UNIX socket support
 #
 # TODO or consider for future:
 #
@@ -410,6 +411,7 @@
 #   Matt McMillan
 #   Jon Schulz
 #   M Spiegle
+#   Benjamin Renard
 #
 # ============================ START OF PROGRAM CODE =============================
 
@@ -423,6 +425,7 @@ use Redis;
 # default hostname, port, database, user and password, see NOTES above
 my $HOSTNAME= 'localhost';
 my $PORT=     6379;
+my $SOCKPATH= undef;
 my $PASSWORD= undef;
 my $DATABASE= undef;
 
@@ -510,6 +513,7 @@ my $PERF_OK_STATUS_REGEX = 'GAUGE|COUNTER|^DATA$|BOOLEAN';
 
 my $o_host=     undef;		# hostname
 my $o_port=     undef;		# port
+my $o_sockpath= undef;		# UNIX socket path
 my $o_pwfile=   undef;          # password file
 my $o_password= undef;		# password as parameter
 my $o_database= undef;		# database name (usually a number)
@@ -543,7 +547,7 @@ my @query=();                   # array of queries with each entry being keyed h
 sub p_version { print "check_redis.pl version : $Version\n"; }
 
 sub print_usage_line {
-   print "Usage: $0 [-v [debugfilename]] -H <host> [-p <port>] [-x password | -C credentials_file] [-D <database>] [-a <statistics variables> -w <variables warning thresholds> -c <variables critical thresholds>] [-A <performance output variables>] [-T [conntime_warn,conntime_crit]] [-R [hitrate_warn,hitrate_crit]] [-m [mem_utilization_warn,mem_utilization_crit] [-M <maxmemory>[B|K|M|G]]] [-r replication_delay_time_warn,replication_delay_time_crit]  [-f] [-T <timeout>] [-V] [-P <previous performance data in quoted string>] [-q (GET|LLEN|HLEN|SLEN|ZLEN|HGET:name|HEXISTS:name|SEXISTS:name|LRANGE:(AVG|SUM|MIN|MAX):start:end|ZRANGE:(AVG|SUM|MIN|MAX):start:end),query_type,query_key_name[:data_name][,ABSENT:WARNING|CRITICAL][,WARN:threshold,CRIT:threshold]] [-o <threshold specification with name or pattern>]\n";
+   print "Usage: $0 [-v [debugfilename]] [-H <host> [-p <port>]|-S <UNIX socket path>] [-x password | -C credentials_file] [-D <database>] [-a <statistics variables> -w <variables warning thresholds> -c <variables critical thresholds>] [-A <performance output variables>] [-T [conntime_warn,conntime_crit]] [-R [hitrate_warn,hitrate_crit]] [-m [mem_utilization_warn,mem_utilization_crit] [-M <maxmemory>[B|K|M|G]]] [-r replication_delay_time_warn,replication_delay_time_crit]  [-f] [-T <timeout>] [-V] [-P <previous performance data in quoted string>] [-q (GET|LLEN|HLEN|SLEN|ZLEN|HGET:name|HEXISTS:name|SEXISTS:name|LRANGE:(AVG|SUM|MIN|MAX):start:end|ZRANGE:(AVG|SUM|MIN|MAX):start:end),query_type,query_key_name[:data_name][,ABSENT:WARNING|CRITICAL][,WARN:threshold,CRIT:threshold]] [-o <threshold specification with name or pattern>]\n";
 }
 
 sub print_usage {
@@ -572,6 +576,8 @@ General and Server Connection Options:
    Hostname or IP Address to check
  -p, --port=INTEGER
    port number (default: 6379)
+ -S, --socket-path=UNIX Socket path
+   UNIX Socket path
  -D, --database=NAME
    optional database name (usually a number), needed for --query but otherwise not needed
  -x, --password=STRING
@@ -2475,7 +2481,7 @@ sub option_query {
 
 # sets password, host, port and other data based on options entered
 sub options_setaccess {
-    if (!defined($o_host)) { print "Please specify hostname (-H)\n"; print_usage(); exit $ERRORS{"UNKNOWN"}; }
+    if (!defined($o_host) && !defined($o_sockpath)) { print "Please specify hostname (-H) or UNIX socket path (-S)\n"; print_usage(); exit $ERRORS{"UNKNOWN"}; }
     if (defined($o_pwfile) && $o_pwfile) {
         if ($o_password) {
 	    print "use either -x or -C to enter credentials\n"; print_usage(); exit $ERRORS{"UNKNOWN"};
@@ -2496,6 +2502,7 @@ sub options_setaccess {
     }
     $HOSTNAME = $o_host if defined($o_host);
     $PORT     = $o_port if defined($o_port);
+    $SOCKPATH = $o_sockpath if defined($o_sockpath);
     $TIMEOUT  = $o_timeout if defined($o_timeout);
     $DATABASE = $o_database if defined($o_database);
 }
@@ -2511,6 +2518,7 @@ sub check_options {
         'h'     => \$o_help,            'help'          => \$o_help,
         'H:s'   => \$o_host,            'hostname:s'    => \$o_host,
         'p:i'   => \$o_port,            'port:i'        => \$o_port,
+        'S:s'   => \$o_sockpath,        'socket-path:s'    => \$o_sockpath,
         'C:s'   => \$o_pwfile,          'credentials:s' => \$o_pwfile,
         'x:s'   => \$o_password,	'password:s'	=> \$o_password,
 	'D:s'	=> \$o_database,	'database:s'	=> \$o_database,
@@ -2634,24 +2642,44 @@ my %slaves=();
 my $avar;
 
 # connect using tcp and verify the port is working
-my $sock = new IO::Socket::INET(
-  PeerAddr => $HOSTNAME,
-  PeerPort => $PORT,
-  Proto => 'tcp',
-);
+my $sock;
+if (defined($SOCKPATH)) {
+  $sock = new IO::Socket::UNIX(
+    Type => IO::Socket::SOCK_STREAM,
+    PeerAddr => $SOCKPATH,
+  );
+}
+else {
+  $sock = new IO::Socket::INET(
+    PeerAddr => $HOSTNAME,
+    PeerPort => $PORT,
+    Proto => 'tcp',
+  );
+}
 if (!$sock) {
-  print "CRITICAL ERROR - Can not connect to '$HOSTNAME' on port $PORT\n";
+  if (defined($SOCKPATH)) {
+    print "CRITICAL ERROR - Can not connect to UNIX socket '$SOCKPATH'\n";
+  }
+  else {
+    print "CRITICAL ERROR - Can not connect to '$HOSTNAME' on port $PORT\n";
+  }
   exit $ERRORS{'CRITICAL'};
 }
 close($sock);
 
 # now do connection using Redis library
 my $start_time;
-my $dsn = $HOSTNAME.":".$PORT;
-$nlib->verb("connecting to $dsn");
-$start_time = [ Time::HiRes::gettimeofday() ] if defined($o_timecheck);
 
-$redis = Redis-> new ( server => $dsn, 'debug' => (defined($o_verb))?1:0 );
+$start_time = [ Time::HiRes::gettimeofday() ] if defined($o_timecheck);
+if (defined($SOCKPATH)) {
+    $nlib->verb("connecting to UNIX socket $SOCKPATH");
+    $redis = Redis-> new ( sock => $SOCKPATH, 'debug' => (defined($o_verb))?1:0 );
+}
+else {
+    my $dsn = $HOSTNAME.":".$PORT;
+    $nlib->verb("connecting to $dsn");
+    $redis = Redis-> new ( server => $dsn, 'debug' => (defined($o_verb))?1:0 );
+}
 
 if ($PASSWORD) {
     $redis->auth($PASSWORD);

@@ -2488,8 +2488,16 @@ sub options_setaccess {
         while (<$file>) {
             # Match first non-blank line that doesn't start with a comment
             if (!($_ =~ /^\s*#/) && $_ =~ /\S+/) {
-                chomp($PASSWORD = $_);
-                last;
+                if (!$PASSWORD) {
+                    chomp($PASSWORD = $_);
+                }
+                elsif (!$USERNAME) {
+                    chomp($USERNAME = $_);
+                    last;
+                }
+                else {
+                    last;
+                }
             }
         }
         close $file;

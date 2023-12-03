@@ -424,6 +424,7 @@ use Redis;
 my $HOSTNAME= 'localhost';
 my $PORT=     6379;
 my $PASSWORD= undef;
+my $USERNAME= undef;
 my $DATABASE= undef;
 
 # Add path to additional libraries if necessary
@@ -512,6 +513,7 @@ my $o_host=     undef;		# hostname
 my $o_port=     undef;		# port
 my $o_pwfile=   undef;          # password file
 my $o_password= undef;		# password as parameter
+my $o_username= undef;		# username as parameter
 my $o_database= undef;		# database name (usually a number)
 my $o_help=     undef;          # help option
 my $o_verb=     undef;          # verbose mode
@@ -532,7 +534,7 @@ my @o_querykey=();		# query this key, this option maybe repeated so its an array
 my $o_prevperf= undef;		# performance data given with $SERVICEPERFDATA$ macro
 my $o_prevtime= undef;		# previous time plugin was run $LASTSERVICECHECK$ macro
 my $o_ratelabel=undef;		# prefix and suffix for creating rate variables
-my $o_rsuffix='_rate';		# default suffix	
+my $o_rsuffix='_rate';		# default suffix
 my $o_rprefix='';
 
 ## Additional global variables
@@ -543,7 +545,7 @@ my @query=();                   # array of queries with each entry being keyed h
 sub p_version { print "check_redis.pl version : $Version\n"; }
 
 sub print_usage_line {
-   print "Usage: $0 [-v [debugfilename]] -H <host> [-p <port>] [-x password | -C credentials_file] [-D <database>] [-a <statistics variables> -w <variables warning thresholds> -c <variables critical thresholds>] [-A <performance output variables>] [-T [conntime_warn,conntime_crit]] [-R [hitrate_warn,hitrate_crit]] [-m [mem_utilization_warn,mem_utilization_crit] [-M <maxmemory>[B|K|M|G]]] [-r replication_delay_time_warn,replication_delay_time_crit]  [-f] [-T <timeout>] [-V] [-P <previous performance data in quoted string>] [-q (GET|LLEN|HLEN|SLEN|ZLEN|HGET:name|HEXISTS:name|SEXISTS:name|LRANGE:(AVG|SUM|MIN|MAX):start:end|ZRANGE:(AVG|SUM|MIN|MAX):start:end),query_type,query_key_name[:data_name][,ABSENT:WARNING|CRITICAL][,WARN:threshold,CRIT:threshold]] [-o <threshold specification with name or pattern>]\n";
+   print "Usage: $0 [-v [debugfilename]] -H <host> [-p <port>] [-x password -u username | -C credentials_file] [-D <database>] [-a <statistics variables> -w <variables warning thresholds> -c <variables critical thresholds>] [-A <performance output variables>] [-T [conntime_warn,conntime_crit]] [-R [hitrate_warn,hitrate_crit]] [-m [mem_utilization_warn,mem_utilization_crit] [-M <maxmemory>[B|K|M|G]]] [-r replication_delay_time_warn,replication_delay_time_crit]  [-f] [-T <timeout>] [-V] [-P <previous performance data in quoted string>] [-q (GET|LLEN|HLEN|SLEN|ZLEN|HGET:name|HEXISTS:name|SEXISTS:name|LRANGE:(AVG|SUM|MIN|MAX):start:end|ZRANGE:(AVG|SUM|MIN|MAX):start:end),query_type,query_key_name[:data_name][,ABSENT:WARNING|CRITICAL][,WARN:threshold,CRIT:threshold]] [-o <threshold specification with name or pattern>]\n";
 }
 
 sub print_usage {
@@ -574,6 +576,8 @@ General and Server Connection Options:
    port number (default: 6379)
  -D, --database=NAME
    optional database name (usually a number), needed for --query but otherwise not needed
+ -u, --username=STRING
+    Username for Redis authentication.
  -x, --password=STRING
     Password for Redis authentication. Safer alternative is to put them in a file and use -C
  -C, --credentials=FILENAME
@@ -2484,8 +2488,16 @@ sub options_setaccess {
         while (<$file>) {
             # Match first non-blank line that doesn't start with a comment
             if (!($_ =~ /^\s*#/) && $_ =~ /\S+/) {
-                chomp($PASSWORD = $_);
-                last;
+                if (!$PASSWORD) {
+                    chomp($PASSWORD = $_);
+                }
+                elsif (!$USERNAME) {
+                    chomp($USERNAME = $_);
+                    last;
+                }
+                else {
+                    last;
+                }
             }
         }
         close $file;
@@ -2494,6 +2506,7 @@ sub options_setaccess {
     if (defined($o_password) && $o_password) {
 	$PASSWORD = $o_password;
     }
+    $USERNAME = $o_username if defined($o_username);
     $HOSTNAME = $o_host if defined($o_host);
     $PORT     = $o_port if defined($o_port);
     $TIMEOUT  = $o_timeout if defined($o_timeout);
@@ -2512,6 +2525,7 @@ sub check_options {
         'H:s'   => \$o_host,            'hostname:s'    => \$o_host,
         'p:i'   => \$o_port,            'port:i'        => \$o_port,
         'C:s'   => \$o_pwfile,          'credentials:s' => \$o_pwfile,
+        'u:s'   => \$o_username,	'username:s'	=> \$o_username,
         'x:s'   => \$o_password,	'password:s'	=> \$o_password,
 	'D:s'	=> \$o_database,	'database:s'	=> \$o_database,
         't:i'   => \$o_timeout,         'timeout:i'     => \$o_timeout,
@@ -2653,7 +2667,10 @@ $start_time = [ Time::HiRes::gettimeofday() ] if defined($o_timecheck);
 
 $redis = Redis-> new ( server => $dsn, 'debug' => (defined($o_verb))?1:0 );
 
-if ($PASSWORD) {
+if ($USERNAME && $PASSWORD) {
+    $redis->auth($USERNAME, $PASSWORD);
+}
+elsif ($PASSWORD) {
     $redis->auth($PASSWORD);
 }
 if ($DATABASE) {

@@ -577,7 +577,7 @@ sub parse_lsline {
         $ret{'group'} = $parsed[3] if defined($parsed[3]);
         $ret{'size'} = $parsed[4] if defined($parsed[4]);
         $ret{'time_line'} = $parsed[5].' '.$parsed[6].' '.$parsed[7] if defined($parsed[5]) && defined($parsed[6]) && defined($parsed[7]);
-        $ret{'filename'} = $parsed[8] if defined($parsed[8]);
+        $ret{'filename'} = join " ", @parsed[8 .. $#parsed] if defined($parsed[8]);
         $ret{'time'} = str2time($ret{'time_line'}) if defined($ret{'time_line'});
     }
     elsif ($line =~ /No such file or directory/) {

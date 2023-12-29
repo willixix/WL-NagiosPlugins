@@ -555,6 +555,9 @@ sub parse_lsline {
     # parse file mode into std number
     if (defined($parsed[0]) && $parsed[0] =~ /([-d])(.{3})(.{3})(.{3})/) {
         my ($file_type,$mod_user, $mod_group, $mod_all) = ($1,$2,$3,$4);
+	my $tmp = $line;
+	$tmp=~s/^.{50}//;
+	$parsed[8]=$tmp;
         if ($file_type eq 'd') {
             $ret{'type'}='dir';
         }
@@ -577,7 +580,7 @@ sub parse_lsline {
         $ret{'group'} = $parsed[3] if defined($parsed[3]);
         $ret{'size'} = $parsed[4] if defined($parsed[4]);
         $ret{'time_line'} = $parsed[5].' '.$parsed[6].' '.$parsed[7] if defined($parsed[5]) && defined($parsed[6]) && defined($parsed[7]);
-        $ret{'filename'} = join " ", @parsed[8 .. $#parsed] if defined($parsed[8]);
+        $ret{'filename'} = $parsed[8] if defined($parsed[8]);
         $ret{'time'} = str2time($ret{'time_line'}) if defined($ret{'time_line'});
     }
     elsif ($line =~ /No such file or directory/) {
@@ -636,7 +639,7 @@ sub open_shell_stream {
             $shell_command = "";
         }
         $shell_command .= $cd_dir if defined($cd_dir);
-        $shell_command .= "LANG=C ls -l";
+        $shell_command .= "LANG=C LC_ALL=C ls -l";
         verb("Command: ".$shell_command);
     }
     $shell_command .= " -R" if defined($o_recurse);

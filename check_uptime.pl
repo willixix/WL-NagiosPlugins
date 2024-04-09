@@ -576,7 +576,8 @@ else {
 	  $guessed_check_type=2;
 	  verb('Guessing Type: 2 = windows');
       }
-      if ($result->{$oid_sysSystem} =~ /Cisco/) {
+      if ($result->{$oid_sysSystem} =~ /Cisco/ ||
+          $result->{$oid_sysSystem} =~ /HPE Comware/) {
 	  $guessed_check_type=5;
 	  verb('Guessing Type: 5 = netswitch');
       }

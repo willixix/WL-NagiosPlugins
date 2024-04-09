@@ -576,9 +576,12 @@ else {
 	  $guessed_check_type=2;
 	  verb('Guessing Type: 2 = windows');
       }
-      if ($result->{$oid_sysSystem} =~ /Cisco/) {
-	  $guessed_check_type=5;
-	  verb('Guessing Type: 5 = netswitch');
+      if ($result->{$oid_sysSystem} =~ /Cisco Controller/) {
+          $guessed_check_type=4;
+          verb('Guessing Type: 4 = unix-sys');
+      } elsif ($result->{$oid_sysSystem} =~ /(Cisco|HPE Comware|Aruba)/) {
+          $guessed_check_type=5;
+          verb('Guessing Type: 5 = netswitch');
       }
       if ($guessed_check_type==0) {
 	  $guessed_check_type=3; # will try hostUptime first

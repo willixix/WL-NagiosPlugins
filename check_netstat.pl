@@ -727,7 +727,7 @@ while (<SHELL_DATA>) {
       }
     }
     else { # $netstat_format==1 || $netstat_format==2 || $netstat_format==4
-      if (/^$o_proto\s/) {
+      if (/^${o_proto}4?\s/) {
         ($port_local, $port_remote, $conn_state) = parse_netstatline($_, $netstat_format);
       }
     }

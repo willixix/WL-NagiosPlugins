@@ -661,6 +661,7 @@ my %o_cisco=		();	# cisco options
 my $o_stp=		undef;	# stp support option
 
 # Login and other options specific to SNMP
+my $o_port_explicit = 0; # Include explicitly selected ports in history filenames
 my $o_port =		161;    # SNMP port
 my $o_octetlength=	undef;	# SNMP Message size parameter (Makina Corpus contrib)
 my $o_community =	undef; 	# community
@@ -962,7 +963,8 @@ sub check_options {
    	'v:s'	=> \$o_verb,		'verbose:s' => \$o_verb, "debug:s" => \$o_verb,
         'h'     => \$o_help,    	'help'        	=> \$o_help,
         'H:s'   => \$o_host,		'hostname:s'	=> \$o_host,
-        'p:i'   => \$o_port,   		'port:i'	=> \$o_port,
+        'p:i'   => sub { $o_port = $_[1]; $o_port_explicit = 1; },
+        'port:i' => sub { $o_port = $_[1]; $o_port_explicit = 1; },
 	'n:s'   => \$o_descr,           'name:s'        => \$o_descr,
         'C:s'   => \$o_community,	'community:s'	=> \$o_community,
 	 '2'	=> \$o_version2,	'v2c'		=> \$o_version2,
@@ -1806,7 +1808,8 @@ for (my $i=0;$i < $num_int; $i++) {
         else {
 	  $temp_file_name=$descr[$i];
 	  $temp_file_name =~ s/[ ;\/]/_/g;
-	  $temp_file_name = $o_base_dir . $o_host ."." . $temp_file_name;
+	  $temp_file_name = $o_base_dir . $o_host .
+              ($o_port_explicit ? "." . $o_port : "") . "." . $temp_file_name;
         }
         # First, read entire file
         my @ret_array=read_file($temp_file_name,$n_items_check);
@@ -2165,3 +2168,4 @@ else {
 print " | ",$perf_out if defined($perf_out);
 print "\n";
 exit $ERRORS{$exit_status};
+

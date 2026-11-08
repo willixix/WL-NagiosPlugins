@@ -1867,6 +1867,10 @@ for (my $i=0;$i < $num_int; $i++) {
         }
 	$n_rows++;
     }
+    # Percentage rates require a known positive interface speed.
+    my $invalid_percentage_speed = defined($o_prct) &&
+        (!defined($portspeed[$i]) || $portspeed[$i] <= 0);
+    $usable_data = 1 if $invalid_percentage_speed;
     #make the checks if the file is OK
     if ($usable_data==0) {
       my $j;
@@ -2002,7 +2006,12 @@ for (my $i=0;$i < $num_int; $i++) {
       $print_out .= ")";
     }
     else { # Return unknown when no data
-      $print_out.= " (no usable data - ".$n_rows." rows) ";
+      if ($invalid_percentage_speed) {
+        $print_out.= " (cannot calculate percentage without positive interface speed) ";
+        $final_status=3 if $final_status==0;
+      } else {
+        $print_out.= " (no usable data - ".$n_rows." rows) ";
+      }
       # WL: I've removed return of UNKNOWN if no data is available, when plugin is first used that may well happen
       # $final_status=3;
     }
@@ -2165,3 +2174,4 @@ else {
 print " | ",$perf_out if defined($perf_out);
 print "\n";
 exit $ERRORS{$exit_status};
+
